@@ -1,0 +1,8 @@
+sourceDir = "/Users/masahiro_mitsuhashi/work/repo/dotfiles"
+
+[data]
+    name = {{ .name | quote }}
+    email = {{ .email | quote }}
+{{- if eq .chezmoi.os "darwin" }}
+    signingkey = {{ .signingkey | quote }}
+{{- end }}

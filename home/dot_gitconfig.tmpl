@@ -1,0 +1,38 @@
+[alias]
+	st = status
+	f = fetch --prune --all
+	br = branch
+	sw = switch
+	co = checkout
+	cob = checkout -b
+	adu = add -u
+	adup = add -u -p
+	ci = commit
+	diffc = diff --cached
+	mg = merge --no-ff
+	mgff = merge --ff
+	cp = cherry-pick
+	log1 = log -1
+	log2 = log -2
+	log3 = log -3
+	logo = log --oneline
+	logn = log --name-status --oneline
+	firstcom = commit --allow-empty -m "Initial commit"
+[user]
+	name = {{ .name }}
+	email = {{ .email }}
+{{- if eq .chezmoi.os "darwin" }}
+	signingkey = {{ .signingkey }}
+{{- end }}
+
+{{- if eq .chezmoi.os "darwin" }}
+
+[gpg]
+	format = ssh
+
+[gpg "ssh"]
+	allowedSignersFile = ~/.gitallowedsigners
+
+[commit]
+	gpgsign = true
+{{- end }}
