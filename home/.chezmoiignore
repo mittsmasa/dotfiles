@@ -6,3 +6,13 @@
 # Files with secrets or personal info - never manage
 .npmrc
 .gitallowedsigners
+
+# Claude Code plugins - auto-managed by `claude plugins install`
+.claude/plugins/cache
+.claude/plugins/marketplaces
+.claude/plugins/repos
+.claude/plugins/blocklist.json
+.claude/plugins/install-counts-cache.json
+.claude/plugins/installed_plugins.json
+.claude/plugins/known_marketplaces.json
+.claude/plugins/data
