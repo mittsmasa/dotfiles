@@ -1,10 +1,12 @@
-sourceDir = "/Users/masahiro_mitsuhashi/work/repo/dotfiles"
+{{- $name := promptStringOnce . "name" "Your full name" -}}
+{{- $email := promptStringOnce . "email" "Your email address" -}}
+{{- $signingkey := promptStringOnce . "signingkey" "Path to your signing key" -}}
 
 [git]
     autoCommit = true
     autoPush = true
 
 [data]
-    name = "{{ .name }}"
-    email = "{{ .email }}"
-    signingkey = "{{ .signingkey }}"
+    name = {{ $name | quote }}
+    email = {{ $email | quote }}
+    signingkey = {{ $signingkey | quote }}
