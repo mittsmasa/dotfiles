@@ -208,10 +208,9 @@
       "mcp__pencil"
     ]
   },
-  "model": "claude-sonnet",
   "statusLine": {
     "type": "command",
-    "command": "bash /Users/masahiro_mitsuhashi/.claude/statusline.sh"
+    "command": "bash /home/mittsmasa/.claude/statusline.sh"
   },
   "enabledPlugins": {
     "document-skills@anthropic-agent-skills": true,
