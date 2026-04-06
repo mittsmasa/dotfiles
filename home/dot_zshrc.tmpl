@@ -1,20 +1,7 @@
-# git-promptの読み込み
-source ~/.zsh/git-prompt.sh
-
 # git-completionの読み込み
 fpath=(~/.zsh $fpath)
 zstyle ':completion:*:*:git:*' script ~/.zsh/git-completion.bash
 autoload -Uz compinit && compinit
-
-# プロンプトのオプション表示設定
-GIT_PS1_SHOWDIRTYSTATE=true
-GIT_PS1_SHOWUNTRACKEDFILES=true
-GIT_PS1_SHOWSTASHSTATE=true
-GIT_PS1_SHOWUPSTREAM=auto
-
-# プロンプトの表示設定
-setopt PROMPT_SUBST ; PS1='%F{cyan}%~%f %F{red}$(__git_ps1 "(%s)")%f
-\$ '
 
 # PATH
 typeset -U path PATH
@@ -40,7 +27,12 @@ fi
 # mise (replaces nvm + manages pnpm)
 if command -v mise &> /dev/null; then
   eval "$(mise activate zsh)"
+  # shims を PATH に追加（sudo env "PATH=$PATH" で引き継ぐため）
+  export PATH="$HOME/.local/share/mise/shims:$PATH"
 fi
+
+# sudo でも mise 管理ツール（pnpm 等）を使えるようにする
+alias sudo='sudo env "PATH=$PATH"'
 
 {{ if eq .chezmoi.os "darwin" -}}
 # SSH Agent (Secretive - macOS only)
@@ -61,6 +53,9 @@ alias f='git fetch --prune --all'
 alias br='git branch'
 alias sw='git switch'
 alias co='git checkout'
+
+# Starship prompt
+eval "$(starship init zsh)"
 
 # Local overrides (secrets, machine-specific settings)
 [ -f "$HOME/.zshrc.local" ] && source "$HOME/.zshrc.local"
