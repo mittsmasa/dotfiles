@@ -1,8 +1,4 @@
-{{ if eq .chezmoi.os "darwin" -}}
-sourceDir = "/Users/masahiro_mitsuhashi/work/repo/dotfiles"
-{{ else -}}
-sourceDir = {{ .chezmoi.homeDir | printf "%s/.local/share/chezmoi" | quote }}
-{{ end -}}
+sourceDir = {{ .chezmoi.sourceDir | quote }}
 
 [data]
     name = {{ .name | quote }}

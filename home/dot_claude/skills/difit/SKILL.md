@@ -120,7 +120,7 @@ cat changes.patch | difit --mode inline
 
 - **Display mode**: Always use `inline` mode (overrides the default side-by-side)
 - **Browser launch**: Automatically opens browser unless `--tui` or `--no-open` is specified
-- **Installation path**: `/Users/masahiro_mitsuhashi/Library/pnpm/difit`
+- **Installation path**: installed globally via pnpm (`pnpm add -g difit`)
 
 ## Error Handling
 

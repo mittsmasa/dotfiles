@@ -145,10 +145,7 @@
       "Bash(true)",
       "Bash(false)",
       "Bash(similarity-ts:*)",
-      "Bash(find /Users/masahiro_mitsuhashi/work/repo/heimdall -name \".plan\" -type d)",
       "Bash(zizmor:*)",
-      "Read(//Users/masahiro_mitsuhashi/work/repo/heimdall/.github/workflows/**)",
-      "Read(//Users/masahiro_mitsuhashi/work/repo/heimdall/**)",
       "WebSearch",
       "WebFetch(domain:caniuse.com)",
       "WebFetch(domain:turbo.build)",
@@ -161,7 +158,6 @@
       "mcp__playwright__browser_navigate",
       "WebFetch(domain:vitest.dev)",
       "Bash(tsg:*)",
-      "Read(//Users/masahiro_mitsuhashi/**)",
       "mcp__next-devtools__upgrade_nextjs_16",
       "Bash(xargs curl -sL)",
       "mcp__chrome-devtools__take_snapshot",
@@ -199,8 +195,8 @@
       "Bash(envchain npm pnpm:*)",
       "mcp__serena__get_symbols_overview",
       "Bash(tee:*)",
-      "Bash(open \"https://github.com/dwango-zane/heimdall/actions/runs/20980784430/job/60305176548\")",
-      "Bash(xargs -I {} sh -c 'echo \"\"=== {} ===\"\" && head -50 {}')",
+      "Bash(open:*)",
+      "Bash(xargs:*)",
       "mcp__serena__find_symbol",
       "Bash(while read review_id)",
       "Bash(do gh api repos/dwango-zane/heimdall/pulls/reviews/$review_id/comments)",
@@ -210,7 +206,7 @@
   },
   "statusLine": {
     "type": "command",
-    "command": "bash /home/mittsmasa/.claude/statusline.sh"
+    "command": "bash ~/.claude/statusline.sh"
   },
   "enabledPlugins": {
     "document-skills@anthropic-agent-skills": true,
