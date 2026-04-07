@@ -7,15 +7,16 @@
           {
             "type": "command",
             "command": "bash ~/.claude/scripts/plan-review-hook.sh"
+          },
+          {
+            "type": "command",
+            "command": "bash ~/.claude/scripts/chezmoi-sync-hook.sh"
           }
         ]
       }
     ]
   },
   "permissions": {
-    "deny": [
-      "Bash(npx:*)"
-    ],
     "allow": [
       "Bash(npm:*)",
       "Bash(yarn:*)",
@@ -217,7 +218,8 @@
       "Bash(while read review_id)",
       "Bash(do gh api repos/dwango-zane/heimdall/pulls/reviews/$review_id/comments)",
       "Bash(done)",
-      "mcp__pencil"
+      "mcp__pencil",
+      "Bash(chezmoi:*)"
     ]
   },
   "statusLine": {
