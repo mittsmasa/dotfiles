@@ -9,6 +9,17 @@ chezmoi 管理ファイルの同期確認・差分解決ワークフロー。
 
 ## Workflow
 
+### 0. Remote Pull (必須・省略不可)
+
+**必ず最初にリモートから最新を取り込む。** ローカルだけ見て「同期済み」と判断してはならない。
+
+```bash
+chezmoi git -- pull --rebase
+```
+
+- 失敗した場合（conflict 等）はユーザーに状況を報告して指示を仰ぐ
+- pull で更新があった場合は `chezmoi status` に差分が出るので、以降のステップで通常通り処理する
+
 ### 1. Status Check
 
 ```bash
