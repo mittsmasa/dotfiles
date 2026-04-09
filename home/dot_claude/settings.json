@@ -17,6 +17,9 @@
     ]
   },
   "permissions": {
+    "deny": [
+      "Bash(npx:*)"
+    ],
     "allow": [
       "Bash(npm:*)",
       "Bash(yarn:*)",
