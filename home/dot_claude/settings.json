@@ -1,50 +1,26 @@
 {
-  "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "Write|Edit|MultiEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ~/.claude/scripts/plan-review-hook.sh"
-          },
-          {
-            "type": "command",
-            "command": "bash ~/.claude/scripts/chezmoi-sync-hook.sh"
-          }
-        ]
-      }
-    ]
-  },
   "permissions": {
-    "deny": [
-      "Bash(npx:*)"
-    ],
     "allow": [
       "Bash(node:*)",
       "Bash(tsx:*)",
       "Bash(tsc:*)",
       "Bash(tsgo:*)",
       "Bash(ts-node:*)",
-
       "Bash(pnpm:*)",
       "Bash(yarn:*)",
       "Bash(bun:*)",
       "Bash(envchain npm pnpm:*)",
-
       "Bash(deno:*)",
       "Bash(deno task:*)",
       "Bash(deno test:*)",
       "Bash(deno fmt:*)",
       "Bash(deno lint:*)",
       "Bash(deno compile:*)",
-
       "Bash(eslint:*)",
       "Bash(prettier:*)",
       "Bash(biome:*)",
       "Bash(pnpm biome:*)",
       "Bash(oxlint:*)",
-
       "Bash(vitest:*)",
       "Bash(pnpm vitest:*)",
       "Bash(jest:*)",
@@ -52,37 +28,31 @@
       "Bash(mocha:*)",
       "Bash(tap:*)",
       "Bash(coverage:*)",
-
       "Bash(webpack:*)",
       "Bash(vite:*)",
       "Bash(rollup:*)",
       "Bash(parcel:*)",
       "Bash(swc:*)",
       "Bash(esbuild:*)",
-
       "Bash(next:*)",
       "Bash(nuxt:*)",
       "Bash(astro:*)",
       "Bash(svelte:*)",
       "Bash(sveltekit:*)",
       "Bash(remix:*)",
-
       "Bash(turbo:*)",
       "Bash(turborepo:*)",
       "Bash(nx:*)",
       "Bash(lerna:*)",
-
       "Bash(mise:*)",
       "Bash(direnv:*)",
       "Bash(asdf:*)",
       "Bash(rtx:*)",
       "Bash(uv:*)",
       "Bash(uvx:*)",
-
       "Bash(git:*)",
       "Bash(gh:*)",
       "Bash(tig:*)",
-
       "Bash(ls:*)",
       "Bash(exa:*)",
       "Bash(cat:*)",
@@ -99,7 +69,6 @@
       "Bash(sort:*)",
       "Bash(diff:*)",
       "Bash(jq:*)",
-
       "Bash(mkdir:*)",
       "Bash(touch:*)",
       "Bash(cp:*)",
@@ -108,7 +77,6 @@
       "Bash(ln:*)",
       "Bash(chmod:*)",
       "Bash(chown:*)",
-
       "Bash(echo:*)",
       "Bash(which:*)",
       "Bash(pwd)",
@@ -129,7 +97,6 @@
       "Bash(alias:*)",
       "Bash(time:*)",
       "Bash(timeout:*)",
-
       "Bash(curl:*)",
       "Bash(wget:*)",
       "Bash(ssh:*)",
@@ -138,7 +105,6 @@
       "Bash(ping:*)",
       "Bash(nslookup:*)",
       "Bash(dig:*)",
-
       "Bash(ps:*)",
       "Bash(kill:*)",
       "Bash(killall:*)",
@@ -146,13 +112,11 @@
       "Bash(lsof:*)",
       "Bash(netstat:*)",
       "Bash(perf:*)",
-
       "Bash(unzip:*)",
       "Bash(tar:*)",
       "Bash(gzip:*)",
       "Bash(gunzip:*)",
       "Bash(7z:*)",
-
       "Bash(chezmoi:*)",
       "Bash(claude mcp add:*)",
       "Bash(claude mcp list:*)",
@@ -160,17 +124,14 @@
       "Bash(similarity-ts:*)",
       "Bash(zizmor:*)",
       "Bash(tsg:*)",
-
       "WebSearch",
       "WebFetch(domain:github.com)",
       "WebFetch(domain:vitest.dev)",
       "WebFetch(domain:pnpm.io)",
       "WebFetch(domain:www.cve.org)",
       "WebFetch(domain:docs.astral.sh)",
-
       "mcp__context7__resolve-library-id",
       "mcp__context7__get-library-docs",
-
       "mcp__chrome__list_pages",
       "mcp__chrome__navigate_page",
       "mcp__chrome__wait_for",
@@ -182,10 +143,8 @@
       "mcp__chrome-devtools__take_snapshot",
       "mcp__chrome-devtools__take_screenshot",
       "mcp__chrome-devtools__evaluate_script",
-
       "mcp__playwright__browser_navigate",
       "mcp__playwright__browser_take_screenshot",
-
       "mcp__Figma_Dev_Mode_MCP__get_design_context",
       "mcp__Figma_Dev_Mode_MCP__get_screenshot",
       "mcp__Figma_Dev_Mode_MCP__get_variable_defs",
@@ -193,17 +152,34 @@
       "mcp__Figma_Dev_Mode_MCP__get_code_connect_map",
       "mcp__figma-dev-mode-mcp-server__get_design_context",
       "mcp__figma-dev-mode-mcp-server__get_screenshot",
-
       "mcp__next-devtools__upgrade_nextjs_16",
-
       "mcp__serena__list_dir",
       "mcp__serena__search_for_pattern",
       "mcp__serena__find_file",
       "mcp__serena__get_symbols_overview",
       "mcp__serena__find_symbol",
-
       "SlashCommand(/create-component:*)",
       "SlashCommand(/generate-stories:*)"
+    ],
+    "deny": [
+      "Bash(npx:*)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/scripts/plan-review-hook.sh"
+          },
+          {
+            "type": "command",
+            "command": "bash ~/.claude/scripts/chezmoi-sync-hook.sh"
+          }
+        ]
+      }
     ]
   },
   "statusLine": {
@@ -223,7 +199,7 @@
       }
     }
   },
+  "outputStyle": "maaya",
   "language": "日本語",
-  "autoUpdatesChannel": "latest",
-  "outputStyle": "maaya"
+  "autoUpdatesChannel": "latest"
 }
