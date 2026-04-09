@@ -54,6 +54,9 @@ alias br='git branch'
 alias sw='git switch'
 alias co='git checkout'
 
+# Claude Code helpers
+[ -f "$HOME/.zsh/ccstyle.zsh" ] && source "$HOME/.zsh/ccstyle.zsh"
+
 # Starship prompt
 eval "$(starship init zsh)"
 
