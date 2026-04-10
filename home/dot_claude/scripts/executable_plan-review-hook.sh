@@ -145,22 +145,33 @@ VERDICT="${VERDICT:-error}"
 # plan.md のハッシュを再計算
 FINAL_HASH=$(hash_cmd "$PLAN_FILE")
 
+# macOS (BSD sed) / Linux (GNU sed) 両対応の in-place 置換
+sedi() {
+  if sed --version >/dev/null 2>&1; then
+    # GNU sed
+    sed -i "$@"
+  else
+    # BSD sed (macOS)
+    sed -i '' "$@"
+  fi
+}
+
 # plan.md の Review Status を更新
 # 既存のマーカーがあれば置換、なければ追記
 if grep -q '<!-- auto-review:' "$PLAN_FILE"; then
-  sed -i "s|<!-- auto-review:.*-->|<!-- auto-review: verdict=$VERDICT; hash=$FINAL_HASH; round=$NEXT_ROUND -->|" "$PLAN_FILE"
+  sedi "s|<!-- auto-review:.*-->|<!-- auto-review: verdict=$VERDICT; hash=$FINAL_HASH; round=$NEXT_ROUND -->|" "$PLAN_FILE"
 else
   echo "<!-- auto-review: verdict=$VERDICT; hash=$FINAL_HASH; round=$NEXT_ROUND -->" >> "$PLAN_FILE"
 fi
 
 # Review Status セクションを更新
-sed -i "s/^- Status: .*/- Status: $VERDICT/" "$PLAN_FILE"
-sed -i "s/^- Round: .*/- Round: $NEXT_ROUND/" "$PLAN_FILE"
-sed -i "s/^- Last Review Hash: .*/- Last Review Hash: $FINAL_HASH/" "$PLAN_FILE"
+sedi "s/^- Status: .*/- Status: $VERDICT/" "$PLAN_FILE"
+sedi "s/^- Round: .*/- Round: $NEXT_ROUND/" "$PLAN_FILE"
+sedi "s/^- Last Review Hash: .*/- Last Review Hash: $FINAL_HASH/" "$PLAN_FILE"
 
 # verdict が pass なら Plan Status を complete に
 if [[ "$VERDICT" == "pass" ]]; then
-  sed -i "s/^- Plan Status: .*/- Plan Status: complete/" "$PLAN_FILE"
+  sedi "s/^- Plan Status: .*/- Plan Status: complete/" "$PLAN_FILE"
   echo "[plan-review] Round $NEXT_ROUND: PASS. Plan marked as complete." >&2
 else
   echo "[plan-review] Round $NEXT_ROUND: NEEDS REVISION. See $REVIEW_OUTPUT" >&2
