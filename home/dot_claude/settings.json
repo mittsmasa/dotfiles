@@ -197,7 +197,7 @@
     "command": "bash ~/.claude/statusline.sh"
   },
   "enabledPlugins": {
-    "document-skills@anthropic-agent-skills": true,
+    "document-skills@anthropic-agent-skills": false,
     "context7@claude-plugins-official": true,
     "using-cmux@hummer98-using-cmux": true
   },
