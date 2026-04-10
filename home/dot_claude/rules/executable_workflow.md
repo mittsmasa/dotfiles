@@ -118,6 +118,8 @@ Research 完了時に自動評価。**2つ以上該当で警告発動**:
 
 **CRITICAL: 承認は人間のみ。** Claude の自己承認禁止。承認前の実装着手禁止。
 
+plan.md を fresh でユーザーに提示し、承認を求める（ツール選択基準は `rules/pane-strategy.md` 参照）。
+
 ## Phase 5: Implement（実装）
 
 前提: Plan Status=complete, Review Status=pass, Approval Status=approved
