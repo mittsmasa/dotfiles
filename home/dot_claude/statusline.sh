@@ -20,7 +20,7 @@ remaining=$(echo "$input" | jq -r '.context_window.remaining_percentage // empty
 
 # Build output
 parts=()
-[ -n "$git_branch" ] && parts+=("$(printf '\033[0;36m\ue0a0 %s\033[0m' "$git_branch")")
+[ -n "$git_branch" ] && parts+=("$(printf '\033[0;36m\xee\x82\xa0 %s\033[0m' "$git_branch")")
 [ -n "$short_dir" ] && parts+=("$(printf '\033[0;33m%s\033[0m' "$short_dir")")
 if [ -n "$remaining" ]; then
   remaining_int=$(printf '%.0f' "$remaining")
