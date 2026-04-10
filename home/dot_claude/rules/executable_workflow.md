@@ -91,20 +91,20 @@ Research 完了時に自動評価。**2つ以上該当で警告発動**:
 
 ## Phase 3: Plan Review Loop（hook自動実行）
 
-`plan.md` 書き込みを `plan-review-automation` hook が検知し自動レビュー。
+`plan.md` 書き込みを PostToolUse hook (`~/.claude/scripts/plan-review-hook.sh`) が検知し自動レビュー。
+環境に依存せず動作する（tmux / cmux / bare いずれでも可）。
 
 **hook の動作:**
 1. plan.md のハッシュを計算、前回と比較（変更なしならスキップ）
-2. tmux review ウィンドウを新規作成、別プロセスの `claude` CLI でレビュー:
+2. `claude --print` でレビューを直接実行（別ペインは使わない）:
    ```bash
-   tmux new-window -t work -n review
-   tmux send-keys -t work:review \
-     "claude --print --system-prompt '$(cat $WORKFLOW_DIR/.review-prompt)' \
-       'ファイルを読んでレビューしてください: $WORKFLOW_DIR/research.md $WORKFLOW_DIR/plan.md' \
-       > $WORKFLOW_DIR/review-round-$ROUND.md" Enter
+   claude --print \
+     --system-prompt "$(cat $WORKFLOW_DIR/.review-prompt)" \
+     "以下のファイルを読んでレビューしてください: $WORKFLOW_DIR/research.md $WORKFLOW_DIR/plan.md" \
+     > $WORKFLOW_DIR/review-round-$ROUND.md
    ```
-3. 結果を plan.md に書き戻し: `<!-- auto-review: verdict=pass|needs_revision; hash=<sha256>; round=N -->`
-4. review ウィンドウを `tmux kill-window -t work:review` で閉じる
+3. verdict を JSON からパース（コードブロックラップにも対応）
+4. 結果を plan.md に書き戻し: `<!-- auto-review: verdict=pass|needs_revision; hash=<sha256>; round=N -->`
 
 **レビュー6観点**: 完全性 / 具体性 / 順序妥当性 / リスク対応 / 確認網羅性 / スコープ適切さ
 
