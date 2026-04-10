@@ -13,14 +13,16 @@ consult → research → plan → (plan review loop) → implement → (verify l
 - サブエージェント（Task tool / Explore agent）でコンテキスト温存
 - セッションをまたぐ作業は TaskCreate で追跡
 
-## tmux 戦略
+## ペイン戦略
+
+ターミナルマルチプレクサ（tmux / cmux）が利用可能な場合、以下のペイン構成を使う。
+bare 環境ではペイン分割なしで直接実行する。
 
 | ペイン | 用途 | フェーズ |
 |---|---|---|
 | main.0 | Claude Code メイン | 全フェーズ |
 | main.1 | dev server / watch 常駐 | implement, verify |
 | main.2 | 動作確認コマンド実行 | verify |
-| review window | hook が動的生成・破棄、別 claude で plan レビュー | review |
 
 ## CRITICAL: Phase 0 — Consult（受付）
 
