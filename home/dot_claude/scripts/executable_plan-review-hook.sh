@@ -129,10 +129,21 @@ if [[ ! -f "$REVIEW_OUTPUT" ]]; then
 fi
 
 # verdict を抽出
-VERDICT=$(grep -oP '"verdict"\s*:\s*"\K[^"]+' "$REVIEW_OUTPUT" 2>/dev/null || echo "error")
+# claude --print は ```json ... ``` でラップすることがあるので、
+# まず JSON 部分を抽出してから jq でパースする
+VERDICT=$(sed -n '/^```/,/^```/{/^```/d;p;}' "$REVIEW_OUTPUT" | jq -r '.verdict // empty' 2>/dev/null)
+if [[ -z "$VERDICT" ]]; then
+  # コードブロックなしの素の JSON を試す
+  VERDICT=$(jq -r '.verdict // empty' "$REVIEW_OUTPUT" 2>/dev/null)
+fi
+if [[ -z "$VERDICT" ]]; then
+  # フォールバック: テキストから verdict を探す
+  VERDICT=$(sed -n 's/.*"verdict"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$REVIEW_OUTPUT" | head -1)
+fi
+VERDICT="${VERDICT:-error}"
 
 # plan.md のハッシュを再計算
-FINAL_HASH=$(sha256sum "$PLAN_FILE" | cut -d' ' -f1)
+FINAL_HASH=$(hash_cmd "$PLAN_FILE")
 
 # plan.md の Review Status を更新
 # 既存のマーカーがあれば置換、なければ追記
