@@ -36,6 +36,8 @@ consult → research → plan → (plan review loop) → implement → (verify l
 
 対象コードと関連領域を読み `$WORKFLOW_DIR/research.md` にまとめる。
 
+**調査の深さはタスクの規模に比例させる。** 過剰に広く深く調べない。必要十分な情報を得たら止める。「徹底的に」「網羅的に」調査するのではなく、実装判断に必要な情報を効率的に集める。
+
 ```markdown
 # Research: [タスク名]
 ## 調査対象
