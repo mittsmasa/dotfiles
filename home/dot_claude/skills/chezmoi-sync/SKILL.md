@@ -26,7 +26,36 @@ chezmoi git -- pull --rebase
 chezmoi status
 ```
 
-出力が空なら「差分なし、同期済み」と報告して終了。
+出力が空でも**油断しない**。`chezmoi status` は**既に管理下にあるファイルの差分しか報告しない**。
+新規ファイル（まだ `chezmoi add` されていないもの）は status に現れないため、次の Step 1.5 で別途確認する。
+
+### 1.5 Untracked File Detection (新規ファイルの検出)
+
+以下のいずれかに該当する場合、**必ずこのステップを実行する**:
+
+- ユーザーが「今回作ったもの」「新しく追加したファイル」系の依頼をしている
+- 直近の会話で chezmoi 管理下のディレクトリ（`~/.claude/`, `~/.config/`, `~/.zshrc` 周辺など）に **新規ファイルを作成した** 覚えがある
+- ユーザーが特定のファイル／ディレクトリを指定して同期を依頼している
+
+**確認方法**:
+
+```bash
+# 個別確認（管理下なら exit 0、未追跡なら非 0）
+chezmoi source-path <file> &>/dev/null && echo "managed" || echo "untracked"
+
+# パターン一致で一覧から探す
+chezmoi managed | grep -E '<pattern>'
+```
+
+未追跡ファイルが見つかったら `chezmoi add` で追加する:
+
+```bash
+chezmoi add ~/.claude/scripts/new-script.sh ~/.claude/skills/new-skill/SKILL.md
+```
+
+- 実行権限があれば `executable_` prefix が自動付与され、権限が保持される
+- `autoCommit`/`autoPush` が有効な環境では `chezmoi add` 実行時にそのまま commit → push まで走る
+- 追加後、再度 `chezmoi status` が空であることを確認する
 
 ### 2. Diff Review
 
