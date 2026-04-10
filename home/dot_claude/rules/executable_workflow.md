@@ -22,13 +22,15 @@ consult → research → plan → (plan review loop) → implement → (verify l
 | main.2 | 動作確認コマンド実行 | verify |
 | review window | hook が動的生成・破棄、別 claude で plan レビュー | review |
 
-## Phase 0: Consult（受付）
+## CRITICAL: Phase 0 — Consult（受付）
 
-タスク受付直後、他の行動より前に以下を出力:
+**タスクを受け取ったら、ツール呼び出し・調査・エージェント起動より前に、必ず以下を出力すること。例外なし。**
 
 > **規模判定**
 > - 推定ステップ数 / 影響ファイル数 / 設計判断有無 / 探索+実装混在
 > - → 実行モード: 直接実行(1-2step,1-2file) / 簡易フロー(3-5step,方針明確) / フルフロー(3+step,設計判断あり)
+
+タスクが自明に見えても省略しない。規模判定のコストはゼロ、飛ばすリスクは高い。
 
 ## Phase 1: Research（調査）
 
