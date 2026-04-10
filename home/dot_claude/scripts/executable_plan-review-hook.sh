@@ -48,10 +48,17 @@ fi
 
 # --- ハッシュチェック ---
 
-CURRENT_HASH=$(sha256sum "$PLAN_FILE" | cut -d' ' -f1)
+# macOS (shasum) / Linux (sha256sum) 両対応
+if command -v sha256sum >/dev/null 2>&1; then
+  hash_cmd() { sha256sum "$1" | cut -d' ' -f1; }
+else
+  hash_cmd() { shasum -a 256 "$1" | cut -d' ' -f1; }
+fi
 
-# plan.md 内の既存ハッシュを抽出
-EXISTING_HASH=$(grep -oP '(?<=hash=)[a-f0-9]+' "$PLAN_FILE" 2>/dev/null || echo "")
+CURRENT_HASH=$(hash_cmd "$PLAN_FILE")
+
+# plan.md 内の既存ハッシュを抽出 (BSD grep 互換: -oP ではなく sed を使用)
+EXISTING_HASH=$(sed -n 's/.*hash=\([a-f0-9]*\).*/\1/p' "$PLAN_FILE" 2>/dev/null | head -1)
 
 if [[ "$CURRENT_HASH" == "$EXISTING_HASH" ]]; then
   echo "[plan-review] No changes since last review. Skipping." >&2
@@ -60,7 +67,8 @@ fi
 
 # --- ラウンド数チェック ---
 
-CURRENT_ROUND=$(grep -oP '(?<=round=)\d+' "$PLAN_FILE" 2>/dev/null || echo "0")
+CURRENT_ROUND=$(sed -n 's/.*round=\([0-9]*\).*/\1/p' "$PLAN_FILE" 2>/dev/null | head -1)
+CURRENT_ROUND="${CURRENT_ROUND:-0}"
 NEXT_ROUND=$((CURRENT_ROUND + 1))
 
 if [[ "$NEXT_ROUND" -gt "$MAX_ROUNDS" ]]; then
