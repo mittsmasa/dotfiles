@@ -115,3 +115,8 @@ cd "$(chezmoi source-path)" && git status && git log --oneline -3
 
 - `.tmpl` 拡張子のファイルは chezmoi テンプレート構文（`{{ if ... }}`）を含む。編集時にテンプレート構文を壊さないこと
 - `chezmoi managed --include=files` で管理対象ファイル一覧を取得可能
+- **PostToolUse hook (`chezmoi-sync-hook.sh`) は既存管理下ファイルの更新のみを自動同期する**。
+  hook は `chezmoi source-path <file>` の成否で判定しているため、**新規ファイルは弾かれる**。
+  そのため「今回作ったものを同期して」系の依頼では `chezmoi status` が空でも安心せず、
+  必ず Step 1.5 の新規ファイル検出を実行すること
+- `chezmoi status` が空 = 同期済み、ではない。あくまで「既存管理下ファイルに差分がない」だけ
