@@ -62,3 +62,8 @@ eval "$(starship init zsh)"
 
 # Local overrides (secrets, machine-specific settings)
 [ -f "$HOME/.zshrc.local" ] && source "$HOME/.zshrc.local"
+
+{{ if eq .chezmoi.os "linux" -}}
+# Turso
+export PATH="$PATH:/home/mittsmasa/.turso"
+{{ end -}}
