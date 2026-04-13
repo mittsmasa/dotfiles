@@ -118,6 +118,8 @@
       "Bash(gunzip:*)",
       "Bash(7z:*)",
       "Bash(chezmoi:*)",
+      "Bash(tmux:*)",
+      "Bash(fresh:*)",
       "Bash(claude mcp add:*)",
       "Bash(claude mcp list:*)",
       "Bash(claude mcp get:*)",
