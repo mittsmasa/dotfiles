@@ -199,7 +199,8 @@
   "enabledPlugins": {
     "document-skills@anthropic-agent-skills": false,
     "context7@claude-plugins-official": true,
-    "using-cmux@hummer98-using-cmux": true
+    "using-cmux@hummer98-using-cmux": true,
+    "vercel-plugin@vercel": true
   },
   "extraKnownMarketplaces": {
     "hummer98-using-cmux": {
