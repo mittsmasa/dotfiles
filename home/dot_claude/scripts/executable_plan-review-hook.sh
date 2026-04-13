@@ -183,7 +183,7 @@ fi
   echo ""
   echo "## Verdict: $VERDICT"
   echo ""
-  grep -v '---REVIEW_DONE---' "$REVIEW_OUTPUT"
+  grep -vF -- '---REVIEW_DONE---' "$REVIEW_OUTPUT"
 } > "${REVIEW_OUTPUT}.tmp" && mv "${REVIEW_OUTPUT}.tmp" "$REVIEW_OUTPUT"
 
 echo "[plan-review] Review round $NEXT_ROUND complete. Output: $REVIEW_OUTPUT" >&2
