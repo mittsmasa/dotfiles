@@ -120,6 +120,7 @@
       "Bash(chezmoi:*)",
       "Bash(tmux:*)",
       "Bash(fresh:*)",
+      "Bash(agent-browser:*)",
       "Bash(claude mcp add:*)",
       "Bash(claude mcp list:*)",
       "Bash(claude mcp get:*)",
