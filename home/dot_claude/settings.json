@@ -119,6 +119,7 @@
       "Bash(7z:*)",
       "Bash(chezmoi:*)",
       "Bash(tmux:*)",
+      "Bash(cmux:*)",
       "Bash(fresh:*)",
       "Bash(agent-browser:*)",
       "Bash(claude mcp add:*)",
