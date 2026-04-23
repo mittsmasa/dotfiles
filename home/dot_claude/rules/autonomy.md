@@ -55,6 +55,7 @@
 - **chezmoi 関連**: chezmoi 管理下のファイル編集、`chezmoi diff / apply / re-add / status` 等のコマンド実行、hook による sync の挙動
 - **lint / format / test / build の実行**: `settings.json` で既に許可済みのコマンド全般
 - **読み取り系の調査**: ファイル読み, grep, glob, git log, git status, find 等
+- **worktree 並列化**: 独立した 2+ のタスクが明示的に依頼された場合、`/wt` skill を使って worktree を切り、別ペインで `claude --worktree` セッションを並走させてよい。上限は **3 並列** まで。4 以上は事前にユーザーに確認する（各 worktree ごとに別 Claude セッションが起動するためコストが増えるため）
 
 ## workflow.md との関係
 
