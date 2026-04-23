@@ -16,3 +16,7 @@
 .claude/plugins/installed_plugins.json
 .claude/plugins/known_marketplaces.json
 .claude/plugins/data
+
+# Machine-local skills / data - not synced across machines
+.agents/skills/agent-browser
+.claude/skills/slide/references
