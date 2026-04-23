@@ -216,5 +216,6 @@
   },
   "outputStyle": "maaya",
   "language": "日本語",
-  "autoUpdatesChannel": "latest"
+  "autoUpdatesChannel": "latest",
+  "effortLevel": "medium"
 }
