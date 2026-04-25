@@ -98,6 +98,8 @@
       "Bash(time:*)",
       "Bash(timeout:*)",
       "Bash(curl:*)",
+      "Bash(playwright-cli:*)",
+      "Bash(playwright:*)",
       "Bash(wget:*)",
       "Bash(ssh:*)",
       "Bash(scp:*)",
@@ -216,6 +218,8 @@
   },
   "outputStyle": "maaya",
   "language": "日本語",
+  "effortLevel": "medium",
   "autoUpdatesChannel": "latest",
-  "effortLevel": "medium"
+  "theme": "dark-daltonized",
+  "agentPushNotifEnabled": true
 }
