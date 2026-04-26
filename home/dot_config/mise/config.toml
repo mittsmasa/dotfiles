@@ -2,11 +2,11 @@
 node = "22"
 pnpm = "latest"
 starship = "latest"
-"npm:@playwright/cli" = "0.1.8"
+"npm:@playwright/cli" = "0.1.9"
 "npm:difit" = "3.1.8"
-"npm:@fresh-editor/fresh-editor" = "0.2.22"
-"npm:skills" = "1.1.6"
-chezmoi = "2.70.0"
+"npm:@fresh-editor/fresh-editor" = "0.3.0"
+"npm:skills" = "1.5.1"
+chezmoi = "2.70.2"
 
 [settings]
 idiomatic_version_file_enable_tools = ["node"]
