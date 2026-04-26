@@ -57,6 +57,31 @@ tmux send-keys -t work:main.1 'hello' Enter
 
 envchain --set のようなインタラクティブ入力が必要なツールや、claude のような TUI は、別ペインで起動して send で操作する。メインの Claude Code セッションからは対話的入力ができないが、別ペイン経由なら send/send-key で操作できる。
 
+### Claude Code TUI に長文プロンプトを送るときは paste-buffer + C-m
+
+別ペインで動いている Claude Code TUI（`claude --worktree` 等）に長文プロンプトを送るとき、`tmux send-keys 'long text' Enter` は **テキストは入るが submit されない** ことがある（特に日本語混じり・複数行・長文）。`Enter` キーを Claude TUI が改行として扱うため。
+
+確実に動く手順:
+
+```bash
+# 1. 既存の入力をクリア
+tmux send-keys -t '<target>' Escape Escape
+
+# 2. プロンプト本文を tmux のペーストバッファ経由で貼り付け
+printf '%s' "$PROMPT" | tmux load-buffer -
+tmux paste-buffer -t '<target>'
+
+# 3. C-m で submit（Enter ではなく C-m / キャリッジリターンの raw 信号）
+sleep 1
+tmux send-keys -t '<target>' C-m
+
+# 4. 受信確認
+sleep 3
+tmux capture-pane -t '<target>' -p -S -20  # Infusing... 等が出ていれば OK
+```
+
+**短い 1 行の英数字コマンド** なら `send-keys 'text' Enter` で済む（シェルへの送信や cmux と同じ）。**Claude TUI に対する数行以上のプロンプト** で submit が効かなかったら、即この方式に切り替える。
+
 ## 注意
 
 - 「人間に見せる」と「エージェントが使う」が両方あるケース（例: テスト失敗の原因をユーザーに相談）では、まず tmux で実行・結果回収し、判断を仰ぐ必要がある箇所だけ fresh で示す
