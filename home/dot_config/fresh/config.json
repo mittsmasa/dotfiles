@@ -2,5 +2,6 @@
   "theme": "dark",
   "editor": {
     "auto_save_enabled": true
-  }
+  },
+  "locale": "ja"
 }
