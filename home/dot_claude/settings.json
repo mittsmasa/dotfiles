@@ -202,7 +202,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ~/.claude/scripts/notify-speak.sh"
+            "command": "bash ~/.claude/scripts/notify.sh"
           }
         ]
       }
