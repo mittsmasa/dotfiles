@@ -1,0 +1,5 @@
+{{- if eq .chezmoi.os "darwin" -}}
+../../.agents/skills/playwright-cli
+{{- else -}}
+/home/{{ .chezmoi.username }}/.local/share/mise/installs/npm-playwright-cli/latest/lib/node_modules/@playwright/cli/skills/playwright-cli
+{{- end -}}
