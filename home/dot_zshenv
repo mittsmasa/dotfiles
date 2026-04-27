@@ -1,2 +1,5 @@
+# /etc/zsh/zshrc の自動 compinit を止め、~/.zshrc 側で fpath を整えてから呼ぶ
+skip_global_compinit=1
+
 # Cargo/Rust environment
 [ -f "$HOME/.cargo/env" ] && . "$HOME/.cargo/env"
