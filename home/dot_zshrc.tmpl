@@ -1,6 +1,20 @@
 # git-completionの読み込み
 fpath=(~/.zsh $fpath)
 zstyle ':completion:*:*:git:*' script ~/.zsh/git-completion.bash
+
+{{ if eq .chezmoi.os "linux" -}}
+# Docker Desktop の zsh 補完は /mnt/wsl/docker-desktop/... を指す symlink。
+# Docker Desktop 未起動時はリンク切れになり compinit が警告するので、
+# fpath 先頭にダミーの _docker を置いて壊れた symlink を shadow する。
+if [[ -L /usr/share/zsh/vendor-completions/_docker && ! -e /usr/share/zsh/vendor-completions/_docker ]]; then
+  _shadow_dir=$HOME/.cache/zsh-shadow
+  [[ -d $_shadow_dir ]] || mkdir -p $_shadow_dir
+  [[ -f $_shadow_dir/_docker ]] || print -- '#compdef docker' > $_shadow_dir/_docker
+  fpath=($_shadow_dir $fpath)
+  print -P "%F{yellow}💤 Docker Desktop 未起動: docker 補完をスキップします%f"
+  unset _shadow_dir
+fi
+{{ end -}}
 autoload -Uz compinit && compinit
 
 # PATH
