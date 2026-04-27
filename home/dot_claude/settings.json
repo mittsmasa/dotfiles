@@ -231,10 +231,10 @@
   "effortLevel": "medium",
   "autoUpdatesChannel": "latest",
   "voice": {
-    "enabled": true,
+    "enabled": false,
     "mode": "hold"
   },
   "theme": "dark-daltonized",
   "agentPushNotifEnabled": true,
-  "voiceEnabled": true
+  "voiceEnabled": false
 }
