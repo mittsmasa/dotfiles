@@ -242,11 +242,11 @@ REPORT="$WORKFLOW_DIR/review-round-${NEXT_ROUND}.md"
   echo "- failed: [$FAILED_STR]"
   echo ""
   for r in "${REVIEWERS[@]}"; do
-    echo "## $r — ${VERDICT[$r]}"
+    echo "## $r — $(get_kv VERDICT_$r)"
     echo ""
     json_out="$WORKFLOW_DIR/review-round-${NEXT_ROUND}-${r}.json"
     raw="$WORKFLOW_DIR/review-round-${NEXT_ROUND}-${r}.raw"
-    if [[ "${STATUS[$r]}" == "ok" && -f "$json_out" ]]; then
+    if [[ "$(get_kv STATUS_$r)" == "ok" && -f "$json_out" ]]; then
       echo '```json'
       cat "$json_out"
       echo '```'
