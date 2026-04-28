@@ -13,4 +13,7 @@ case "$MESSAGE" in
   *)                         WAV="$HOME/.claude/sounds/notify.wav" ;;
 esac
 
-exec paplay "$WAV"
+case "$(uname -s)" in
+  Darwin) exec afplay "$WAV" ;;
+  *)      exec paplay "$WAV" ;;
+esac
