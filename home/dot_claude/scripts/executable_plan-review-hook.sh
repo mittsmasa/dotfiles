@@ -82,7 +82,11 @@ run_reviewer() {
   local name="$1"
   local prompt_file="$PROMPTS_DIR/$name.md"
   local out="$WORKFLOW_DIR/review-round-${NEXT_ROUND}-${name}.raw"
-  if claude --print \
+  # Isolate TMPDIR per reviewer to avoid cmux-claude-node-options mktemp races
+  # when multiple `claude --print` are invoked in parallel from the same hook.
+  local tmp_dir
+  tmp_dir=$(mktemp -d "${TMPDIR:-/tmp}/plan-review-${name}.XXXXXX")
+  if TMPDIR="$tmp_dir" claude --print \
       --system-prompt "$(cat "$prompt_file")" \
       "$USER_PROMPT" \
       > "$out" 2>&1; then
@@ -90,6 +94,7 @@ run_reviewer() {
   else
     echo "fail:$?" > "$WORKFLOW_DIR/review-round-${NEXT_ROUND}-${name}.exit"
   fi
+  rm -rf "$tmp_dir"
 }
 
 pids=()
