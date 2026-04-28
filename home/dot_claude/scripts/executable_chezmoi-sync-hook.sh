@@ -23,6 +23,12 @@ fi
 
 echo "[chezmoi-sync] Detected change in managed file: $FILE_PATH" >&2
 
+# gitleaks 必須化: secrets スキャンができないなら何も push させない
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo "[chezmoi-sync] ERROR: gitleaks not found. Install with: mise use -g gitleaks@latest" >&2
+  exit 1
+fi
+
 # re-add で source に反映
 if ! chezmoi re-add "$FILE_PATH" 2>&1; then
   echo "[chezmoi-sync] ERROR: chezmoi re-add failed for $FILE_PATH" >&2
@@ -35,9 +41,26 @@ if chezmoi git -- diff --quiet && chezmoi git -- diff --staged --quiet; then
   exit 0
 fi
 
+# 当該ファイルの source パスのみ stage（add -A による巻き添え push を防ぐ）
+SOURCE_PATH=$(chezmoi source-path "$FILE_PATH" 2>/dev/null)
+if [[ -z "$SOURCE_PATH" ]]; then
+  echo "[chezmoi-sync] ERROR: failed to resolve source path for $FILE_PATH" >&2
+  exit 1
+fi
+
+chezmoi git -- add -- "$SOURCE_PATH" 2>&1
+
+# Push 前のシークレットスキャン: staged 差分のみ対象
+SOURCE_ROOT=$(chezmoi source-path)
+if ! gitleaks git --staged --no-banner --redact "$SOURCE_ROOT" 2>&1; then
+  echo "[chezmoi-sync] ERROR: gitleaks detected secrets in staged changes. Aborting." >&2
+  echo "[chezmoi-sync] Unstaging $SOURCE_PATH. Review the file and remove secrets before retrying." >&2
+  chezmoi git -- reset HEAD -- "$SOURCE_PATH" 2>&1 || true
+  exit 1
+fi
+
 # commit
 RELATIVE=$(echo "$FILE_PATH" | sed "s|^$HOME/||")
-chezmoi git -- add -A 2>&1
 chezmoi git -- commit -m "Update $RELATIVE" 2>&1
 
 # pull --rebase して push
