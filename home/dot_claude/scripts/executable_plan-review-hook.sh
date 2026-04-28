@@ -19,6 +19,11 @@
 
 set -euo pipefail
 
+if [[ -n "${PLAN_REVIEW_HOOK_RUNNING:-}" ]]; then
+  echo "[plan-review-hook] re-entrant call skipped" >&2
+  exit 0
+fi
+
 WORKFLOW_DIR="${WORKFLOW_DIR:-.workflow}"
 MAX_ROUNDS="${MAX_REVIEW_ROUNDS:-3}"
 PROMPTS_DIR="${PLAN_REVIEW_PROMPTS:-$HOME/.claude/scripts/plan-review-prompts}"
