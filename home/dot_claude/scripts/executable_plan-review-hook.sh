@@ -248,11 +248,8 @@ else
   FINAL_VERDICT="pass"
 fi
 
-# --- plan.md への書き戻し ---
+# --- skipped / failed の文字列化 ---
 
-FINAL_HASH=$(hash_cmd "$PLAN_FILE")
-
-# join helper
 join_csv() {
   local IFS=,
   echo "$*"
@@ -261,6 +258,79 @@ SKIPPED_STR=$(join_csv "${SKIPPED[@]:-}")
 FAILED_STR=$(join_csv "${FAILED[@]:-}")
 [[ -z "$SKIPPED_STR" ]] && SKIPPED_STR="none"
 [[ -z "$FAILED_STR" ]] && FAILED_STR="none"
+
+# --- 集約レビューレポートを生成 (applier に渡すため書き戻しより前に置く) ---
+
+REPORT="$WORKFLOW_DIR/review-round-${NEXT_ROUND}.md"
+{
+  echo "# Review Round $NEXT_ROUND"
+  echo ""
+  echo "## Final Verdict: $FINAL_VERDICT"
+  echo ""
+  echo "- skipped: [$SKIPPED_STR]"
+  echo "- failed: [$FAILED_STR]"
+  echo ""
+  for r in "${REVIEWERS[@]}"; do
+    echo "## $r — $(get_kv VERDICT_$r)"
+    echo ""
+    json_out="$WORKFLOW_DIR/review-round-${NEXT_ROUND}-${r}.json"
+    raw="$WORKFLOW_DIR/review-round-${NEXT_ROUND}-${r}.raw"
+    if [[ "$(get_kv STATUS_$r)" == "ok" && -f "$json_out" ]]; then
+      echo '```json'
+      cat "$json_out"
+      echo '```'
+    else
+      echo "_(skipped — raw output preserved at \`$(basename "$raw")\`)_"
+    fi
+    echo ""
+  done
+} > "$REPORT"
+
+# --- applier フェーズ (needs_revision のときだけ実行) ---
+# applier は plan.md を直接 Edit する。失敗時はバックアップから復元。
+# 成功時は pre-applier hash を据え置くことで、applier 編集後の plan.md は
+# 次回 hook 発火で必ず再レビューされる。
+PRE_APPLIER_HASH=""
+
+if [[ "$FINAL_VERDICT" == "needs_revision" ]]; then
+  PRE_APPLIER_HASH=$(hash_cmd "$PLAN_FILE")
+  cp "$PLAN_FILE" "$WORKFLOW_DIR/plan.md.bak"
+
+  RESEARCH_ABS=$(realpath "$RESEARCH_FILE" 2>/dev/null || echo "$RESEARCH_FILE")
+  PLAN_ABS=$(realpath "$PLAN_FILE" 2>/dev/null || echo "$PLAN_FILE")
+  REPORT_ABS=$(realpath "$REPORT" 2>/dev/null || echo "$REPORT")
+  WORKFLOW_ABS=$(realpath "$WORKFLOW_DIR" 2>/dev/null || echo "$WORKFLOW_DIR")
+
+  USER_PROMPT_APPLIER="以下を読んで plan.md を編集してください:
+- $RESEARCH_ABS
+- $PLAN_ABS
+- $REPORT_ABS"
+
+  echo "[applier] starting" >&2
+  # PLAN_REVIEW_APPLIER_CMD はテスト用差し替え点
+  APPLIER_BIN="${PLAN_REVIEW_APPLIER_CMD:-claude}"
+  if (
+    cd "$WORKFLOW_ABS" && \
+    PLAN_REVIEW_HOOK_RUNNING=1 WORKFLOW_DIR="$WORKFLOW_ABS" \
+      "$APPLIER_BIN" --print \
+      --allowedTools Edit,Read \
+      --system-prompt "$(cat "$PROMPTS_DIR/applier.md")" \
+      "$USER_PROMPT_APPLIER" >&2
+  ); then
+    echo "[applier] exit 0" >&2
+  else
+    echo "[applier] exit non-zero, rolling back" >&2
+    cp "$WORKFLOW_DIR/plan.md.bak" "$PLAN_FILE"
+  fi
+fi
+
+# --- plan.md への書き戻し ---
+# applier が走った場合は pre-applier hash を据え置く (次回 hook で必ず再レビュー)
+if [[ -n "$PRE_APPLIER_HASH" ]]; then
+  FINAL_HASH="$PRE_APPLIER_HASH"
+else
+  FINAL_HASH=$(hash_cmd "$PLAN_FILE")
+fi
 
 MARKER="<!-- auto-review: verdict=$FINAL_VERDICT; hash=$FINAL_HASH; round=$NEXT_ROUND; skipped=[$SKIPPED_STR]; failed=[$FAILED_STR] -->"
 
@@ -287,33 +357,6 @@ sedi "s/^- Last Review Hash: .*/- Last Review Hash: $FINAL_HASH/" "$PLAN_FILE"
 if [[ "$FINAL_VERDICT" == "pass" ]]; then
   sedi "s/^- Plan Status: .*/- Plan Status: complete/" "$PLAN_FILE"
 fi
-
-# --- 集約レビューレポートを生成 ---
-
-REPORT="$WORKFLOW_DIR/review-round-${NEXT_ROUND}.md"
-{
-  echo "# Review Round $NEXT_ROUND"
-  echo ""
-  echo "## Final Verdict: $FINAL_VERDICT"
-  echo ""
-  echo "- skipped: [$SKIPPED_STR]"
-  echo "- failed: [$FAILED_STR]"
-  echo ""
-  for r in "${REVIEWERS[@]}"; do
-    echo "## $r — $(get_kv VERDICT_$r)"
-    echo ""
-    json_out="$WORKFLOW_DIR/review-round-${NEXT_ROUND}-${r}.json"
-    raw="$WORKFLOW_DIR/review-round-${NEXT_ROUND}-${r}.raw"
-    if [[ "$(get_kv STATUS_$r)" == "ok" && -f "$json_out" ]]; then
-      echo '```json'
-      cat "$json_out"
-      echo '```'
-    else
-      echo "_(skipped — raw output preserved at \`$(basename "$raw")\`)_"
-    fi
-    echo ""
-  done
-} > "$REPORT"
 
 echo "[plan-review] Round $NEXT_ROUND: $FINAL_VERDICT (skipped=[$SKIPPED_STR], failed=[$FAILED_STR])" >&2
 echo "[plan-review] Report: $REPORT" >&2
