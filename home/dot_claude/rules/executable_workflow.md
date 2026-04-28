@@ -89,30 +89,38 @@ Research 完了時に自動評価。**2つ以上該当で警告発動**:
 
 動作確認項目は**実行可能で検証可能**に（具体コマンド＋期待結果。手動確認はその旨明記）。
 
-## Phase 3: Plan Review Loop（hook自動実行）
+## Phase 3: Plan Review Loop（hook自動実行・マルチエージェント並列）
 
-`plan.md` 書き込みを PostToolUse hook (`~/.claude/scripts/plan-review-hook.sh`) が検知し自動レビュー。
+`plan.md` 書き込みを PostToolUse hook (`~/.claude/scripts/plan-review-hook.sh`) が検知し、**3 本のレビュアを並列実行**して観点ごとに判定する。
 環境に依存せず動作する（tmux / cmux / bare いずれでも可）。
 
-**hook の動作:**
-1. plan.md のハッシュを計算、前回と比較（変更なしならスキップ）
-2. `claude --print` でレビューを直接実行（別ペインは使わない）:
-   ```bash
-   claude --print \
-     --system-prompt "$(cat $WORKFLOW_DIR/.review-prompt)" \
-     "以下のファイルを読んでレビューしてください: $WORKFLOW_DIR/research.md $WORKFLOW_DIR/plan.md" \
-     > $WORKFLOW_DIR/review-round-$ROUND.md
-   ```
-3. verdict を JSON からパース（コードブロックラップにも対応）
-4. 結果を plan.md に書き戻し: `<!-- auto-review: verdict=pass|needs_revision; hash=<sha256>; round=N -->`
+**3 レビュアの責務分担**（プロンプトは `~/.claude/scripts/plan-review-prompts/<name>.md`）:
 
-**レビュー6観点**: 完全性 / 具体性 / 順序妥当性 / リスク対応 / 確認網羅性 / スコープ適切さ
+| レビュア | 観点 | 特性 |
+|---|---|---|
+| **simplicity** | YAGNI / 過剰実装 / 不要な抽象・fallback / 計画外スコープ / 削れるステップ | **veto 権あり**: fail なら他がどうあれ needs_revision |
+| **correctness** | 影響範囲の漏れ / 順序 / 前提 / リスク対応 / 副作用 / 境界エラー | |
+| **verifiability** | 確認項目の実行可能性 / 期待結果の定量性 / 網羅性 / SKIP 妥当性 | |
+
+**hook の動作:**
+1. plan.md のハッシュを前回と比較（変更なしならスキップ）
+2. 3 本の `claude --print` をバックグラウンド起動 → `wait`
+3. 各レビュアの出力から JSON を抽出（コードフェンス対応・素 JSON・抽出フォールバック）
+4. **壊れた結果は捨てる**: claude 実行失敗 / JSON パース不能 / verdict 欠落の場合、そのレビュアは `skipped` 扱い。残りで判定
+5. **aggregator**:
+   - 全レビュア skipped → `verdict=error`
+   - simplicity が needs_revision → `needs_revision`（veto）
+   - 他のレビュアが needs_revision → `needs_revision`
+   - 上記以外 → `pass`
+6. plan.md に書き戻し: `<!-- auto-review: verdict=...; hash=...; round=N; skipped=[a,b]; failed=[c] -->`
+   - **捨てたレビュアは `skipped=[]` に名指しで残る**ので、ユーザーは何が判定に使われなかったか把握できる
 
 **制御**:
 - pass → Plan Status: complete → ユーザーに承認を求める
 - needs_revision → 指摘反映（→ 次の hook トリガー）、Round インクリメント
+- error（全 skipped）→ ユーザーに報告、Round はインクリメントしつつ放置
 - 最大3ラウンド（超過時はユーザーに提示）
-- 各ラウンド結果は `$WORKFLOW_DIR/review-round-N.md` に保存
+- 集約レポートは `$WORKFLOW_DIR/review-round-N.md`、各レビュアの生 JSON は `review-round-N-<name>.json` に保存
 
 **Hash 整合性**: Approval 時に plan.md のハッシュとマーカー内ハッシュを比較。不一致なら再レビュー自動トリガー。
 
