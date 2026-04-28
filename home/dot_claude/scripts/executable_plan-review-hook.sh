@@ -129,8 +129,13 @@ extract_json() {
   return 1
 }
 
-declare -A VERDICT
-declare -A STATUS  # ok | skipped
+# 疑似連想配列 (bash 3.2 互換: declare -A が使えないため printf -v で動的変数に格納)
+# 変数名: VERDICT_<reviewer>, STATUS_<reviewer>
+#   STATUS_*  = ok | skipped
+#   VERDICT_* = pass | needs_revision | skipped
+set_kv() { printf -v "$1" '%s' "$2"; }
+get_kv() { local k="$1"; echo "${!k-}"; }
+
 SKIPPED=()
 FAILED=()
 
@@ -141,8 +146,8 @@ for r in "${REVIEWERS[@]}"; do
   exit_status=$(cat "$exit_marker" 2>/dev/null || echo "fail:unknown")
 
   if [[ "$exit_status" != "ok" ]]; then
-    STATUS[$r]="skipped"
-    VERDICT[$r]="skipped"
+    set_kv "STATUS_$r"  "skipped"
+    set_kv "VERDICT_$r" "skipped"
     SKIPPED+=("$r")
     echo "[plan-review] $r: SKIPPED ($exit_status)" >&2
     continue
@@ -152,19 +157,19 @@ for r in "${REVIEWERS[@]}"; do
     echo "$json" > "$json_out"
     v=$(echo "$json" | jq -r '.verdict // "skipped"' 2>/dev/null)
     if [[ "$v" == "pass" || "$v" == "needs_revision" ]]; then
-      STATUS[$r]="ok"
-      VERDICT[$r]="$v"
+      set_kv "STATUS_$r"  "ok"
+      set_kv "VERDICT_$r" "$v"
       [[ "$v" == "needs_revision" ]] && FAILED+=("$r")
       echo "[plan-review] $r: $v" >&2
     else
-      STATUS[$r]="skipped"
-      VERDICT[$r]="skipped"
+      set_kv "STATUS_$r"  "skipped"
+      set_kv "VERDICT_$r" "skipped"
       SKIPPED+=("$r")
       echo "[plan-review] $r: SKIPPED (no valid verdict)" >&2
     fi
   else
-    STATUS[$r]="skipped"
-    VERDICT[$r]="skipped"
+    set_kv "STATUS_$r"  "skipped"
+    set_kv "VERDICT_$r" "skipped"
     SKIPPED+=("$r")
     echo "[plan-review] $r: SKIPPED (unparseable JSON)" >&2
   fi
@@ -176,7 +181,7 @@ done
 if [[ "${#SKIPPED[@]}" -eq "${#REVIEWERS[@]}" ]]; then
   FINAL_VERDICT="error"
 # simplicity が fail または ok でない → needs_revision (veto)
-elif [[ "${VERDICT[simplicity]}" == "needs_revision" ]]; then
+elif [[ "$(get_kv VERDICT_simplicity)" == "needs_revision" ]]; then
   FINAL_VERDICT="needs_revision"
 # 他のレビュアが fail → needs_revision
 elif [[ "${#FAILED[@]}" -gt 0 ]]; then
