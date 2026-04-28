@@ -35,6 +35,13 @@ user-prompt には以下のファイルパスが渡される:
 「あったほうが良い」程度では fail にしない。「無くても成立する」なら fail。
 迷ったら fail 寄りに倒す。simplicity reviewer は厳しいのが仕事。
 
+ただし共通スタンスに従い:
+
+- 前ラウンドで自分が出した must_remove が解消されているかを最優先で確認
+- 解消済みなら再指摘しない。残っていれば同 severity で再指摘
+- 新規視点での「削れ」は severity を 1 段下げる（critical → major、major → minor、minor → 出さない）
+- `peers.md` で他 reviewer が必要と認めている機構を「削れ」と指摘するのは管轄越境。出さない
+
 ## 出力形式
 
 以下の JSON のみを出力。前後の説明文・コードブロックフェンス禁止:
