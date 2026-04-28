@@ -117,10 +117,22 @@ Research 完了時に自動評価。**2つ以上該当で警告発動**:
 
 **制御**:
 - pass → Plan Status: complete → ユーザーに承認を求める
-- needs_revision → 指摘反映（→ 次の hook トリガー）、Round インクリメント
+- needs_revision → **applier session が起動して plan.md を直接編集**（指摘反映 or escalate）、Round インクリメント
 - error（全 skipped）→ ユーザーに報告、Round はインクリメントしつつ放置
 - 最大3ラウンド（超過時はユーザーに提示）
 - 集約レポートは `$WORKFLOW_DIR/review-round-N.md`、各レビュアの生 JSON は `review-round-N-<name>.json` に保存
+
+**applier フェーズ** (verdict=needs_revision のときのみ起動):
+- 入力: `research.md`, `plan.md`, `review-round-N.md`
+- 編集対象: plan.md 本文と `## Approval` 内 `Approval Status` 行のみ（マーカー行と `## Review Status` は触らない）
+- 判断指針: research.md の射程内なら反映、射程外/方針変更レベルなら escalate
+- escalate 操作: `Approval Status: pending` → `Approval Status: needs_human_review`
+- 失敗時: `plan.md.bak` から自動ロールバック
+- applier 編集後は **次回 hook 発火で必ず再レビューが走る**
+
+**main session 側の責務変化**:
+従来の「reviewer の指摘を読んで自分で plan.md を直す」は不要になり、main session が介入するのは applier が `Approval Status: needs_human_review` を出したときだけ。
+それ以外の `verdict=needs_revision` ループは hook 内で完結する。
 
 **Hash 整合性**: Approval 時に plan.md のハッシュとマーカー内ハッシュを比較。不一致なら再レビュー自動トリガー。
 
