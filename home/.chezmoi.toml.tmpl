@@ -3,8 +3,11 @@
 {{- $signingkey := promptStringOnce . "signingkey" "Path to your signing key" -}}
 
 [git]
-    autoCommit = true
-    autoPush = true
+    # autoCommit/autoPush は無効化（chezmoi 内部の commit/push が
+    # ~/.claude/scripts/chezmoi-sync-hook.sh の gitleaks スキャンを迂回するため）。
+    # commit/push は hook 側で gitleaks 通過後に実行する。
+    autoCommit = false
+    autoPush = false
 
 [data]
     name = {{ $name | quote }}
