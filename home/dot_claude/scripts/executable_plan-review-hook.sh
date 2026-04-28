@@ -72,23 +72,71 @@ if [[ "$NEXT_ROUND" -gt "$MAX_ROUNDS" ]]; then
   exit 0
 fi
 
+# --- peers.md を前ラウンドの結果から生成 ---
+# 同ラウンド内で他 reviewer の verdict を共有するには順序問題があるため、
+# 1 ラウンド遅らせて前ラウンドの結果を peers.md として渡す。
+# round 1 では前ラウンドが無いので空ファイルになる。
+
+PEERS_FILE="$WORKFLOW_DIR/review-round-${NEXT_ROUND}-peers.md"
+PREV_ROUND=$((NEXT_ROUND - 1))
+{
+  if [[ "$PREV_ROUND" -ge 1 ]]; then
+    echo "# Peers (前ラウンドの他 reviewer の verdict / summary / must_remove)"
+    echo ""
+    for peer in "${REVIEWERS[@]}"; do
+      peer_json="$WORKFLOW_DIR/review-round-${PREV_ROUND}-${peer}.json"
+      echo "## ${peer}"
+      if [[ -f "$peer_json" ]]; then
+        verdict=$(jq -r '.verdict // "unknown"' "$peer_json" 2>/dev/null || echo "unknown")
+        summary=$(jq -r '.summary // ""' "$peer_json" 2>/dev/null || echo "")
+        echo "- verdict: ${verdict}"
+        echo "- summary: ${summary}"
+        if jq -e '.must_remove' "$peer_json" >/dev/null 2>&1; then
+          echo "- must_remove:"
+          jq -r '.must_remove[]? | "  - " + .' "$peer_json" 2>/dev/null || true
+        fi
+      else
+        echo "- (no previous report)"
+      fi
+      echo ""
+    done
+  fi
+} > "$PEERS_FILE"
+
 # --- 並列レビュー実行 ---
 
 echo "[plan-review] Starting review round $NEXT_ROUND (3 reviewers in parallel)..." >&2
 
-USER_PROMPT="以下のファイルを読んでレビューしてください: $RESEARCH_FILE $PLAN_FILE"
+MVP_STANCE_FILE="$PROMPTS_DIR/_mvp-stance.md"
 
 run_reviewer() {
   local name="$1"
   local prompt_file="$PROMPTS_DIR/$name.md"
+  local prev_self_json="$WORKFLOW_DIR/review-round-${PREV_ROUND}-${name}.json"
   local out="$WORKFLOW_DIR/review-round-${NEXT_ROUND}-${name}.raw"
+  local user_prompt
+  user_prompt="以下のファイルを読んでレビューしてください:
+- $RESEARCH_FILE
+- $PLAN_FILE
+- $prev_self_json (前ラウンドの自分のレポート、無ければ無視)
+- $PEERS_FILE (他 reviewer の前ラウンド verdict、無ければ無視)"
+  local sys_prompt
+  if [[ -f "$MVP_STANCE_FILE" ]]; then
+    sys_prompt="$(cat "$MVP_STANCE_FILE")
+
+---
+
+$(cat "$prompt_file")"
+  else
+    sys_prompt="$(cat "$prompt_file")"
+  fi
   # Isolate TMPDIR per reviewer to avoid cmux-claude-node-options mktemp races
   # when multiple `claude --print` are invoked in parallel from the same hook.
   local tmp_dir
   tmp_dir=$(mktemp -d "${TMPDIR:-/tmp}/plan-review-${name}.XXXXXX")
   if TMPDIR="$tmp_dir" claude --print \
-      --system-prompt "$(cat "$prompt_file")" \
-      "$USER_PROMPT" \
+      --system-prompt "$sys_prompt" \
+      "$user_prompt" \
       > "$out" 2>&1; then
     echo "ok" > "$WORKFLOW_DIR/review-round-${NEXT_ROUND}-${name}.exit"
   else
