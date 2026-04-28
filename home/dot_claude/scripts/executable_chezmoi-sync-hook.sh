@@ -51,8 +51,15 @@ fi
 chezmoi git -- add -- "$SOURCE_PATH" 2>&1
 
 # Push 前のシークレットスキャン: staged 差分のみ対象
-SOURCE_ROOT=$(chezmoi source-path)
-if ! gitleaks git --staged --no-banner --redact "$SOURCE_ROOT" 2>&1; then
+# .chezmoiroot で source-path が git root と異なる場合があるため git toplevel を使う
+GIT_ROOT=$(chezmoi git -- rev-parse --show-toplevel 2>/dev/null | tr -d '\r')
+if [[ -z "$GIT_ROOT" ]] || [[ ! -d "$GIT_ROOT/.git" ]]; then
+  echo "[chezmoi-sync] ERROR: could not resolve chezmoi git toplevel" >&2
+  chezmoi git -- reset HEAD -- "$SOURCE_PATH" 2>&1 || true
+  exit 1
+fi
+
+if ! gitleaks git --staged --no-banner --redact --exit-code 1 "$GIT_ROOT" >&2; then
   echo "[chezmoi-sync] ERROR: gitleaks detected secrets in staged changes. Aborting." >&2
   echo "[chezmoi-sync] Unstaging $SOURCE_PATH. Review the file and remove secrets before retrying." >&2
   chezmoi git -- reset HEAD -- "$SOURCE_PATH" 2>&1 || true
