@@ -1,54 +1,52 @@
 #!/usr/bin/env bash
 # plan-review-hook.sh
-# plan.md への書き込みを検知して自動レビューを実行する
+# plan.md への書き込みを検知して 3 本のレビュアを並列実行する
 #
-# Claude Code の PostToolUse hook として使用:
-# {
-#   "hooks": {
-#     "PostToolUse": [
-#       {
-#         "matcher": "Write|Edit|MultiEdit",
-#         "hooks": [{
-#           "type": "command",
-#           "command": "bash ~/.claude/scripts/plan-review-hook.sh"
-#         }]
-#       }
-#     ]
-#   }
-# }
+# レビュア構成:
+#   - simplicity     (veto 権あり: fail なら他がどうあれ needs_revision)
+#   - correctness
+#   - verifiability
+#
+# 各レビュアの結果が壊れている / claude --print が失敗した場合、
+# そのレビュアは「skipped」として扱い、残りの結果で判定する。
+# 全レビュア skipped のときのみ verdict=error。
 #
 # 環境変数:
-#   WORKFLOW_DIR - 成果物ディレクトリ (default: .workflow)
-#   MAX_REVIEW_ROUNDS - 最大レビューラウンド数 (default: 3)
+#   WORKFLOW_DIR        - 成果物ディレクトリ (default: .workflow)
+#   MAX_REVIEW_ROUNDS   - 最大レビューラウンド数 (default: 3)
+#   PLAN_REVIEW_PROMPTS - プロンプト配置ディレクトリ
+#                         (default: ~/.claude/scripts/plan-review-prompts)
 
 set -euo pipefail
 
 WORKFLOW_DIR="${WORKFLOW_DIR:-.workflow}"
 MAX_ROUNDS="${MAX_REVIEW_ROUNDS:-3}"
+PROMPTS_DIR="${PLAN_REVIEW_PROMPTS:-$HOME/.claude/scripts/plan-review-prompts}"
 PLAN_FILE="$WORKFLOW_DIR/plan.md"
-REVIEW_PROMPT_FILE="$WORKFLOW_DIR/.review-prompt"
+RESEARCH_FILE="$WORKFLOW_DIR/research.md"
+
+REVIEWERS=(simplicity correctness verifiability)
 
 # --- 前提チェック ---
 
-# plan.md が存在しなければスキップ
-if [[ ! -f "$PLAN_FILE" ]]; then
-  exit 0
-fi
+[[ -f "$PLAN_FILE" ]] || exit 0
 
-# stdin から JSON ペイロードを読み込み、対象ファイルを抽出
 INPUT=$(cat)
-
-# jq を使用して tool_input.file_path から対象ファイルを取得
 FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty' 2>/dev/null || echo "")
 
-# plan.md の変更でない場合はスキップ
 if [[ -z "$FILE_PATH" ]] || [[ "$FILE_PATH" != *"plan.md" ]]; then
   exit 0
 fi
 
+for r in "${REVIEWERS[@]}"; do
+  if [[ ! -f "$PROMPTS_DIR/$r.md" ]]; then
+    echo "[plan-review] Missing prompt: $PROMPTS_DIR/$r.md" >&2
+    exit 1
+  fi
+done
+
 # --- ハッシュチェック ---
 
-# macOS (shasum) / Linux (sha256sum) 両対応
 if command -v sha256sum >/dev/null 2>&1; then
   hash_cmd() { sha256sum "$1" | cut -d' ' -f1; }
 else
@@ -56,8 +54,6 @@ else
 fi
 
 CURRENT_HASH=$(hash_cmd "$PLAN_FILE")
-
-# plan.md 内の既存ハッシュを抽出 (BSD grep 互換: -oP ではなく sed を使用)
 EXISTING_HASH=$(sed -n 's/.*hash=\([a-f0-9]*\).*/\1/p' "$PLAN_FILE" 2>/dev/null | head -1)
 
 if [[ "$CURRENT_HASH" == "$EXISTING_HASH" ]]; then
@@ -76,114 +72,185 @@ if [[ "$NEXT_ROUND" -gt "$MAX_ROUNDS" ]]; then
   exit 0
 fi
 
-# --- レビュープロンプト生成 ---
+# --- 並列レビュー実行 ---
 
-cat > "$REVIEW_PROMPT_FILE" << 'PROMPT_EOF'
-あなたは実装計画のレビュアーです。
-渡されたファイルを読み、計画の品質を以下の6観点で評価してください。
+echo "[plan-review] Starting review round $NEXT_ROUND (3 reviewers in parallel)..." >&2
 
-## 評価観点
+USER_PROMPT="以下のファイルを読んでレビューしてください: $RESEARCH_FILE $PLAN_FILE"
 
-1. 完全性: research.md で特定された影響範囲がすべて plan.md に反映されているか
-2. 具体性: 各ステップが十分に具体的で、実装者が迷わないか
-3. 順序の妥当性: ステップの依存関係と実行順序は正しいか
-4. リスク対応: 特定されたリスクに対する対策は十分か
-5. 動作確認の網羅性: 変更内容に対して動作確認項目は十分か
-6. スコープの適切さ: 不要な変更が含まれていないか、必要な変更が漏れていないか
-
-## 出力形式
-
-以下のJSON形式のみを出力してください。それ以外のテキストは含めないでください:
-
-{
-  "verdict": "pass" または "needs_revision",
-  "issues": [
-    {
-      "severity": "critical" または "major" または "minor",
-      "category": "completeness" または "specificity" または "ordering" または "risk" または "verification" または "scope",
-      "description": "問題の説明",
-      "suggestion": "改善案"
-    }
-  ],
-  "summary": "総評（1-2文）"
+run_reviewer() {
+  local name="$1"
+  local prompt_file="$PROMPTS_DIR/$name.md"
+  local out="$WORKFLOW_DIR/review-round-${NEXT_ROUND}-${name}.raw"
+  if claude --print \
+      --system-prompt "$(cat "$prompt_file")" \
+      "$USER_PROMPT" \
+      > "$out" 2>&1; then
+    echo "ok" > "$WORKFLOW_DIR/review-round-${NEXT_ROUND}-${name}.exit"
+  else
+    echo "fail:$?" > "$WORKFLOW_DIR/review-round-${NEXT_ROUND}-${name}.exit"
+  fi
 }
-PROMPT_EOF
 
-# --- レビュー実行（直接バックグラウンド実行） ---
+pids=()
+for r in "${REVIEWERS[@]}"; do
+  run_reviewer "$r" &
+  pids+=($!)
+done
 
-REVIEW_OUTPUT="$WORKFLOW_DIR/review-round-${NEXT_ROUND}.md"
+for pid in "${pids[@]}"; do
+  wait "$pid" || true
+done
 
-echo "[plan-review] Starting review round $NEXT_ROUND..." >&2
+# --- 各レビュアの verdict を抽出 ---
 
-# claude --print をサブプロセスとして直接実行
-claude --print \
-  --system-prompt "$(cat "$REVIEW_PROMPT_FILE")" \
-  "以下のファイルを読んでレビューしてください: $WORKFLOW_DIR/research.md $PLAN_FILE" \
-  > "$REVIEW_OUTPUT" 2>&1
+# JSON 抽出: ```json...``` でラップ・素のJSON・先頭にゴミがある場合に対応
+extract_json() {
+  local file="$1"
+  # 1. コードブロックを剥がす
+  local stripped
+  stripped=$(sed -n '/^```/,/^```/{/^```/d;p;}' "$file")
+  if [[ -n "$stripped" ]] && echo "$stripped" | jq -e . >/dev/null 2>&1; then
+    echo "$stripped"
+    return 0
+  fi
+  # 2. 素の JSON
+  if jq -e . "$file" >/dev/null 2>&1; then
+    cat "$file"
+    return 0
+  fi
+  # 3. 最初の { から最後の } までを抜き出して試す
+  local extracted
+  extracted=$(sed -n '/^{/,/^}/p' "$file")
+  if [[ -n "$extracted" ]] && echo "$extracted" | jq -e . >/dev/null 2>&1; then
+    echo "$extracted"
+    return 0
+  fi
+  return 1
+}
 
-# --- 結果の解析と plan.md への反映 ---
+declare -A VERDICT
+declare -A STATUS  # ok | skipped
+SKIPPED=()
+FAILED=()
 
-if [[ ! -f "$REVIEW_OUTPUT" ]]; then
-  echo "[plan-review] Review output not found. Skipping." >&2
-  exit 1
+for r in "${REVIEWERS[@]}"; do
+  raw="$WORKFLOW_DIR/review-round-${NEXT_ROUND}-${r}.raw"
+  json_out="$WORKFLOW_DIR/review-round-${NEXT_ROUND}-${r}.json"
+  exit_marker="$WORKFLOW_DIR/review-round-${NEXT_ROUND}-${r}.exit"
+  exit_status=$(cat "$exit_marker" 2>/dev/null || echo "fail:unknown")
+
+  if [[ "$exit_status" != "ok" ]]; then
+    STATUS[$r]="skipped"
+    VERDICT[$r]="skipped"
+    SKIPPED+=("$r")
+    echo "[plan-review] $r: SKIPPED ($exit_status)" >&2
+    continue
+  fi
+
+  if json=$(extract_json "$raw"); then
+    echo "$json" > "$json_out"
+    v=$(echo "$json" | jq -r '.verdict // "skipped"' 2>/dev/null)
+    if [[ "$v" == "pass" || "$v" == "needs_revision" ]]; then
+      STATUS[$r]="ok"
+      VERDICT[$r]="$v"
+      [[ "$v" == "needs_revision" ]] && FAILED+=("$r")
+      echo "[plan-review] $r: $v" >&2
+    else
+      STATUS[$r]="skipped"
+      VERDICT[$r]="skipped"
+      SKIPPED+=("$r")
+      echo "[plan-review] $r: SKIPPED (no valid verdict)" >&2
+    fi
+  else
+    STATUS[$r]="skipped"
+    VERDICT[$r]="skipped"
+    SKIPPED+=("$r")
+    echo "[plan-review] $r: SKIPPED (unparseable JSON)" >&2
+  fi
+done
+
+# --- aggregator ---
+
+# 全 skipped → error
+if [[ "${#SKIPPED[@]}" -eq "${#REVIEWERS[@]}" ]]; then
+  FINAL_VERDICT="error"
+# simplicity が fail または ok でない → needs_revision (veto)
+elif [[ "${VERDICT[simplicity]}" == "needs_revision" ]]; then
+  FINAL_VERDICT="needs_revision"
+# 他のレビュアが fail → needs_revision
+elif [[ "${#FAILED[@]}" -gt 0 ]]; then
+  FINAL_VERDICT="needs_revision"
+else
+  FINAL_VERDICT="pass"
 fi
 
-# verdict を抽出
-# claude --print は ```json ... ``` でラップすることがあるので、
-# まず JSON 部分を抽出してから jq でパースする
-VERDICT=$(sed -n '/^```/,/^```/{/^```/d;p;}' "$REVIEW_OUTPUT" | jq -r '.verdict // empty' 2>/dev/null)
-if [[ -z "$VERDICT" ]]; then
-  # コードブロックなしの素の JSON を試す
-  VERDICT=$(jq -r '.verdict // empty' "$REVIEW_OUTPUT" 2>/dev/null)
-fi
-if [[ -z "$VERDICT" ]]; then
-  # フォールバック: テキストから verdict を探す
-  VERDICT=$(sed -n 's/.*"verdict"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$REVIEW_OUTPUT" | head -1)
-fi
-VERDICT="${VERDICT:-error}"
+# --- plan.md への書き戻し ---
 
-# plan.md のハッシュを再計算
 FINAL_HASH=$(hash_cmd "$PLAN_FILE")
 
-# macOS (BSD sed) / Linux (GNU sed) 両対応の in-place 置換
+# join helper
+join_csv() {
+  local IFS=,
+  echo "$*"
+}
+SKIPPED_STR=$(join_csv "${SKIPPED[@]:-}")
+FAILED_STR=$(join_csv "${FAILED[@]:-}")
+[[ -z "$SKIPPED_STR" ]] && SKIPPED_STR="none"
+[[ -z "$FAILED_STR" ]] && FAILED_STR="none"
+
+MARKER="<!-- auto-review: verdict=$FINAL_VERDICT; hash=$FINAL_HASH; round=$NEXT_ROUND; skipped=[$SKIPPED_STR]; failed=[$FAILED_STR] -->"
+
 sedi() {
   if sed --version >/dev/null 2>&1; then
-    # GNU sed
     sed -i "$@"
   else
-    # BSD sed (macOS)
     sed -i '' "$@"
   fi
 }
 
-# plan.md の Review Status を更新
-# 既存のマーカーがあれば置換、なければ追記
 if grep -q '<!-- auto-review:' "$PLAN_FILE"; then
-  sedi "s|<!-- auto-review:.*-->|<!-- auto-review: verdict=$VERDICT; hash=$FINAL_HASH; round=$NEXT_ROUND -->|" "$PLAN_FILE"
+  # マーカー行全体を置換 (sed の区切りに | を使い、かつエスケープ)
+  ESCAPED_MARKER=$(printf '%s\n' "$MARKER" | sed -e 's/[\/&|]/\\&/g')
+  sedi "s|<!-- auto-review:.*-->|$ESCAPED_MARKER|" "$PLAN_FILE"
 else
-  echo "<!-- auto-review: verdict=$VERDICT; hash=$FINAL_HASH; round=$NEXT_ROUND -->" >> "$PLAN_FILE"
+  echo "$MARKER" >> "$PLAN_FILE"
 fi
 
-# Review Status セクションを更新
-sedi "s/^- Status: .*/- Status: $VERDICT/" "$PLAN_FILE"
+sedi "s/^- Status: .*/- Status: $FINAL_VERDICT/" "$PLAN_FILE"
 sedi "s/^- Round: .*/- Round: $NEXT_ROUND/" "$PLAN_FILE"
 sedi "s/^- Last Review Hash: .*/- Last Review Hash: $FINAL_HASH/" "$PLAN_FILE"
 
-# verdict が pass なら Plan Status を complete に
-if [[ "$VERDICT" == "pass" ]]; then
+if [[ "$FINAL_VERDICT" == "pass" ]]; then
   sedi "s/^- Plan Status: .*/- Plan Status: complete/" "$PLAN_FILE"
-  echo "[plan-review] Round $NEXT_ROUND: PASS. Plan marked as complete." >&2
-else
-  echo "[plan-review] Round $NEXT_ROUND: NEEDS REVISION. See $REVIEW_OUTPUT" >&2
 fi
 
-# レビュー結果に見出しを追加
+# --- 集約レビューレポートを生成 ---
+
+REPORT="$WORKFLOW_DIR/review-round-${NEXT_ROUND}.md"
 {
   echo "# Review Round $NEXT_ROUND"
   echo ""
-  echo "## Verdict: $VERDICT"
+  echo "## Final Verdict: $FINAL_VERDICT"
   echo ""
-  grep -vF -- '---REVIEW_DONE---' "$REVIEW_OUTPUT"
-} > "${REVIEW_OUTPUT}.tmp" && mv "${REVIEW_OUTPUT}.tmp" "$REVIEW_OUTPUT"
+  echo "- skipped: [$SKIPPED_STR]"
+  echo "- failed: [$FAILED_STR]"
+  echo ""
+  for r in "${REVIEWERS[@]}"; do
+    echo "## $r — ${VERDICT[$r]}"
+    echo ""
+    json_out="$WORKFLOW_DIR/review-round-${NEXT_ROUND}-${r}.json"
+    raw="$WORKFLOW_DIR/review-round-${NEXT_ROUND}-${r}.raw"
+    if [[ "${STATUS[$r]}" == "ok" && -f "$json_out" ]]; then
+      echo '```json'
+      cat "$json_out"
+      echo '```'
+    else
+      echo "_(skipped — raw output preserved at \`$(basename "$raw")\`)_"
+    fi
+    echo ""
+  done
+} > "$REPORT"
 
-echo "[plan-review] Review round $NEXT_ROUND complete. Output: $REVIEW_OUTPUT" >&2
+echo "[plan-review] Round $NEXT_ROUND: $FINAL_VERDICT (skipped=[$SKIPPED_STR], failed=[$FAILED_STR])" >&2
+echo "[plan-review] Report: $REPORT" >&2
