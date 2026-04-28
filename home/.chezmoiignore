@@ -19,3 +19,5 @@
 
 # Machine-local skills / data - not synced across machines
 .agents/skills/agent-browser
+.agents/skills/vercel-react-best-practices
+.claude/skills/vercel-react-best-practices
