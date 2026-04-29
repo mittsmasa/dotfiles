@@ -16,6 +16,54 @@
 #   MAX_REVIEW_ROUNDS   - 最大レビューラウンド数 (default: 3)
 #   PLAN_REVIEW_PROMPTS - プロンプト配置ディレクトリ
 #                         (default: ~/.claude/scripts/plan-review-prompts)
+#
+# 全体フロー:
+#   1. plan.md の書き込みを検知（PostToolUse hook）
+#   2. plan.md と前回 hash を比較 → 同一ならスキップ
+#   3. ラウンド数確認（MAX_REVIEW_ROUNDS 超過なら手動レビューを促してスキップ）
+#   4. 前ラウンドの他 reviewer の verdict/summary/must_remove を peers.md に集約
+#      （同ラウンド内では順序問題があるため 1 ラウンド遅延で共有する）
+#   5. 3 本のレビュアを `claude --print` でバックグラウンド並列起動 → wait
+#   6. 各 raw 出力から JSON 抽出（コードフェンス対応・素 JSON・抽出フォールバック）
+#   7. aggregator で最終 verdict を決定
+#   8. needs_revision なら applier フェーズ実行 → plan.md を編集
+#   9. plan.md にマーカー / Status / Round / Last Review Hash を書き戻す
+#
+# Aggregator:
+#   - 全レビュア skipped → verdict=error
+#   - simplicity が needs_revision → verdict=needs_revision（veto）
+#   - 他のレビュアが needs_revision → verdict=needs_revision
+#   - 上記以外 → verdict=pass
+#
+# Applier フェーズ (verdict=needs_revision のときのみ):
+#   - PRE_APPLIER_HASH を保存し plan.md.bak を作成
+#   - `claude --print --allowedTools Edit,Read` で起動、system prompt は
+#     `$PROMPTS_DIR/applier.md`
+#   - 編集スコープ・escalate 条件（`Approval Status: needs_human_review` への
+#     遷移など）は applier.md プロンプト側で制約する
+#   - 失敗時は plan.md.bak から自動ロールバック
+#   - PLAN_REVIEW_APPLIER_CMD 環境変数でコマンド差し替え可能（テスト用）
+#
+# Hash 整合性:
+#   - applier が走った場合、書き戻す hash は PRE_APPLIER_HASH（applier 編集前）
+#     を据え置く。これにより applier 編集後の plan.md は次回 hook で必ず
+#     再レビューされる
+#   - applier が走らなかった場合は現在の plan.md ハッシュを書き戻す
+#
+# plan.md に書き戻す内容:
+#   - マーカー行（既存があれば置換、なければ末尾に追記）:
+#       <!-- auto-review: verdict=...; hash=...; round=...; skipped=[...]; failed=[...] -->
+#   - `- Status: ...` 行を最終 verdict で更新
+#   - `- Round: ...` 行を NEXT_ROUND で更新
+#   - `- Last Review Hash: ...` 行を FINAL_HASH で更新
+#   - verdict=pass のときのみ `- Plan Status: ...` を complete に更新
+#
+# 出力ファイル:
+#   $WORKFLOW_DIR/review-round-N.md         - 集約レポート
+#   $WORKFLOW_DIR/review-round-N-<r>.json   - 各レビュアの抽出済み JSON
+#   $WORKFLOW_DIR/review-round-N-<r>.raw    - 各レビュアの生出力
+#   $WORKFLOW_DIR/review-round-N-peers.md   - 前ラウンドの他者 verdict
+#   $WORKFLOW_DIR/plan.md.bak               - applier 用バックアップ
 
 set -euo pipefail
 
