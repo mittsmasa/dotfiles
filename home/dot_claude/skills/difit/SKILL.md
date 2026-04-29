@@ -109,6 +109,23 @@ difit --pr <github-pr-url>
 cat changes.patch | difit --mode inline
 ```
 
+### Untracked / gitignored ファイルを開く
+
+`.gitignore` 配下のファイルや、まだ `git add` していない新規ファイルは `git diff` には出てこないため、`git diff --no-index /dev/null <file>` でパッチ化して difit に流す:
+
+```bash
+# 新規ファイル / gitignored ファイルを new file として表示
+git diff --no-index /dev/null path/to/file.md | difit --mode inline --no-open
+```
+
+### TUI モードの制約
+
+`--tui` は **stdin が TTY であること** が必須。`git diff ... | difit --tui` のように pipe で渡すと `Error: TUI mode requires an interactive terminal (TTY).` で落ちる。
+
+pipe で渡したい場合の選択肢:
+- ブラウザで見る: `... | difit --mode inline --no-open` で URL だけ出して手動で開く（自動オープンが効かない WSL 等で有効）
+- TUI で見たい場合: 一度パッチをファイルに書き出してから `difit --tui < patch.diff` のように **直接渡す**（pipe ではなくリダイレクト）
+
 ## Available Options
 
 - `--mode <mode>`: Display mode (`side-by-side` or `inline`). Default: `inline`
