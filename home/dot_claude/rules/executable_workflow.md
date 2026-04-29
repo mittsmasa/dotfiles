@@ -140,7 +140,33 @@ Research 完了時に自動評価。**2つ以上該当で警告発動**:
 
 **CRITICAL: 承認は人間のみ。** Claude の自己承認禁止。承認前の実装着手禁止。
 
-plan.md を fresh でユーザーに提示し、承認を求める（ツール選択基準は `rules/pane-strategy.md` 参照）。
+plan.md は **difit** でユーザーに提示し、承認を求める（差分ビューでマークダウンが読みやすい）。`rules/pane-strategy.md` も参照。
+
+### plan.md を difit で開く
+
+plan.md は `$WORKFLOW_DIR/` 配下で gitignore されているため、`git diff --no-index` でパッチ化して difit に流す。`--tui` は pipe 経由だと TTY が外れて使えないので `--no-open` でサーバ起動 + URL 提示にする（WSL/headless でも動く）。
+
+```bash
+# 別ペインで起動して URL を表示する
+tmux split-window -h -c "$(pwd)"
+tmux send-keys -t '{next}' \
+  'git diff --no-index /dev/null '"$WORKFLOW_DIR"'/plan.md | difit --mode inline --no-open' Enter
+sleep 2
+tmux capture-pane -t '{next}' -p -S -10  # http://localhost:NNNN を取り出してユーザーに案内
+```
+
+cmux 環境なら `cmux new-split right` + `cmux send` で同じことを行う。
+
+### 編集後の再表示
+
+plan.md が編集された（applier が修正した／ユーザー指摘で書き直した／Edit/Write が走った）あとは、**必ず difit を開き直す**。古い difit プロセスは Ctrl+C で停止 or 当該ペインを kill してから、上記コマンドを再実行する。
+
+- 「plan.md を編集 → そのままにしてユーザーに承認を求める」をしない（古い内容を見たまま承認される事故を防ぐ）
+- ブラウザリロードだけでは stdin が固定済みのため反映されない場合があるので、**プロセス再起動が原則**
+
+### Approval を得たら
+
+ユーザーが `approve` 等で承認した時点で `Approval Status: pending` → `approved` に書き換え、Phase 5 に進む。承認前に Phase 5 の実装着手は禁止。
 
 ## Phase 5: Implement（実装）
 
