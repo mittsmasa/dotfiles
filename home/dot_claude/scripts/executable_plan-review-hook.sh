@@ -12,58 +12,65 @@
 # 全レビュア skipped のときのみ verdict=error。
 #
 # 環境変数:
-#   WORKFLOW_DIR        - 成果物ディレクトリ (default: .workflow)
-#   MAX_REVIEW_ROUNDS   - 最大レビューラウンド数 (default: 3)
-#   PLAN_REVIEW_PROMPTS - プロンプト配置ディレクトリ
-#                         (default: ~/.claude/scripts/plan-review-prompts)
+#   WORKFLOW_DIR              - 成果物ディレクトリ (default: .workflow)
+#   MAX_REVIEW_ROUNDS         - 最大レビューラウンド数 (default: 3)
+#   PLAN_REVIEW_PROMPTS       - プロンプト配置ディレクトリ
+#                               (default: ~/.claude/scripts/plan-review-prompts)
+#   PLAN_REVIEW_REVIEWER_CMD  - reviewer コマンド差し替え (テスト用, default: claude)
+#   PLAN_REVIEW_APPLIER_CMD   - applier コマンド差し替え (テスト用, default: claude)
 #
 # 全体フロー:
 #   1. plan.md の書き込みを検知（PostToolUse hook）
 #   2. plan.md と前回 hash を比較 → 同一ならスキップ
 #   3. ラウンド数確認（MAX_REVIEW_ROUNDS 超過なら手動レビューを促してスキップ）
-#   4. 前ラウンドの他 reviewer の verdict/summary/must_remove を peers.md に集約
-#      （同ラウンド内では順序問題があるため 1 ラウンド遅延で共有する）
-#   5. 3 本のレビュアを `claude --print` でバックグラウンド並列起動 → wait
-#   6. 各 raw 出力から JSON 抽出（コードフェンス対応・素 JSON・抽出フォールバック）
-#   7. aggregator で最終 verdict を決定
-#   8. needs_revision なら applier フェーズ実行 → plan.md を編集
-#   9. plan.md にマーカー / Status / Round / Last Review Hash を書き戻す
+#   4. 内部ループ開始 (1 round = reviewers 並列 → aggregator → 必要なら applier):
+#      a. 前ラウンドの他 reviewer 出力を peers.md に集約 (1 ラウンド遅延)
+#      b. 3 本のレビュアを `$REVIEWER_BIN --print` で並列起動 → wait
+#      c. 各 raw 出力から JSON 抽出 (コードフェンス / 素 JSON / 抽出フォールバック)
+#      d. aggregator で round の verdict を決定
+#      e. report (review-round-N.md) を生成
+#      f. verdict が pass / error なら break
+#      g. applier フェーズ: `$APPLIER_BIN --print` で plan.md を直接編集
+#      h. applier が exit 非ゼロ → plan.md.bak から復元して break
+#      i. applier 完了後、plan.md が `Approval Status: needs_human_review` に
+#         遷移していたら break (escalate)
+#      j. NEXT_ROUND を 1 進めて MAX_ROUNDS を超えたら break、超えなければ次イテレーションへ
+#   5. ループ終了後、最終 verdict / hash / round を plan.md に書き戻す (1 回だけ)
 #
-# Aggregator:
+# Aggregator (各ラウンド内):
 #   - 全レビュア skipped → verdict=error
-#   - simplicity が needs_revision → verdict=needs_revision（veto）
+#   - simplicity が needs_revision → verdict=needs_revision (veto)
 #   - 他のレビュアが needs_revision → verdict=needs_revision
 #   - 上記以外 → verdict=pass
 #
-# Applier フェーズ (verdict=needs_revision のときのみ):
-#   - PRE_APPLIER_HASH を保存し plan.md.bak を作成
-#   - `claude --print --allowedTools Edit,Read` で起動、system prompt は
+# Applier フェーズ (verdict=needs_revision のときのみ実行):
+#   - plan.md.bak を作成 (失敗時 rollback 用)
+#   - `$APPLIER_BIN --print --allowedTools Edit,Read` で起動、system prompt は
 #     `$PROMPTS_DIR/applier.md`
-#   - 編集スコープ・escalate 条件（`Approval Status: needs_human_review` への
-#     遷移など）は applier.md プロンプト側で制約する
-#   - 失敗時は plan.md.bak から自動ロールバック
-#   - PLAN_REVIEW_APPLIER_CMD 環境変数でコマンド差し替え可能（テスト用）
+#   - 編集スコープ・escalate 条件 (`Approval Status: needs_human_review` への
+#     遷移など) は applier.md プロンプト側で制約する
+#   - applier 失敗時は plan.md.bak から自動 rollback → ループを break
 #
-# Hash 整合性:
-#   - applier が走った場合、書き戻す hash は PRE_APPLIER_HASH（applier 編集前）
-#     を据え置く。これにより applier 編集後の plan.md は次回 hook で必ず
-#     再レビューされる
-#   - applier が走らなかった場合は現在の plan.md ハッシュを書き戻す
+# Hash:
+#   - plan.md に書き戻す `hash=` はループ終了時点の plan.md ハッシュ
+#   - 同じ内容で再度 plan.md が書かれたら冒頭の hash 比較で skip
+#   - 内容が変われば次回 hook 発火で改めてレビューが走る
+#   (旧仕様の PRE_APPLIER_HASH 据え置きは in-process ループ化により不要になった)
 #
-# plan.md に書き戻す内容:
-#   - マーカー行（既存があれば置換、なければ末尾に追記）:
+# plan.md に書き戻す内容 (ループ終了後 1 回):
+#   - マーカー行 (既存があれば置換、なければ末尾に追記):
 #       <!-- auto-review: verdict=...; hash=...; round=...; skipped=[...]; failed=[...] -->
 #   - `- Status: ...` 行を最終 verdict で更新
-#   - `- Round: ...` 行を NEXT_ROUND で更新
+#   - `- Round: ...` 行を最後に完走したラウンド番号で更新
 #   - `- Last Review Hash: ...` 行を FINAL_HASH で更新
 #   - verdict=pass のときのみ `- Plan Status: ...` を complete に更新
 #
-# 出力ファイル:
+# 出力ファイル (各ラウンドごとに分かれる):
 #   $WORKFLOW_DIR/review-round-N.md         - 集約レポート
 #   $WORKFLOW_DIR/review-round-N-<r>.json   - 各レビュアの抽出済み JSON
 #   $WORKFLOW_DIR/review-round-N-<r>.raw    - 各レビュアの生出力
 #   $WORKFLOW_DIR/review-round-N-peers.md   - 前ラウンドの他者 verdict
-#   $WORKFLOW_DIR/plan.md.bak               - applier 用バックアップ
+#   $WORKFLOW_DIR/plan.md.bak               - applier 用バックアップ (最後の applier 直前)
 
 set -euo pipefail
 
@@ -75,8 +82,11 @@ fi
 WORKFLOW_DIR="${WORKFLOW_DIR:-.workflow}"
 MAX_ROUNDS="${MAX_REVIEW_ROUNDS:-3}"
 PROMPTS_DIR="${PLAN_REVIEW_PROMPTS:-$HOME/.claude/scripts/plan-review-prompts}"
+REVIEWER_BIN="${PLAN_REVIEW_REVIEWER_CMD:-claude}"
+APPLIER_BIN="${PLAN_REVIEW_APPLIER_CMD:-claude}"
 PLAN_FILE="$WORKFLOW_DIR/plan.md"
 RESEARCH_FILE="$WORKFLOW_DIR/research.md"
+MVP_STANCE_FILE="$PROMPTS_DIR/_mvp-stance.md"
 
 REVIEWERS=(simplicity correctness verifiability)
 
@@ -114,7 +124,7 @@ if [[ "$CURRENT_HASH" == "$EXISTING_HASH" ]]; then
   exit 0
 fi
 
-# --- ラウンド数チェック ---
+# --- ラウンド数チェック (前回ループ終了時の round が MAX_ROUNDS なら manual に委ねる) ---
 
 CURRENT_ROUND=$(sed -n 's/.*round=\([0-9]*\).*/\1/p' "$PLAN_FILE" 2>/dev/null | head -1)
 CURRENT_ROUND="${CURRENT_ROUND:-0}"
@@ -125,107 +135,21 @@ if [[ "$NEXT_ROUND" -gt "$MAX_ROUNDS" ]]; then
   exit 0
 fi
 
-# --- peers.md を前ラウンドの結果から生成 ---
-# 同ラウンド内で他 reviewer の verdict を共有するには順序問題があるため、
-# 1 ラウンド遅らせて前ラウンドの結果を peers.md として渡す。
-# round 1 では前ラウンドが無いので空ファイルになる。
-
-PEERS_FILE="$WORKFLOW_DIR/review-round-${NEXT_ROUND}-peers.md"
-PREV_ROUND=$((NEXT_ROUND - 1))
-{
-  if [[ "$PREV_ROUND" -ge 1 ]]; then
-    echo "# Peers (前ラウンドの他 reviewer の verdict / summary / must_remove)"
-    echo ""
-    for peer in "${REVIEWERS[@]}"; do
-      peer_json="$WORKFLOW_DIR/review-round-${PREV_ROUND}-${peer}.json"
-      echo "## ${peer}"
-      if [[ -f "$peer_json" ]]; then
-        verdict=$(jq -r '.verdict // "unknown"' "$peer_json" 2>/dev/null || echo "unknown")
-        summary=$(jq -r '.summary // ""' "$peer_json" 2>/dev/null || echo "")
-        echo "- verdict: ${verdict}"
-        echo "- summary: ${summary}"
-        if jq -e '.must_remove' "$peer_json" >/dev/null 2>&1; then
-          echo "- must_remove:"
-          jq -r '.must_remove[]? | "  - " + .' "$peer_json" 2>/dev/null || true
-        fi
-      else
-        echo "- (no previous report)"
-      fi
-      echo ""
-    done
-  fi
-} > "$PEERS_FILE"
-
-# --- 並列レビュー実行 ---
-
-echo "[plan-review] Starting review round $NEXT_ROUND (3 reviewers in parallel)..." >&2
-
-MVP_STANCE_FILE="$PROMPTS_DIR/_mvp-stance.md"
-
-run_reviewer() {
-  local name="$1"
-  local prompt_file="$PROMPTS_DIR/$name.md"
-  local prev_self_json="$WORKFLOW_DIR/review-round-${PREV_ROUND}-${name}.json"
-  local out="$WORKFLOW_DIR/review-round-${NEXT_ROUND}-${name}.raw"
-  local user_prompt
-  user_prompt="以下のファイルを読んでレビューしてください:
-- $RESEARCH_FILE
-- $PLAN_FILE
-- $prev_self_json (前ラウンドの自分のレポート、無ければ無視)
-- $PEERS_FILE (他 reviewer の前ラウンド verdict、無ければ無視)"
-  local sys_prompt
-  if [[ -f "$MVP_STANCE_FILE" ]]; then
-    sys_prompt="$(cat "$MVP_STANCE_FILE")
-
----
-
-$(cat "$prompt_file")"
-  else
-    sys_prompt="$(cat "$prompt_file")"
-  fi
-  # Isolate TMPDIR per reviewer to avoid cmux-claude-node-options mktemp races
-  # when multiple `claude --print` are invoked in parallel from the same hook.
-  local tmp_dir
-  tmp_dir=$(mktemp -d "${TMPDIR:-/tmp}/plan-review-${name}.XXXXXX")
-  if TMPDIR="$tmp_dir" claude --print \
-      --system-prompt "$sys_prompt" \
-      "$user_prompt" \
-      > "$out" 2>&1; then
-    echo "ok" > "$WORKFLOW_DIR/review-round-${NEXT_ROUND}-${name}.exit"
-  else
-    echo "fail:$?" > "$WORKFLOW_DIR/review-round-${NEXT_ROUND}-${name}.exit"
-  fi
-  rm -rf "$tmp_dir"
-}
-
-pids=()
-for r in "${REVIEWERS[@]}"; do
-  run_reviewer "$r" &
-  pids+=($!)
-done
-
-for pid in "${pids[@]}"; do
-  wait "$pid" || true
-done
-
-# --- 各レビュアの verdict を抽出 ---
+# --- ヘルパ ---
 
 # JSON 抽出: ```json...``` でラップ・素のJSON・先頭にゴミがある場合に対応
 extract_json() {
   local file="$1"
-  # 1. コードブロックを剥がす
   local stripped
   stripped=$(sed -n '/^```/,/^```/{/^```/d;p;}' "$file")
   if [[ -n "$stripped" ]] && echo "$stripped" | jq -e . >/dev/null 2>&1; then
     echo "$stripped"
     return 0
   fi
-  # 2. 素の JSON
   if jq -e . "$file" >/dev/null 2>&1; then
     cat "$file"
     return 0
   fi
-  # 3. 最初の { から最後の } までを抜き出して試す
   local extracted
   extracted=$(sed -n '/^{/,/^}/p' "$file")
   if [[ -n "$extracted" ]] && echo "$extracted" | jq -e . >/dev/null 2>&1; then
@@ -242,106 +166,197 @@ extract_json() {
 set_kv() { printf -v "$1" '%s' "$2"; }
 get_kv() { local k="$1"; echo "${!k-}"; }
 
-SKIPPED=()
-FAILED=()
-
-for r in "${REVIEWERS[@]}"; do
-  raw="$WORKFLOW_DIR/review-round-${NEXT_ROUND}-${r}.raw"
-  json_out="$WORKFLOW_DIR/review-round-${NEXT_ROUND}-${r}.json"
-  exit_marker="$WORKFLOW_DIR/review-round-${NEXT_ROUND}-${r}.exit"
-  exit_status=$(cat "$exit_marker" 2>/dev/null || echo "fail:unknown")
-
-  if [[ "$exit_status" != "ok" ]]; then
-    set_kv "STATUS_$r"  "skipped"
-    set_kv "VERDICT_$r" "skipped"
-    SKIPPED+=("$r")
-    echo "[plan-review] $r: SKIPPED ($exit_status)" >&2
-    continue
-  fi
-
-  if json=$(extract_json "$raw"); then
-    echo "$json" > "$json_out"
-    v=$(echo "$json" | jq -r '.verdict // "skipped"' 2>/dev/null)
-    if [[ "$v" == "pass" || "$v" == "needs_revision" ]]; then
-      set_kv "STATUS_$r"  "ok"
-      set_kv "VERDICT_$r" "$v"
-      [[ "$v" == "needs_revision" ]] && FAILED+=("$r")
-      echo "[plan-review] $r: $v" >&2
-    else
-      set_kv "STATUS_$r"  "skipped"
-      set_kv "VERDICT_$r" "skipped"
-      SKIPPED+=("$r")
-      echo "[plan-review] $r: SKIPPED (no valid verdict)" >&2
-    fi
-  else
-    set_kv "STATUS_$r"  "skipped"
-    set_kv "VERDICT_$r" "skipped"
-    SKIPPED+=("$r")
-    echo "[plan-review] $r: SKIPPED (unparseable JSON)" >&2
-  fi
-done
-
-# --- aggregator ---
-
-# 全 skipped → error
-if [[ "${#SKIPPED[@]}" -eq "${#REVIEWERS[@]}" ]]; then
-  FINAL_VERDICT="error"
-# simplicity が fail または ok でない → needs_revision (veto)
-elif [[ "$(get_kv VERDICT_simplicity)" == "needs_revision" ]]; then
-  FINAL_VERDICT="needs_revision"
-# 他のレビュアが fail → needs_revision
-elif [[ "${#FAILED[@]}" -gt 0 ]]; then
-  FINAL_VERDICT="needs_revision"
-else
-  FINAL_VERDICT="pass"
-fi
-
-# --- skipped / failed の文字列化 ---
-
 join_csv() {
   local IFS=,
   echo "$*"
 }
-SKIPPED_STR=$(join_csv "${SKIPPED[@]:-}")
-FAILED_STR=$(join_csv "${FAILED[@]:-}")
-[[ -z "$SKIPPED_STR" ]] && SKIPPED_STR="none"
-[[ -z "$FAILED_STR" ]] && FAILED_STR="none"
 
-# --- 集約レビューレポートを生成 (applier に渡すため書き戻しより前に置く) ---
+run_reviewer() {
+  local name="$1"
+  local round="$2"
+  local prev_round=$((round - 1))
+  local prompt_file="$PROMPTS_DIR/$name.md"
+  local prev_self_json="$WORKFLOW_DIR/review-round-${prev_round}-${name}.json"
+  local peers_file="$WORKFLOW_DIR/review-round-${round}-peers.md"
+  local out="$WORKFLOW_DIR/review-round-${round}-${name}.raw"
+  local user_prompt
+  user_prompt="以下のファイルを読んでレビューしてください:
+- $RESEARCH_FILE
+- $PLAN_FILE
+- $prev_self_json (前ラウンドの自分のレポート、無ければ無視)
+- $peers_file (他 reviewer の前ラウンド verdict、無ければ無視)"
+  local sys_prompt
+  if [[ -f "$MVP_STANCE_FILE" ]]; then
+    sys_prompt="$(cat "$MVP_STANCE_FILE")
 
-REPORT="$WORKFLOW_DIR/review-round-${NEXT_ROUND}.md"
-{
-  echo "# Review Round $NEXT_ROUND"
-  echo ""
-  echo "## Final Verdict: $FINAL_VERDICT"
-  echo ""
-  echo "- skipped: [$SKIPPED_STR]"
-  echo "- failed: [$FAILED_STR]"
-  echo ""
-  for r in "${REVIEWERS[@]}"; do
-    echo "## $r — $(get_kv VERDICT_$r)"
-    echo ""
-    json_out="$WORKFLOW_DIR/review-round-${NEXT_ROUND}-${r}.json"
-    raw="$WORKFLOW_DIR/review-round-${NEXT_ROUND}-${r}.raw"
-    if [[ "$(get_kv STATUS_$r)" == "ok" && -f "$json_out" ]]; then
-      echo '```json'
-      cat "$json_out"
-      echo '```'
-    else
-      echo "_(skipped — raw output preserved at \`$(basename "$raw")\`)_"
+---
+
+$(cat "$prompt_file")"
+  else
+    sys_prompt="$(cat "$prompt_file")"
+  fi
+  # Isolate TMPDIR per reviewer to avoid cmux-claude-node-options mktemp races
+  # when multiple `claude --print` are invoked in parallel from the same hook.
+  # PLAN_REVIEW_REVIEWER_{NAME,ROUND} はテスト時の mock reviewer 用。
+  # 本物の claude には無害。
+  local tmp_dir
+  tmp_dir=$(mktemp -d "${TMPDIR:-/tmp}/plan-review-${name}.XXXXXX")
+  if TMPDIR="$tmp_dir" \
+     PLAN_REVIEW_REVIEWER_NAME="$name" \
+     PLAN_REVIEW_REVIEWER_ROUND="$round" \
+     "$REVIEWER_BIN" --print \
+       --system-prompt "$sys_prompt" \
+       "$user_prompt" \
+       > "$out" 2>&1; then
+    echo "ok" > "$WORKFLOW_DIR/review-round-${round}-${name}.exit"
+  else
+    echo "fail:$?" > "$WORKFLOW_DIR/review-round-${round}-${name}.exit"
+  fi
+  rm -rf "$tmp_dir"
+}
+
+# --- メインループ ---
+# 1 イテレーション = 1 round (reviewers 並列 → aggregator → 必要なら applier)。
+# pass / error / escalate / applier 失敗 / max rounds のいずれかで break。
+
+LOOP_BREAK_REASON=""
+LAST_ROUND="$CURRENT_ROUND"
+FINAL_VERDICT=""
+SKIPPED_STR="none"
+FAILED_STR="none"
+
+while :; do
+  PREV_ROUND=$((NEXT_ROUND - 1))
+
+  # peers.md を前ラウンドの per-reviewer JSON から生成。
+  # round 1 では前ラウンドが無いので空ファイルになる。
+  PEERS_FILE="$WORKFLOW_DIR/review-round-${NEXT_ROUND}-peers.md"
+  {
+    if [[ "$PREV_ROUND" -ge 1 ]]; then
+      echo "# Peers (前ラウンドの他 reviewer の verdict / summary / must_remove)"
+      echo ""
+      for peer in "${REVIEWERS[@]}"; do
+        peer_json="$WORKFLOW_DIR/review-round-${PREV_ROUND}-${peer}.json"
+        echo "## ${peer}"
+        if [[ -f "$peer_json" ]]; then
+          verdict=$(jq -r '.verdict // "unknown"' "$peer_json" 2>/dev/null || echo "unknown")
+          summary=$(jq -r '.summary // ""' "$peer_json" 2>/dev/null || echo "")
+          echo "- verdict: ${verdict}"
+          echo "- summary: ${summary}"
+          if jq -e '.must_remove' "$peer_json" >/dev/null 2>&1; then
+            echo "- must_remove:"
+            jq -r '.must_remove[]? | "  - " + .' "$peer_json" 2>/dev/null || true
+          fi
+        else
+          echo "- (no previous report)"
+        fi
+        echo ""
+      done
     fi
-    echo ""
+  } > "$PEERS_FILE"
+
+  echo "[plan-review] Starting review round $NEXT_ROUND (3 reviewers in parallel)..." >&2
+
+  # reviewers 並列実行
+  pids=()
+  for r in "${REVIEWERS[@]}"; do
+    run_reviewer "$r" "$NEXT_ROUND" &
+    pids+=($!)
   done
-} > "$REPORT"
+  for pid in "${pids[@]}"; do
+    wait "$pid" || true
+  done
 
-# --- applier フェーズ (needs_revision のときだけ実行) ---
-# applier は plan.md を直接 Edit する。失敗時はバックアップから復元。
-# 成功時は pre-applier hash を据え置くことで、applier 編集後の plan.md は
-# 次回 hook 発火で必ず再レビューされる。
-PRE_APPLIER_HASH=""
+  # 各レビュアの verdict を抽出
+  SKIPPED=()
+  FAILED=()
+  for r in "${REVIEWERS[@]}"; do
+    raw="$WORKFLOW_DIR/review-round-${NEXT_ROUND}-${r}.raw"
+    json_out="$WORKFLOW_DIR/review-round-${NEXT_ROUND}-${r}.json"
+    exit_marker="$WORKFLOW_DIR/review-round-${NEXT_ROUND}-${r}.exit"
+    exit_status=$(cat "$exit_marker" 2>/dev/null || echo "fail:unknown")
 
-if [[ "$FINAL_VERDICT" == "needs_revision" ]]; then
-  PRE_APPLIER_HASH=$(hash_cmd "$PLAN_FILE")
+    if [[ "$exit_status" != "ok" ]]; then
+      set_kv "STATUS_$r"  "skipped"
+      set_kv "VERDICT_$r" "skipped"
+      SKIPPED+=("$r")
+      echo "[plan-review] $r: SKIPPED ($exit_status)" >&2
+      continue
+    fi
+
+    if json=$(extract_json "$raw"); then
+      echo "$json" > "$json_out"
+      v=$(echo "$json" | jq -r '.verdict // "skipped"' 2>/dev/null)
+      if [[ "$v" == "pass" || "$v" == "needs_revision" ]]; then
+        set_kv "STATUS_$r"  "ok"
+        set_kv "VERDICT_$r" "$v"
+        [[ "$v" == "needs_revision" ]] && FAILED+=("$r")
+        echo "[plan-review] $r: $v" >&2
+      else
+        set_kv "STATUS_$r"  "skipped"
+        set_kv "VERDICT_$r" "skipped"
+        SKIPPED+=("$r")
+        echo "[plan-review] $r: SKIPPED (no valid verdict)" >&2
+      fi
+    else
+      set_kv "STATUS_$r"  "skipped"
+      set_kv "VERDICT_$r" "skipped"
+      SKIPPED+=("$r")
+      echo "[plan-review] $r: SKIPPED (unparseable JSON)" >&2
+    fi
+  done
+
+  # aggregator
+  if [[ "${#SKIPPED[@]}" -eq "${#REVIEWERS[@]}" ]]; then
+    FINAL_VERDICT="error"
+  elif [[ "$(get_kv VERDICT_simplicity)" == "needs_revision" ]]; then
+    FINAL_VERDICT="needs_revision"
+  elif [[ "${#FAILED[@]}" -gt 0 ]]; then
+    FINAL_VERDICT="needs_revision"
+  else
+    FINAL_VERDICT="pass"
+  fi
+
+  SKIPPED_STR=$(join_csv "${SKIPPED[@]:-}")
+  FAILED_STR=$(join_csv "${FAILED[@]:-}")
+  [[ -z "$SKIPPED_STR" ]] && SKIPPED_STR="none"
+  [[ -z "$FAILED_STR" ]] && FAILED_STR="none"
+
+  # 集約レポート (applier に渡すために書き戻しより前に作る)
+  REPORT="$WORKFLOW_DIR/review-round-${NEXT_ROUND}.md"
+  {
+    echo "# Review Round $NEXT_ROUND"
+    echo ""
+    echo "## Final Verdict: $FINAL_VERDICT"
+    echo ""
+    echo "- skipped: [$SKIPPED_STR]"
+    echo "- failed: [$FAILED_STR]"
+    echo ""
+    for r in "${REVIEWERS[@]}"; do
+      echo "## $r — $(get_kv VERDICT_$r)"
+      echo ""
+      json_out="$WORKFLOW_DIR/review-round-${NEXT_ROUND}-${r}.json"
+      raw="$WORKFLOW_DIR/review-round-${NEXT_ROUND}-${r}.raw"
+      if [[ "$(get_kv STATUS_$r)" == "ok" && -f "$json_out" ]]; then
+        echo '```json'
+        cat "$json_out"
+        echo '```'
+      else
+        echo "_(skipped — raw output preserved at \`$(basename "$raw")\`)_"
+      fi
+      echo ""
+    done
+  } > "$REPORT"
+
+  LAST_ROUND="$NEXT_ROUND"
+
+  # ループ終了判定 (verdict-based)
+  if [[ "$FINAL_VERDICT" == "pass" || "$FINAL_VERDICT" == "error" ]]; then
+    LOOP_BREAK_REASON="$FINAL_VERDICT"
+    break
+  fi
+
+  # applier フェーズ (needs_revision のときのみ)
   cp "$PLAN_FILE" "$WORKFLOW_DIR/plan.md.bak"
 
   RESEARCH_ABS=$(realpath "$RESEARCH_FILE" 2>/dev/null || echo "$RESEARCH_FILE")
@@ -354,9 +369,7 @@ if [[ "$FINAL_VERDICT" == "needs_revision" ]]; then
 - $PLAN_ABS
 - $REPORT_ABS"
 
-  echo "[applier] starting" >&2
-  # PLAN_REVIEW_APPLIER_CMD はテスト用差し替え点
-  APPLIER_BIN="${PLAN_REVIEW_APPLIER_CMD:-claude}"
+  echo "[applier] starting (round $NEXT_ROUND)" >&2
   if (
     cd "$WORKFLOW_ABS" && \
     PLAN_REVIEW_HOOK_RUNNING=1 WORKFLOW_DIR="$WORKFLOW_ABS" \
@@ -369,18 +382,30 @@ if [[ "$FINAL_VERDICT" == "needs_revision" ]]; then
   else
     echo "[applier] exit non-zero, rolling back" >&2
     cp "$WORKFLOW_DIR/plan.md.bak" "$PLAN_FILE"
+    LOOP_BREAK_REASON="applier_failed"
+    break
   fi
-fi
 
-# --- plan.md への書き戻し ---
-# applier が走った場合は pre-applier hash を据え置く (次回 hook で必ず再レビュー)
-if [[ -n "$PRE_APPLIER_HASH" ]]; then
-  FINAL_HASH="$PRE_APPLIER_HASH"
-else
-  FINAL_HASH=$(hash_cmd "$PLAN_FILE")
-fi
+  # escalate 検出 (applier が Approval Status を needs_human_review に書き換えていたら抜ける)
+  if grep -q '^- Approval Status: needs_human_review' "$PLAN_FILE"; then
+    echo "[applier] escalated (Approval Status: needs_human_review). Breaking loop." >&2
+    LOOP_BREAK_REASON="escalate"
+    break
+  fi
 
-MARKER="<!-- auto-review: verdict=$FINAL_VERDICT; hash=$FINAL_HASH; round=$NEXT_ROUND; skipped=[$SKIPPED_STR]; failed=[$FAILED_STR] -->"
+  # 次ラウンドへ
+  NEXT_ROUND=$((NEXT_ROUND + 1))
+  if [[ "$NEXT_ROUND" -gt "$MAX_ROUNDS" ]]; then
+    echo "[plan-review] Max rounds ($MAX_ROUNDS) reached during loop. Stopping." >&2
+    LOOP_BREAK_REASON="max_rounds"
+    break
+  fi
+done
+
+# --- plan.md への書き戻し (ループ終了後 1 回) ---
+
+FINAL_HASH=$(hash_cmd "$PLAN_FILE")
+MARKER="<!-- auto-review: verdict=$FINAL_VERDICT; hash=$FINAL_HASH; round=$LAST_ROUND; skipped=[$SKIPPED_STR]; failed=[$FAILED_STR] -->"
 
 sedi() {
   if sed --version >/dev/null 2>&1; then
@@ -391,7 +416,6 @@ sedi() {
 }
 
 if grep -q '<!-- auto-review:' "$PLAN_FILE"; then
-  # マーカー行全体を置換 (sed の区切りに | を使い、かつエスケープ)
   ESCAPED_MARKER=$(printf '%s\n' "$MARKER" | sed -e 's/[\/&|]/\\&/g')
   sedi "s|<!-- auto-review:.*-->|$ESCAPED_MARKER|" "$PLAN_FILE"
 else
@@ -399,12 +423,12 @@ else
 fi
 
 sedi "s/^- Status: .*/- Status: $FINAL_VERDICT/" "$PLAN_FILE"
-sedi "s/^- Round: .*/- Round: $NEXT_ROUND/" "$PLAN_FILE"
+sedi "s/^- Round: .*/- Round: $LAST_ROUND/" "$PLAN_FILE"
 sedi "s/^- Last Review Hash: .*/- Last Review Hash: $FINAL_HASH/" "$PLAN_FILE"
 
 if [[ "$FINAL_VERDICT" == "pass" ]]; then
   sedi "s/^- Plan Status: .*/- Plan Status: complete/" "$PLAN_FILE"
 fi
 
-echo "[plan-review] Round $NEXT_ROUND: $FINAL_VERDICT (skipped=[$SKIPPED_STR], failed=[$FAILED_STR])" >&2
-echo "[plan-review] Report: $REPORT" >&2
+echo "[plan-review] Loop ended: verdict=$FINAL_VERDICT, last_round=$LAST_ROUND, reason=${LOOP_BREAK_REASON:-unknown} (skipped=[$SKIPPED_STR], failed=[$FAILED_STR])" >&2
+echo "[plan-review] Final report: $WORKFLOW_DIR/review-round-${LAST_ROUND}.md" >&2
