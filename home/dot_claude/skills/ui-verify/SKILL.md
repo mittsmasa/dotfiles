@@ -40,7 +40,9 @@ For "does this match the design?", "which element did you mean?", "is this inter
    Skip **only** when the question is genuinely about the whole page (overall layout, page-level color scheme).
 2. Launch the dashboard in annotation mode:
    ```bash
-   playwright-cli show --annotate
+   # WAYLAND_DISPLAY= forces X11 so fcitx5 (XIM) reaches the dashboard on WSLg.
+   # Harmless on macOS — WAYLAND_DISPLAY is unset there anyway.
+   WAYLAND_DISPLAY= playwright-cli show --annotate
    ```
 3. Tell the user in one sentence what you want feedback on.
 4. Read the returned annotation (coordinates + comment + cropped screenshot). The comment is the source of truth.
