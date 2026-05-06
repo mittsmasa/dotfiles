@@ -40,10 +40,12 @@ For "does this match the design?", "which element did you mean?", "is this inter
    Skip **only** when the question is genuinely about the whole page (overall layout, page-level color scheme).
 2. Launch the dashboard in annotation mode:
    ```bash
-   # WAYLAND_DISPLAY= forces X11 so fcitx5 (XIM) reaches the dashboard on WSLg.
-   # Harmless on macOS — WAYLAND_DISPLAY is unset there anyway.
-   WAYLAND_DISPLAY= playwright-cli show --annotate
+   playwright-cli show --annotate
    ```
+   On WSLg, keep `WAYLAND_DISPLAY` set — the bundled Chrome for Testing has
+   no GTK linkage and dropped XIM, so Linux-side fcitx5 can't reach it.
+   Japanese input flows through WSLg Weston's Wayland text-input-v3 bridge
+   to the Windows IME instead, which only works while Chrome is on Wayland.
 3. Tell the user in one sentence what you want feedback on.
 4. Read the returned annotation (coordinates + comment + cropped screenshot). The comment is the source of truth.
 5. Apply the change, then loop back to Stage 1.
