@@ -169,7 +169,8 @@
     ],
     "deny": [
       "Bash(npx:*)"
-    ]
+    ],
+    "defaultMode": "auto"
   },
   "hooks": {
     "SessionStart": [
@@ -231,7 +232,7 @@
   },
   "outputStyle": "maaya",
   "language": "日本語",
-  "effortLevel": "medium",
+  "effortLevel": "high",
   "autoUpdatesChannel": "latest",
   "voice": {
     "enabled": false,
@@ -239,5 +240,6 @@
   },
   "theme": "dark-daltonized",
   "agentPushNotifEnabled": true,
-  "voiceEnabled": false
+  "voiceEnabled": false,
+  "skipAutoPermissionPrompt": true
 }
