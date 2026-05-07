@@ -229,9 +229,6 @@
   "env": {
     "ENABLE_TOOL_SEARCH": "true"
   },
-  "env": {
-    "ENABLE_TOOL_SEARCH": "true"
-  },
   "outputStyle": "maaya",
   "language": "日本語",
   "effortLevel": "medium",
