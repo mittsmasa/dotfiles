@@ -1,22 +1,20 @@
-# chezmoi 自動同期ルール
+# chezmoi ルール
 
-## 概要
+## 前提
 
-`~/.claude/` 配下など chezmoi 管理下のファイルを編集した場合、PostToolUse hook が自動的に `chezmoi re-add` → commit → pull --rebase → push を実行する。
+`~/.claude/` 配下など chezmoi 管理下のファイルを編集すると、PostToolUse hook が自動で `chezmoi re-add` → commit → pull --rebase → push する。**Claude が手動で chezmoi を叩く必要はない**（下記エラー時を除く）。
 
-## エラー時の対応
+詳細な差分解決ワークフロー（status / untracked 検出 / diff / merge / apply）が必要なときは `/chezmoi-sync` skill を使う。
 
-hook が失敗した場合（stderr に `[chezmoi-sync] ERROR` が出力される）、以下の手順で対応すること:
+## 守ること
 
-1. **pull --rebase failed**: リモートとの conflict が発生している。`chezmoi git -- status` で状態を確認し、ユーザーに状況を伝えて対応を相談する。
-2. **push failed**: 認証エラーやネットワーク障害の可能性がある。ユーザーに報告する。
-3. **re-add failed**: ファイルの状態が不正な可能性がある。`chezmoi diff` で差分を確認してユーザーに報告する。
+- セッション開始時、chezmoi 管理ファイルを編集する前に `chezmoi git -- pull --rebase` を一度実行する
+- 既存管理下ファイルの更新は `chezmoi re-add`。**`chezmoi add` は使わない**（テンプレを上書きする）。新規追加だけ `chezmoi add`
 
-## セッション開始時
+## hook エラー時の対応
 
-新しいセッションの開始時、chezmoi 管理ファイルを編集する前に `chezmoi git -- pull --rebase` を実行してリモートの最新状態を取得すること。
+stderr に `[chezmoi-sync] ERROR` が出たら:
 
-## 注意事項
-
-- hook はシェルスクリプトとして自動実行されるため、Claude が手動で chezmoi コマンドを実行する必要はない（hook がエラーになった場合を除く）
-- `chezmoi re-add` ではなく `chezmoi add` を使わないこと（既存テンプレートを上書きしてしまう）
+- **pull --rebase failed** → `chezmoi git -- status` で状態確認、ユーザーに相談
+- **push failed** → 認証 / ネットワーク障害の可能性、ユーザーに報告
+- **re-add failed** → `chezmoi diff` で差分確認してユーザーに報告
