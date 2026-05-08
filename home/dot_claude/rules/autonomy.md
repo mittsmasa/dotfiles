@@ -49,7 +49,7 @@
 - **chezmoi 関連**: chezmoi 管理下のファイル編集、`chezmoi diff / apply / re-add / status` 等の実行、hook による sync
 - **lint / format / test / build の実行**: settings.json で許可済みのもの
 - **読み取り系の調査**: ファイル読み, grep, glob, git log, git status, find 等
-- **worktree 並列化**: 独立した 2+ タスクが明示依頼された場合は `/wt` で並列起動可。**上限 3 並列**、4 以上は事前確認
+- **worktree 並列化**: 独立した 2+ タスクが明示依頼された場合は `git worktree add` で並列起動可（手順は `rules/worktree.md`）。**上限 3 並列**、4 以上は事前確認
 
 ## workflow.md との関係
 
