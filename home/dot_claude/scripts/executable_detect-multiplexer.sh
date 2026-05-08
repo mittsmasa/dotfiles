@@ -2,9 +2,9 @@
 # Claude Code SessionStart hook.
 # 1. Detect terminal multiplexer (tmux / cmux / bare) and inject context
 #    so Claude knows which skill to use for pane operations.
-# 2. If the session's cwd is inside a worktree created by `claude --worktree`
-#    (path contains `.claude/worktrees/`), copy gitignored setup files
-#    (`.serena/`, `.env.local` family) from the main repo once.
+# 2. If the session's cwd is inside a worktree under `.claude/worktrees/`,
+#    copy gitignored setup files (`.serena/`, `.env.local` family) from
+#    the main repo once.
 
 set -uo pipefail
 
