@@ -2,21 +2,27 @@
 
 ## 基本フロー
 
-別ブランチで独立した作業をしたいときは `/wt <name>` skill を使う。skill が cmux / tmux を判定してペインを切り、`claude --worktree <name>` を起動する。メインセッションはそのまま、別ペインで独立した Claude セッションが走る。
+別ブランチで独立した作業をしたいときは、リポジトリで以下を実行する。
 
-`<repo>/.claude/worktrees/<name>/` が作られ、ブランチ `worktree-<name>` が切られる。SessionStart hook (`~/.claude/scripts/detect-multiplexer.sh`) が `.serena/` と `.env.local` 系をメインリポジトリから自動コピーする（冪等）。**Claude が手動でコピーする必要はない。**
+```sh
+git worktree add <repo>/.claude/worktrees/<name> -b worktree-<name>
+```
 
-## /wt の使いどころ
+その後、tmux / cmux なら別ペインで `claude` を起動して並走させる。bare 環境ならターミナルを別途立ち上げる。
 
-- ユーザーから明示的に `/wt <name>` を受けたとき
+SessionStart hook (`~/.claude/scripts/detect-multiplexer.sh`) が新しい worktree 配下に `.serena/` と `.env.local` 系をメインリポジトリから自動コピーする（冪等）。**Claude が手動でコピーする必要はない。**
+
+## 使いどころ
+
 - 独立した複数タスクを並走させたいとき（`rules/autonomy.md` の並列化条件参照）
 - 本流ブランチに触れず試したい変更があるとき
 
-衝突時の扱い・環境別の前提（cmux / tmux / bare）は `/wt` skill 側のドキュメント参照。
-
 ## 終了と cleanup
 
-`claude --worktree` 終了時、変更がない worktree は自動 cleanup。変更があった場合は残るので、PR 化 / `git worktree remove <path>` / `git branch -D worktree-<name>` のいずれかで処理する。
+作業終了後は以下のいずれかで処理する。
+
+- PR 化してマージ後に `git worktree remove <path>` / `git branch -d worktree-<name>`
+- 破棄するなら `git worktree remove <path>` / `git branch -D worktree-<name>`
 
 ## 注意
 
