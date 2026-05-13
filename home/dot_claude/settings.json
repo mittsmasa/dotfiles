@@ -1,4 +1,7 @@
 {
+  "env": {
+    "ENABLE_TOOL_SEARCH": "true"
+  },
   "permissions": {
     "allow": [
       "Bash(node:*)",
@@ -216,8 +219,7 @@
   "enabledPlugins": {
     "document-skills@anthropic-agent-skills": false,
     "context7@claude-plugins-official": true,
-    "using-cmux@hummer98-using-cmux": true,
-    "vercel-plugin@vercel": true
+    "using-cmux@hummer98-using-cmux": true
   },
   "extraKnownMarketplaces": {
     "hummer98-using-cmux": {
@@ -226,9 +228,6 @@
         "repo": "hummer98/using-cmux"
       }
     }
-  },
-  "env": {
-    "ENABLE_TOOL_SEARCH": "true"
   },
   "outputStyle": "maaya",
   "language": "日本語",
@@ -240,6 +239,6 @@
   },
   "theme": "dark-daltonized",
   "agentPushNotifEnabled": true,
-  "voiceEnabled": false,
-  "skipAutoPermissionPrompt": true
+  "skipAutoPermissionPrompt": true,
+  "voiceEnabled": false
 }
