@@ -1,6 +1,6 @@
 ---
 name: concise-japanese-writing
-description: "Claude が第三者に読まれる日本語ドキュメントを出力するときに、冗長にならず、伝わる文章を書くためのルール。ユーザー指示が明示的でなくても、Claude 自身が「これから日本語の本文を他人向けに書く」と気づいた瞬間に必ず先回りして発動すること。\n\n【強制トリガー: 行動ベース】以下のいずれかを実行する直前は、本文生成より前に必ずこの skill をロードする:\n- `gh pr create` / `gh pr edit` で `--body` を組み立てる前\n- `gh pr comment` / `gh pr review` で日本語コメントを書く前\n- `gh issue create` / `gh issue comment` で日本語本文を書く前\n- PR description / Issue 本文を Write/Edit でファイルに書き出す前（テンプレ埋めも含む）\n- Slack / Notion / Confluence / Linear など外部システムに貼る日本語まとまり文を返答に含める前\n\n【強制トリガー: 上位タスク】ユーザーの依頼が「PR を作って」「Issue 立てて」「リリースノート書いて」「設計書ドラフト」「議事録まとめて」「レビューコメント書いて」「概要書いて」「説明文書いて」「ドキュメント書いて」「コメントどう書く？」のような形で、最終成果物に他人が読む日本語まとまり文を含むなら、その作業フローに入った時点で発動する。本文生成の直前ではなく、タスクを受けた早い段階でロードしてよい。\n\n【対象】PR description / PR コメント / レビューコメント / 提案書 / 企画書 / 設計書 / 要件定義書 / 技術メモ / ADR / Issue 本文 / リリースノート / Slack や Notion など第三者に共有される日本語文書のたたき。\n\n【適用しない】ユーザーへのチャット応答そのもの、コード内コメント、ワンライン進捗報告。"
+description: "第三者が読む日本語ドキュメント（PR description / PR コメント / レビューコメント / 提案書 / 企画書 / 設計書 / 要件定義書 / ADR / Issue 本文 / リリースノート / Slack や Notion など）を書くときに従う作法。冗長表現や抽象語を削り、一文一義・結論先出しで書く。チャット応答そのものやコード内コメントには適用しない。通常は PreToolUse hook（~/.claude/scripts/concise-jp-reminder.sh）から自動でロードを促されるため、手動起動は不要。"
 ---
 
 # concise-japanese-writing
