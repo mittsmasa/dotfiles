@@ -22,6 +22,19 @@ tmux / cmux があれば main.0=Claude / main.1=dev server / main.2=動作確認
 
 ## Phase 1: Research
 
+### タスク識別と中央集約（成果物を作る場合の最初の作業）
+
+簡易フロー以上（research/plan/verify-results を作る場合）は、Research に入る前に成果物の置き場所を用意する。
+
+1. **task-id を決める**: `{YYYY-MM-DD}-{slug}`（slug はタスク内容を表す短い kebab-case）。
+2. **中央 task dir を作る**: `~/.claude/workflow/{task-id}/`。
+3. **`.workflow` symlink を張る**: リポジトリ直下に `.workflow` が無ければ、上記 task dir への symlink を作る（`ln -s ~/.claude/workflow/{task-id} <repo>/.workflow`）。既に `.workflow` が実ディレクトリとして存在する場合は移行しない（過去の別タスク成果物が入っているのが通常で、現タスク task-id dir へ自動マージすると別タスクの research/plan が混入する）。当該リポジトリは次タスクから symlink 運用に切り替える。旧成果物の中央移行は手動で行う。
+4. 以降の Phase は従来どおり `$WORKFLOW_DIR`（=`.workflow/`）に書く。symlink 透過で実体は中央へ入る。
+
+直接実行モード（成果物を作らない）はこの手順をスキップしてよい。
+
+### 調査内容
+
 `$WORKFLOW_DIR/research.md` に: 調査対象 / 現状の理解 / 影響範囲 / 技術的制約・リスク / スコープ評価。深さはタスク規模に比例。判断に必要な情報で止める。
 
 **Scope Guard**（完了時自動評価、2つ以上該当で警告）: ステップ 10+ / ファイル 8+ / 独立コンポーネント 3+ / 探索+実装混在 / 終了条件曖昧 / 広範囲キーワード（すべて・全体 等）。警告時は分割戦略（垂直/水平/MVP/スパイク+本実装）を提案し承認を得てから Plan へ。
