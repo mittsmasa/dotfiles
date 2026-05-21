@@ -22,3 +22,9 @@
 .agents/skills/vercel-react-best-practices
 .claude/skills/vercel-react-best-practices
 .claude/sounds/ref-whitecul.wav
+
+# workflow ダッシュボード - アプリのソースは管理。
+# md 成果物（実データ）・依存・セッション残骸は同期しない
+.claude/workflow
+.claude/workflow-dashboard/node_modules
+.claude/workflow-dashboard/.playwright-cli
