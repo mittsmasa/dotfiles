@@ -9,6 +9,7 @@ starship = "latest"
 chezmoi = "2.70.2"
 gitleaks = "8.30.1"
 gh = "2.92.0"
+bun = "latest"
 
 [settings]
 idiomatic_version_file_enable_tools = ["node"]
