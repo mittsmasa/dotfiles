@@ -251,6 +251,9 @@ main {
   font-size: 0.88em;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
+.markdown :not(pre) > code {
+  color: #e8912d;
+}
 .markdown pre {
   background: var(--canvas-inset);
   border: 1px solid var(--border);
