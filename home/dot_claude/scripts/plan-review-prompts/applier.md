@@ -61,4 +61,5 @@ plan.md の `- Approval Status: pending` 行を `- Approval Status: needs_human_
 
 - **research 射程内かどうか迷ったら反映寄りに倒す**。escalate は最後の手段
 - **既存の plan の構造を壊さない**。セクション見出しや順序は維持する
+- **plan.md のコード例・mermaid 図・擬似コード・説明的記述は削らない**。reviewer が `must_remove` に挙げていても、それが例示・伝達目的なら反映しない（simplicity の管轄外。実装ステップそのものの過剰さとは区別する）
 - **マーカー行と Review Status は絶対に触らない**。hook 側の責務
