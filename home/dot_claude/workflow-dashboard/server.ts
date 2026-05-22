@@ -285,6 +285,11 @@ const server = Bun.serve({
         headers: { "content-type": "text/css; charset=utf-8" },
       });
     }
+    if (path === "/vendor/mermaid.esm.min.mjs") {
+      return new Response(Bun.file(MERMAID_ESM_PATH), {
+        headers: { "content-type": "text/javascript; charset=utf-8" },
+      });
+    }
     const m = path.match(/^\/task\/(.+)$/);
     if (m) {
       const id = decodeURIComponent(m[1]);
