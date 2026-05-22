@@ -22,16 +22,18 @@ tmux / cmux があれば main.0=Claude / main.1=dev server / main.2=動作確認
 
 ## Phase 1: Research
 
-### タスク識別と中央集約（成果物を作る場合の最初の作業）
+### タスク識別と中央集約（全モード共通、Phase 0 直後）
 
-簡易フロー以上（research/plan/verify-results を作る場合）は、Research に入る前に成果物の置き場所を用意する。
+**モード問わず**、Phase 0 規模判定の直後にタスクを中央集約する。これで直接実行モードのタスクも workflow-dashboard の In Progress に出る。
 
 1. **task-id を決める**: `{YYYY-MM-DD}-{slug}`（slug はタスク内容を表す短い kebab-case）。
-2. **中央 task dir を作る**: `~/.claude/workflow/{task-id}/`。
-3. **`.workflow` symlink を張る**: リポジトリ直下に `.workflow` が無ければ、上記 task dir への symlink を作る（`ln -s ~/.claude/workflow/{task-id} <repo>/.workflow`）。既に `.workflow` が実ディレクトリとして存在する場合は移行しない（過去の別タスク成果物が入っているのが通常で、現タスク task-id dir へ自動マージすると別タスクの research/plan が混入する）。当該リポジトリは次タスクから symlink 運用に切り替える。旧成果物の中央移行は手動で行う。
-4. 以降の Phase は従来どおり `$WORKFLOW_DIR`（=`.workflow/`）に書く。symlink 透過で実体は中央へ入る。
+2. **中央 task dir を作る**: `~/.claude/workflow/{task-id}/`（`mkdir -p` のみで OK）。
+3. **`meta.json` を最小作成**: `{"title": "<タスクの一行要約>", "cwd": "<実作業ディレクトリ>"}`。dashboard の card タイトルに使われる。`createdAt` は `workflow-meta-hook.sh` が md 書き込み時に自動補完するので手動で書かなくてよい。
+4. **`.workflow` symlink は任意**: リポジトリ内で短縮パス（`.workflow/plan.md` 等）を使いたい場合のみ `ln -s ~/.claude/workflow/{task-id} <repo>/.workflow` を張る。symlink が無くても全 hook / dashboard は中央 task dir を直接読むので機能する。既に `.workflow` が実ディレクトリとして存在する場合は移行しない（過去の別タスク成果物の混入を避けるため。旧成果物の中央移行は手動）。
 
-直接実行モード（成果物を作らない）はこの手順をスキップしてよい。
+モード別の追加成果物:
+- **直接実行モード**: 上記 1-3 のみ。research / plan は不要。Phase 6 で `verify-results.md` を簡略でも書き、Phase 7 で末尾に `- Status: done` を追記して完了
+- **簡易フロー / フルフロー**: 続く Phase 1 / Phase 2 で `research.md` / `plan.md` を書く
 
 ### 調査内容
 
