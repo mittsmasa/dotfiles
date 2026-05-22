@@ -305,8 +305,11 @@ const server = Bun.serve({
         headers: { "content-type": "text/css; charset=utf-8" },
       });
     }
-    if (path === "/vendor/mermaid.esm.min.mjs") {
-      return new Response(Bun.file(MERMAID_ESM_PATH), {
+    // mermaid 本体と分割 chunk (dist/chunks/mermaid.esm.min/*.mjs) をまとめて配信
+    const vendor = path.match(/^\/vendor\/([\w./-]+\.mjs(?:\.map)?)$/);
+    if (vendor && !vendor[1].includes("..")) {
+      const file = join(import.meta.dir, "node_modules/mermaid/dist", vendor[1]);
+      return new Response(Bun.file(file), {
         headers: { "content-type": "text/javascript; charset=utf-8" },
       });
     }
