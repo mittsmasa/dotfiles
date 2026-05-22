@@ -1,7 +1,7 @@
 [tools]
 node = "22"
-pnpm = "latest"
-starship = "latest"
+pnpm = "10.33.0"
+starship = "1.24.2"
 "npm:@playwright/cli" = "0.1.11"
 "npm:difit" = "4.0.4"
 "npm:@fresh-editor/fresh-editor" = "0.3.0"
@@ -9,7 +9,8 @@ starship = "latest"
 chezmoi = "2.70.2"
 gitleaks = "8.30.1"
 gh = "2.92.0"
-bun = "latest"
+bun = "1.3.14"
 
 [settings]
 idiomatic_version_file_enable_tools = ["node"]
+minimum_release_age = "7d"
