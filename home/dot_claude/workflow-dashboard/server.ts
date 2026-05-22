@@ -97,19 +97,17 @@ function deriveTitle(id: string, plan: string | null, research: string | null): 
   return m[1].replace(/^(Plan|Research)\s*[—-]\s*/, "").trim();
 }
 
-// phase はユーザ承認済みロジック（pr を最優先、次に plan.md ヘッダ + verify 結果）
-function derivePhase(
-  plan: string | null,
-  verify: string | null,
-  hasResearch: boolean,
-  pr: Pr | null,
-): Phase {
+// phase は plan.md ヘッダの明示シグナルで決める（pr を最優先）。
+// verify-results.md の存在では done 判定しない（Phase 6 途中で作られるため）。
+function derivePhase(plan: string | null, hasResearch: boolean, pr: Pr | null): Phase {
   if (pr) return pr.merged ? "done" : "pr-open";
   if (plan && /^- Plan Status:\s*done/m.test(plan)) return "done";
-  if (verify && !/\bFAIL\b/.test(verify)) return "done";
+  // 承認済み（Phase 5 実装中）は in-progress。Plan Status: complete のままなので
+  // review より先に判定する
   if (plan && /^- Approval Status:\s*approved/m.test(plan)) return "in-progress";
-  if (plan && (/^- Plan Status:\s*complete/m.test(plan) || /^- Approval Status:\s*pending/m.test(plan)))
-    return "review";
+  // レビュー完了・人間承認待ち。draft 段階（Approval Status: pending のまま）は
+  // ここに該当させない — Plan Status: complete を必須にする
+  if (plan && /^- Plan Status:\s*complete/m.test(plan)) return "review";
   if (plan) return "in-progress";
   if (hasResearch) return "in-progress";
   // plan/research 皆無のタスクも in-progress 扱い（Todo 列は廃止）
