@@ -6,7 +6,10 @@
     "start": "bun run server.ts"
   },
   "dependencies": {
+    "highlight.js": "11.11.1",
     "marked": "18.0.4",
+    "marked-highlight": "2.2.4",
+    "mermaid": "11.15.0",
     "portless": "0.13.0"
   }
 }
