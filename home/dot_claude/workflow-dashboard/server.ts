@@ -1,5 +1,7 @@
 // workflow-dashboard — ~/.claude/workflow/ の md 成果物をカンバン + プレビューで見る
 import { marked } from "marked";
+import { markedHighlight } from "marked-highlight";
+import hljs from "highlight.js";
 import { readdirSync, readFileSync, existsSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
@@ -7,7 +9,44 @@ import { homedir } from "node:os";
 const WORKFLOW_ROOT = join(homedir(), ".claude", "workflow");
 // portless 経由なら proxy が PORT を注入する。単体起動（PORT 未設定）は 4519
 const PORT = Number(process.env.PORT) || 4519;
-const DOC_FILES = ["plan.md", "research.md", "verify-results.md"] as const;
+// タブはフェーズ進行順 (research → plan → verify-results) で並べる
+const DOC_FILES = ["research.md", "plan.md", "verify-results.md"] as const;
+const HLJS_THEME_CSS = readFileSync(
+  join(import.meta.dir, "node_modules/highlight.js/styles/github-dark.css"),
+  "utf8",
+);
+const MERMAID_ESM_PATH = join(
+  import.meta.dir,
+  "node_modules/mermaid/dist/mermaid.esm.min.mjs",
+);
+
+// marked: mermaid は pre.mermaid（クライアント描画）、その他は hljs でサーバ側 hl
+marked.use(
+  markedHighlight({
+    langPrefix: "hljs language-",
+    highlight(code, lang) {
+      if (!lang || lang === "mermaid") return code;
+      const language = hljs.getLanguage(lang) ? lang : "plaintext";
+      return hljs.highlight(code, { language }).value;
+    },
+  }),
+);
+
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
+}
+
+marked.use({
+  renderer: {
+    code({ text, lang }: { text: string; lang?: string }) {
+      if (lang === "mermaid") {
+        return `<pre class="mermaid">${escapeHtml(text)}</pre>\n`;
+      }
+      // markedHighlight の renderer に処理を戻す
+      return false as unknown as string;
+    },
+  },
+});
 
 type Phase = "in-progress" | "review" | "pr-open" | "done";
 
