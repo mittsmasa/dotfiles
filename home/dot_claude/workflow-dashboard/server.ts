@@ -14,10 +14,6 @@ const HLJS_THEME_CSS = readFileSync(
   join(import.meta.dir, "node_modules/highlight.js/styles/github-dark.css"),
   "utf8",
 );
-const MERMAID_ESM_PATH = join(
-  import.meta.dir,
-  "node_modules/mermaid/dist/mermaid.esm.min.mjs",
-);
 
 function escapeHtml(s: string): string {
   return s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
