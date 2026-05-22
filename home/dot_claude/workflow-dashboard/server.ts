@@ -122,7 +122,6 @@ function scanTasks(): Task[] {
     const dir = join(WORKFLOW_ROOT, entry.name);
     const plan = readMaybe(join(dir, "plan.md"));
     const research = readMaybe(join(dir, "research.md"));
-    const verify = readMaybe(join(dir, "verify-results.md"));
     const docs = DOC_FILES.filter((f) => existsSync(join(dir, f)));
     const meta = readMeta(dir);
     // orphan: cwd が指す作業ディレクトリが消えているタスクはボードに出さない
