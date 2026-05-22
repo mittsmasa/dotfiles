@@ -1,6 +1,5 @@
 // workflow-dashboard — ~/.claude/workflow/ の md 成果物をカンバン + プレビューで見る
 import { marked } from "marked";
-import { markedHighlight } from "marked-highlight";
 import hljs from "highlight.js";
 import { readdirSync, readFileSync, existsSync, statSync } from "node:fs";
 import { join } from "node:path";
@@ -20,30 +19,23 @@ const MERMAID_ESM_PATH = join(
   "node_modules/mermaid/dist/mermaid.esm.min.mjs",
 );
 
-// marked: mermaid は pre.mermaid（クライアント描画）、その他は hljs でサーバ側 hl
-marked.use(
-  markedHighlight({
-    langPrefix: "hljs language-",
-    highlight(code, lang) {
-      if (!lang || lang === "mermaid") return code;
-      const language = hljs.getLanguage(lang) ? lang : "plaintext";
-      return hljs.highlight(code, { language }).value;
-    },
-  }),
-);
-
 function escapeHtml(s: string): string {
   return s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
 }
 
+// fenced code: lang=mermaid は pre.mermaid（クライアント側で図に変換）、
+// それ以外は hljs でサーバ側ハイライト
 marked.use({
   renderer: {
     code({ text, lang }: { text: string; lang?: string }) {
       if (lang === "mermaid") {
         return `<pre class="mermaid">${escapeHtml(text)}</pre>\n`;
       }
-      // markedHighlight の renderer に処理を戻す
-      return false as unknown as string;
+      if (lang && hljs.getLanguage(lang)) {
+        const html = hljs.highlight(text, { language: lang }).value;
+        return `<pre><code class="hljs language-${escapeHtml(lang)}">${html}\n</code></pre>\n`;
+      }
+      return `<pre><code class="hljs">${escapeHtml(text)}\n</code></pre>\n`;
     },
   },
 });
