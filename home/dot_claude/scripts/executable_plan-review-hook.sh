@@ -12,7 +12,9 @@
 # 全レビュア skipped のときのみ verdict=error。
 #
 # 環境変数:
-#   WORKFLOW_DIR              - 成果物ディレクトリ (default: .workflow)
+#   WORKFLOW_DIR              - 成果物ディレクトリ
+#                               (未設定時は tool_input.file_path の親 dir を採用。
+#                                `.workflow` symlink でも実体 dir に解決される)
 #   MAX_REVIEW_ROUNDS         - 最大レビューラウンド数 (default: 3)
 #   PLAN_REVIEW_PROMPTS       - プロンプト配置ディレクトリ
 #                               (default: ~/.claude/scripts/plan-review-prompts)
