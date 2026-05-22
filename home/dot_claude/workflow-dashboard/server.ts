@@ -163,6 +163,7 @@ function page(title: string, body: string): string {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(title)}</title>
 <link rel="stylesheet" href="/style.css">
+<style>${HLJS_THEME_CSS}</style>
 </head><body>
 <header class="topbar"><a class="brand" href="/">&#9881; Workflow Dashboard</a></header>
 <main>${body}</main>
