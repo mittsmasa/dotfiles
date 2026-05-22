@@ -66,11 +66,11 @@ function readMaybe(path: string): string | null {
   return existsSync(path) ? readFileSync(path, "utf8") : null;
 }
 
-// meta.json（slice2 で導入、slice3 で dependsOn/pr 拡張）を読む。
-// cwd は非空文字列のみ採用、dependsOn は string[]、pr は object のみ。
-function readMeta(dir: string): { cwd: string | null; dependsOn: string[]; pr: Pr | null } {
+// meta.json（slice2 で導入、slice3 で dependsOn/pr 拡張、slice4 で title 追加）を読む。
+// cwd は非空文字列のみ採用、dependsOn は string[]、pr は object のみ、title は非空文字列のみ。
+function readMeta(dir: string): { cwd: string | null; dependsOn: string[]; pr: Pr | null; title: string | null } {
   const raw = readMaybe(join(dir, "meta.json"));
-  if (!raw) return { cwd: null, dependsOn: [], pr: null };
+  if (!raw) return { cwd: null, dependsOn: [], pr: null, title: null };
   try {
     const j = JSON.parse(raw);
     const cwd = typeof j.cwd === "string" && j.cwd.length > 0 ? j.cwd : null;
@@ -78,9 +78,10 @@ function readMeta(dir: string): { cwd: string | null; dependsOn: string[]; pr: P
       ? j.dependsOn.filter((x: unknown): x is string => typeof x === "string")
       : [];
     const pr = j.pr && typeof j.pr === "object" ? (j.pr as Pr) : null;
-    return { cwd, dependsOn, pr };
+    const title = typeof j.title === "string" && j.title.length > 0 ? j.title : null;
+    return { cwd, dependsOn, pr, title };
   } catch {
-    return { cwd: null, dependsOn: [], pr: null };
+    return { cwd: null, dependsOn: [], pr: null, title: null };
   }
 }
 
@@ -89,8 +90,9 @@ function shortenHome(p: string): string {
   return p === home || p.startsWith(home + "/") ? "~" + p.slice(home.length) : p;
 }
 
-// plan.md / research.md の先頭見出しからタイトルを取る。接頭辞 "Plan — " 等は落とす
-function deriveTitle(id: string, plan: string | null, research: string | null): string {
+// meta.json の title を最優先し、なければ plan.md / research.md の先頭見出しを使う。接頭辞 "Plan — " 等は落とす
+function deriveTitle(id: string, plan: string | null, research: string | null, metaTitle: string | null): string {
+  if (metaTitle) return metaTitle;
   const src = plan ?? research ?? "";
   const m = src.match(/^#\s+(.+)$/m);
   if (!m) return id;
@@ -98,10 +100,12 @@ function deriveTitle(id: string, plan: string | null, research: string | null): 
 }
 
 // phase は plan.md ヘッダの明示シグナルで決める（pr を最優先）。
-// verify-results.md の存在では done 判定しない（Phase 6 途中で作られるため）。
-function derivePhase(plan: string | null, hasResearch: boolean, pr: Pr | null): Phase {
+// verify-results.md に `- Status: done` 行があれば done（Phase 7 完了シグナル）。
+// verify-results.md の存在だけでは done 判定しない（Phase 6 途中で作られるため）。
+function derivePhase(plan: string | null, hasResearch: boolean, pr: Pr | null, verify: string | null): Phase {
   if (pr) return pr.merged ? "done" : "pr-open";
   if (plan && /^- Plan Status:\s*done/m.test(plan)) return "done";
+  if (verify && /^- Status:\s*done/m.test(verify)) return "done";
   // 承認済み（Phase 5 実装中）は in-progress。Plan Status: complete のままなので
   // review より先に判定する
   if (plan && /^- Approval Status:\s*approved/m.test(plan)) return "in-progress";
@@ -122,6 +126,7 @@ function scanTasks(): Task[] {
     const dir = join(WORKFLOW_ROOT, entry.name);
     const plan = readMaybe(join(dir, "plan.md"));
     const research = readMaybe(join(dir, "research.md"));
+    const verify = readMaybe(join(dir, "verify-results.md"));
     const docs = DOC_FILES.filter((f) => existsSync(join(dir, f)));
     const meta = readMeta(dir);
     // orphan: cwd が指す作業ディレクトリが消えているタスクはボードに出さない
@@ -133,8 +138,8 @@ function scanTasks(): Task[] {
     }
     tasks.push({
       id: entry.name,
-      title: deriveTitle(entry.name, plan, research),
-      phase: derivePhase(plan, research !== null, meta.pr),
+      title: deriveTitle(entry.name, plan, research, meta.title),
+      phase: derivePhase(plan, research !== null, meta.pr, verify),
       docs,
       updatedAt,
       cwd: meta.cwd,
