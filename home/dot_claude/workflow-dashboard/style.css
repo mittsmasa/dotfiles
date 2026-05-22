@@ -267,6 +267,13 @@ main {
   padding: 0;
   font-size: 0.85em;
 }
+.markdown pre.mermaid {
+  background: transparent;
+  border: none;
+  padding: 8px 0;
+  text-align: center;
+  overflow: visible;
+}
 .markdown table {
   border-collapse: collapse;
   width: 100%;
