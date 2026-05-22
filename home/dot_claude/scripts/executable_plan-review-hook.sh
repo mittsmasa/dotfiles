@@ -79,7 +79,20 @@ if [[ -n "${PLAN_REVIEW_HOOK_RUNNING:-}" ]]; then
   exit 0
 fi
 
-WORKFLOW_DIR="${WORKFLOW_DIR:-.workflow}"
+# INPUT を先に読んで FILE_PATH をガード。WORKFLOW_DIR は環境変数が明示
+# 設定されていればそれを優先、未設定なら FILE_PATH の親 dir を採用する。
+# `.workflow` が symlink でも `cd ... && pwd -P` で実体 dir に解決されるので
+# 既存の symlink 利用フローとも等価。
+INPUT=$(cat)
+FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty' 2>/dev/null || echo "")
+
+if [[ -z "$FILE_PATH" ]] || [[ "$FILE_PATH" != *"plan.md" ]]; then
+  exit 0
+fi
+
+if [[ -z "${WORKFLOW_DIR:-}" ]]; then
+  WORKFLOW_DIR=$(cd "$(dirname "$FILE_PATH")" 2>/dev/null && pwd -P) || exit 0
+fi
 MAX_ROUNDS="${MAX_REVIEW_ROUNDS:-3}"
 PROMPTS_DIR="${PLAN_REVIEW_PROMPTS:-$HOME/.claude/scripts/plan-review-prompts}"
 REVIEWER_BIN="${PLAN_REVIEW_REVIEWER_CMD:-claude}"
@@ -93,13 +106,6 @@ REVIEWERS=(simplicity correctness verifiability)
 # --- 前提チェック ---
 
 [[ -f "$PLAN_FILE" ]] || exit 0
-
-INPUT=$(cat)
-FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty' 2>/dev/null || echo "")
-
-if [[ -z "$FILE_PATH" ]] || [[ "$FILE_PATH" != *"plan.md" ]]; then
-  exit 0
-fi
 
 for r in "${REVIEWERS[@]}"; do
   if [[ ! -f "$PROMPTS_DIR/$r.md" ]]; then
