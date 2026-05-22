@@ -134,7 +134,7 @@ function scanTasks(): Task[] {
     tasks.push({
       id: entry.name,
       title: deriveTitle(entry.name, plan, research),
-      phase: derivePhase(plan, verify, research !== null, meta.pr),
+      phase: derivePhase(plan, research !== null, meta.pr),
       docs,
       updatedAt,
       cwd: meta.cwd,
