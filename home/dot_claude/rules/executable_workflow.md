@@ -99,4 +99,4 @@ Approval=approved, Review=pass, hash 一致を満たさない限り `$WORKFLOW_D
 
 ## 環境変数
 
-`WORKFLOW_DIR`: 成果物出力先（未設定時 `.workflow/`）。通常 `.workflow/` は Phase 1 で張った中央 task dir（`~/.claude/workflow/{task-id}/`）への symlink であり、書き込みは symlink 透過で中央に入る。dashboard はこの中央 dir を直接走査する。
+`WORKFLOW_DIR`: 成果物出力先。`.workflow` symlink を張った場合は `.workflow/`、張らない場合は中央 task dir（`~/.claude/workflow/{task-id}/`）を直接指す。`plan-review-hook.sh` / `workflow-meta-hook.sh` は環境変数が未設定なら `tool_input.file_path` の親 dir を採用するため、symlink の有無に関わらず動く。dashboard も中央 dir を直接走査する。
