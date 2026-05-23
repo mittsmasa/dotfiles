@@ -110,13 +110,30 @@ function deriveTitle(id: string, plan: string | null, research: string | null, m
   return m[1].replace(/^(Plan|Research)\s*[—-]\s*/, "").trim();
 }
 
-// phase は plan.md ヘッダの明示シグナルで決める（pr を最優先）。
-// verify-results.md に `- Status: done` 行があれば done（Phase 7 完了シグナル）。
-// verify-results.md の存在だけでは done 判定しない（Phase 6 途中で作られるため）。
-function derivePhase(plan: string | null, hasResearch: boolean, pr: Pr | null, verify: string | null): Phase {
+// phase は plan.md / verify-results.md のシグナルと、リアルタイム取得した
+// PR 状態 / 未コミット差分から派生する。
+// - pr は graphql 取得結果（live）、無ければ meta.pr（キャッシュ）が渡される
+// - dirty は meta.cwd で `git status --porcelain` を実行した結果。null は取得失敗
+// - noPr は meta.json で明示宣言された「PR を作らないタスク」フラグ
+//
+// Done 判定: PR が merged、または「未コミット差分なし + noPr=true」のみ。
+// `Status: done` / `Plan Status: done` が立っていても上記を満たさなければ pr-pending に降格。
+function derivePhase(
+  plan: string | null,
+  hasResearch: boolean,
+  pr: Pr | null,
+  verify: string | null,
+  noPr: boolean,
+  dirty: boolean | null,
+): Phase {
   if (pr) return pr.merged ? "done" : "pr-open";
-  if (plan && /^- Plan Status:\s*done/m.test(plan)) return "done";
-  if (verify && /^- Status:\s*done/m.test(verify)) return "done";
+  const statusDone =
+    (plan && /^- Plan Status:\s*done/m.test(plan)) ||
+    (verify && /^- Status:\s*done/m.test(verify));
+  if (statusDone) {
+    if (dirty === false && noPr) return "done";
+    return "pr-pending";
+  }
   // 承認済み（Phase 5 実装中）は in-progress。Plan Status: complete のままなので
   // review より先に判定する
   if (plan && /^- Approval Status:\s*approved/m.test(plan)) return "in-progress";
@@ -127,6 +144,99 @@ function derivePhase(plan: string | null, hasResearch: boolean, pr: Pr | null, v
   if (hasResearch) return "in-progress";
   // plan/research 皆無のタスクも in-progress 扱い（Todo 列は廃止）
   return "in-progress";
+}
+
+// git remote の URL から owner / repo を抜く。SSH (git@github.com:owner/repo.git)
+// と HTTPS (https://github.com/owner/repo[.git]) の両形式に対応
+function parseRemote(url: string): { owner: string; repo: string } | null {
+  const m = url.trim().match(/[:/]([\w.-]+)\/([\w.-]+?)(?:\.git)?$/);
+  if (!m) return null;
+  return { owner: m[1], repo: m[2] };
+}
+
+function runGit(cwd: string, args: string[]): { ok: boolean; stdout: string } {
+  try {
+    const r = spawnSync("git", ["-C", cwd, ...args], { encoding: "utf8" });
+    if (r.status !== 0) return { ok: false, stdout: "" };
+    return { ok: true, stdout: (r.stdout ?? "").trim() };
+  } catch {
+    return { ok: false, stdout: "" };
+  }
+}
+
+// cwd の現在ブランチと remote URL を取り、PR バッチ取得の入力に変換する
+function getGitInfo(
+  cwd: string,
+): { owner: string; repo: string; branch: string } | null {
+  const branch = runGit(cwd, ["branch", "--show-current"]);
+  if (!branch.ok || !branch.stdout) return null;
+  const remote = runGit(cwd, ["remote", "get-url", "origin"]);
+  if (!remote.ok || !remote.stdout) return null;
+  const parsed = parseRemote(remote.stdout);
+  if (!parsed) return null;
+  return { owner: parsed.owner, repo: parsed.repo, branch: branch.stdout };
+}
+
+// 未コミット差分の有無。取得失敗時は null（呼び出し側で「無効」扱いにする）
+function isDirty(cwd: string): boolean | null {
+  const r = runGit(cwd, ["status", "--porcelain"]);
+  if (!r.ok) return null;
+  return r.stdout.length > 0;
+}
+
+function gqlEscape(s: string): string {
+  return s.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
+
+// 全タスク分の PR を 1 リクエストでまとめて取得する。alias で複数 repository
+// ノードを束ねた単一 query を `gh api graphql` に投げる。失敗時は空 Map を返し、
+// 呼び出し側は meta.pr にフォールバックする
+function fetchLivePrs(
+  inputs: Map<string, { owner: string; repo: string; branch: string }>,
+): Map<string, Pr> {
+  if (inputs.size === 0) return new Map();
+  const aliases: { taskId: string; alias: string }[] = [];
+  const fragments: string[] = [];
+  let i = 0;
+  for (const [taskId, info] of inputs) {
+    const alias = `r${i++}`;
+    aliases.push({ taskId, alias });
+    const owner = gqlEscape(info.owner);
+    const repo = gqlEscape(info.repo);
+    const branch = gqlEscape(info.branch);
+    fragments.push(
+      `${alias}: repository(owner: "${owner}", name: "${repo}") { ref(qualifiedName: "refs/heads/${branch}") { associatedPullRequests(first: 1, orderBy: {field: CREATED_AT, direction: DESC}) { nodes { number url state } } } }`,
+    );
+  }
+  const query = `query { ${fragments.join(" ")} }`;
+  let stdout = "";
+  try {
+    // timeout 5s で hard cancel。gh の認証は既存設定をそのまま使う
+    const r = spawnSync("timeout", ["5", "gh", "api", "graphql", "-f", `query=${query}`], {
+      encoding: "utf8",
+    });
+    if (r.status !== 0) return new Map();
+    stdout = r.stdout ?? "";
+  } catch {
+    return new Map();
+  }
+  try {
+    const json = JSON.parse(stdout);
+    const data = json.data ?? {};
+    const result = new Map<string, Pr>();
+    for (const { taskId, alias } of aliases) {
+      const node = data[alias]?.ref?.associatedPullRequests?.nodes?.[0];
+      if (!node) continue;
+      result.set(taskId, {
+        number: node.number,
+        url: node.url,
+        merged: node.state === "MERGED",
+      });
+    }
+    return result;
+  } catch {
+    return new Map();
+  }
 }
 
 function scanTasks(): Task[] {
