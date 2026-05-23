@@ -16,7 +16,8 @@
 #   - meta.json の書き込みはシェルリダイレクト経由。Claude の Write ツールを
 #     使わないため PostToolUse は再発火しない（再入ループなし）。
 #   - 既存 meta.json の createdAt は不変。cwd は既存が非空なら保持。
-#   - dependsOn / pr 等の手書きフィールドはマージで残す（cwd/createdAt のみ更新）。
+#   - dependsOn / pr / noPr 等の手書き or 拡張フィールドはマージで残す
+#     （cwd/createdAt のみ更新。jq の `.cwd = $cwd` は他フィールドを保持する挙動）。
 #   - 非対象ファイル・エラー時は常に exit 0（Claude をブロックしない）。
 
 INPUT=$(cat)
