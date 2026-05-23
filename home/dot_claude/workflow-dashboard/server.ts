@@ -134,7 +134,7 @@ function derivePhase(
     (plan && /^- Plan Status:\s*done/m.test(plan)) ||
     (verify && /^- Status:\s*done/m.test(verify));
   if (statusDone) {
-    if (dirty === false && noPr) return "done";
+    if (dirty !== true && noPr) return "done";
     return "pr-pending";
   }
   // 承認済み（Phase 5 実装中）は in-progress。Plan Status: complete のままなので
