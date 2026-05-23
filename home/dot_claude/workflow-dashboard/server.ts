@@ -239,9 +239,25 @@ function fetchLivePrs(
   }
 }
 
+// 1 リクエスト分の board ビルド:
+//   1) 各タスクの md / meta.json を読む
+//   2) cwd を持つタスクについて git info / dirty を集める
+//   3) graphql で全タスク分の PR を 1 リクエストで取得
+//   4) derivePhase に live pr / dirty / noPr を渡して phase を確定
 function scanTasks(): Task[] {
   if (!existsSync(WORKFLOW_ROOT)) return [];
-  const tasks: Task[] = [];
+  type Raw = {
+    id: string;
+    plan: string | null;
+    research: string | null;
+    verify: string | null;
+    docs: string[];
+    meta: ReturnType<typeof readMeta>;
+    updatedAt: number;
+    dirty: boolean | null;
+  };
+  const raws: Raw[] = [];
+  const gitInputs = new Map<string, { owner: string; repo: string; branch: string }>();
   for (const entry of readdirSync(WORKFLOW_ROOT, { withFileTypes: true })) {
     if (!entry.isDirectory()) continue;
     const dir = join(WORKFLOW_ROOT, entry.name);
@@ -257,17 +273,47 @@ function scanTasks(): Task[] {
       const t = statSync(join(dir, f)).mtimeMs;
       if (t > updatedAt) updatedAt = t;
     }
-    tasks.push({
+    let dirty: boolean | null = null;
+    if (meta.cwd) {
+      dirty = isDirty(meta.cwd);
+      const info = getGitInfo(meta.cwd);
+      if (info) gitInputs.set(entry.name, info);
+    }
+    raws.push({
       id: entry.name,
-      title: deriveTitle(entry.name, plan, research, meta.title),
-      phase: derivePhase(plan, research !== null, meta.pr, verify),
+      plan,
+      research,
+      verify,
       docs,
+      meta,
       updatedAt,
-      cwd: meta.cwd,
-      dependsOn: meta.dependsOn,
-      pr: meta.pr,
+      dirty,
     });
   }
+  // graphql で全タスク分の PR を一括取得（失敗時は空 Map → meta.pr にフォールバック）
+  const livePrs = fetchLivePrs(gitInputs);
+  const tasks: Task[] = raws.map((r) => {
+    const livePr = livePrs.get(r.id) ?? null;
+    const pr = livePr ?? r.meta.pr;
+    return {
+      id: r.id,
+      title: deriveTitle(r.id, r.plan, r.research, r.meta.title),
+      phase: derivePhase(
+        r.plan,
+        r.research !== null,
+        pr,
+        r.verify,
+        r.meta.noPr,
+        r.dirty,
+      ),
+      docs: r.docs,
+      updatedAt: r.updatedAt,
+      cwd: r.meta.cwd,
+      dependsOn: r.meta.dependsOn,
+      pr,
+      noPr: r.meta.noPr,
+    };
+  });
   return tasks.sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
