@@ -515,8 +515,12 @@ function html(body: string, status = 200): Response {
 const server = Bun.serve({
   port: PORT,
   fetch(req) {
-    const path = new URL(req.url).pathname;
-    if (path === "/") return html(renderBoard());
+    const url = new URL(req.url);
+    const path = url.pathname;
+    if (path === "/") {
+      const filter = url.searchParams.get("cwd") ?? "";
+      return html(renderBoard(filter));
+    }
     if (path === "/style.css") {
       return new Response(Bun.file(join(import.meta.dir, "style.css")), {
         headers: { "content-type": "text/css; charset=utf-8" },
