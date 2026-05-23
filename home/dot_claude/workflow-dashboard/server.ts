@@ -395,11 +395,38 @@ function renderCard(t: Task, byId: Map<string, Task>): string {
         </div>`;
 }
 
-function renderBoard(): string {
+// `filter` が空文字なら全タスク、それ以外は repoRoot 前方一致のみ通す
+function matchesFilter(task: Task, filter: string): boolean {
+  if (filter === "") return true;
+  if (!task.repoRoot) return false;
+  return task.repoRoot === filter || task.repoRoot.startsWith(filter + "/");
+}
+
+// フィルタ選択肢を描画。repoRoot のユニーク集合 + 「すべて」を先頭に並べる
+function renderFilterBar(allTasks: Task[], filter: string): string {
+  const roots = Array.from(
+    new Set(allTasks.map((t) => t.repoRoot).filter((r): r is string => !!r)),
+  ).sort();
+  const opts = [
+    `<option value=""${filter === "" ? " selected" : ""}>すべて</option>`,
+    ...roots.map(
+      (r) =>
+        `<option value="${esc(r)}"${r === filter ? " selected" : ""}>${esc(shortenHome(r))}</option>`,
+    ),
+  ].join("");
+  return `
+    <form class="filter-bar" method="get" action="/">
+      <label class="filter-label" for="filter-cwd">ディレクトリで絞り込み</label>
+      <select class="filter-select" id="filter-cwd" name="cwd" onchange="this.form.submit()">${opts}</select>
+    </form>`;
+}
+
+function renderBoard(filter: string): string {
   const tasks = scanTasks();
   const byId = new Map(tasks.map((t) => [t.id, t]));
+  const filtered = tasks.filter((t) => matchesFilter(t, filter));
   const cols = COLUMNS.map(({ phase, label }) => {
-    const inCol = tasks.filter((t) => t.phase === phase);
+    const inCol = filtered.filter((t) => t.phase === phase);
     const cards = inCol.map((t) => renderCard(t, byId)).join("");
     return `
       <section class="col" id="col-${phase}">
@@ -410,7 +437,10 @@ function renderBoard(): string {
         <div class="col-body">${cards || '<p class="empty">&mdash;</p>'}</div>
       </section>`;
   }).join("");
-  return page("Workflow Dashboard", `<div class="board">${cols}</div>`);
+  return page(
+    "Workflow Dashboard",
+    `${renderFilterBar(tasks, filter)}<div class="board">${cols}</div>`,
+  );
 }
 
 function renderTask(id: string): string | null {
