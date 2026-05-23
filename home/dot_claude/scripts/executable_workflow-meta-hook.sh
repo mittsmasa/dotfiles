@@ -6,6 +6,8 @@
 # meta.json は md から導けない安定情報のみを持つ:
 #   cwd       - タスクを実行したリポジトリ（worktree）の作業ディレクトリ
 #   createdAt - 初回生成時刻（ISO8601 UTC、以降不変）
+#   noPr      - PR を作らないタスクであることの宣言（手書き）。dashboard の
+#               Done 判定で「未コミット差分なし + noPr=true なら done」用
 #
 # 環境変数:
 #   META_HOOK_CWD - cwd を明示指定（bootstrap 用）。未指定なら実行時 $PWD。
