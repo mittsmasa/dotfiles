@@ -114,9 +114,12 @@ function deriveTitle(id: string, plan: string | null, research: string | null, m
 // PR 状態 / 未コミット差分から派生する。
 // - pr は graphql 取得結果（live）、無ければ meta.pr（キャッシュ）が渡される
 // - dirty は meta.cwd で `git status --porcelain` を実行した結果。null は取得失敗
+//   （git 配下でない / cwd 消失など）
 // - noPr は meta.json で明示宣言された「PR を作らないタスク」フラグ
 //
-// Done 判定: PR が merged、または「未コミット差分なし + noPr=true」のみ。
+// Done 判定: PR が merged、または「差分なし or 取得失敗 + noPr=true」。
+// dirty===true（差分確定）のみ pr-pending に降格する。dirty===null（取得失敗）は
+// 「git 配下でない chezmoi 管理ディレクトリなど」を許容するため done を妨げない。
 // `Status: done` / `Plan Status: done` が立っていても上記を満たさなければ pr-pending に降格。
 function derivePhase(
   plan: string | null,
