@@ -60,6 +60,7 @@ interface Task {
   docs: string[];
   updatedAt: number;
   cwd: string | null;
+  repoRoot: string | null;
   dependsOn: string[];
   pr: Pr | null;
   noPr: boolean;
