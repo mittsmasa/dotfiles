@@ -188,6 +188,18 @@ function isDirty(cwd: string): boolean | null {
   return r.stdout.length > 0;
 }
 
+// cwd を含む git リポジトリのメインルートを返す。worktree から呼び出した場合は
+// main repo の `.git` を指す common-dir が返るので、その親を取れば main repo root。
+// git 配下でない場合は cwd 自身をフォールバックとして返す。
+function deriveRepoRoot(cwd: string): string {
+  const r = runGit(cwd, ["rev-parse", "--path-format=absolute", "--git-common-dir"]);
+  if (!r.ok || !r.stdout) return cwd;
+  // common-dir が `.git` のとき親、`bare/repo.git` のときも親で OK
+  const idx = r.stdout.lastIndexOf("/");
+  if (idx <= 0) return cwd;
+  return r.stdout.slice(0, idx);
+}
+
 function gqlEscape(s: string): string {
   return s.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
