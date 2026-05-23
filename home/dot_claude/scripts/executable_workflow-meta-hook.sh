@@ -70,7 +70,7 @@ if [[ "$(basename "$FILE_PATH")" == "verify-results.md" ]] \
 fi
 
 # 一時ファイルに書いてから mv（jq 失敗時に meta.json を壊さない）。
-# 既存 meta.json があれば dependsOn/pr 等を残し cwd/createdAt のみマージ更新。
+# 既存 meta.json があれば dependsOn/pr/noPr 等を残し cwd/createdAt のみマージ更新。
 # PR_JSON が非空なら pr フィールドも上書きする。
 TMP=$(mktemp "${TMPDIR:-/tmp}/workflow-meta.XXXXXX") || exit 0
 if [[ -f "$META" ]]; then
