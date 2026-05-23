@@ -36,11 +36,12 @@ marked.use({
   },
 });
 
-type Phase = "in-progress" | "review" | "pr-open" | "done";
+type Phase = "in-progress" | "review" | "pr-pending" | "pr-open" | "done";
 
 const COLUMNS: { phase: Phase; label: string }[] = [
   { phase: "in-progress", label: "In Progress" },
   { phase: "review", label: "Review" },
+  { phase: "pr-pending", label: "PR Pending" },
   { phase: "pr-open", label: "PR Open" },
   { phase: "done", label: "Done" },
 ];
@@ -60,6 +61,7 @@ interface Task {
   cwd: string | null;
   dependsOn: string[];
   pr: Pr | null;
+  noPr: boolean;
 }
 
 function readMaybe(path: string): string | null {
