@@ -68,11 +68,18 @@ function readMaybe(path: string): string | null {
   return existsSync(path) ? readFileSync(path, "utf8") : null;
 }
 
-// meta.json（slice2 で導入、slice3 で dependsOn/pr 拡張、slice4 で title 追加）を読む。
-// cwd は非空文字列のみ採用、dependsOn は string[]、pr は object のみ、title は非空文字列のみ。
-function readMeta(dir: string): { cwd: string | null; dependsOn: string[]; pr: Pr | null; title: string | null } {
+// meta.json を読む。cwd は非空文字列のみ採用、dependsOn は string[]、pr は object のみ、
+// title は非空文字列のみ、noPr は boolean のみ（PR を作らないタスクの明示宣言）。
+function readMeta(dir: string): {
+  cwd: string | null;
+  dependsOn: string[];
+  pr: Pr | null;
+  title: string | null;
+  noPr: boolean;
+} {
   const raw = readMaybe(join(dir, "meta.json"));
-  if (!raw) return { cwd: null, dependsOn: [], pr: null, title: null };
+  if (!raw)
+    return { cwd: null, dependsOn: [], pr: null, title: null, noPr: false };
   try {
     const j = JSON.parse(raw);
     const cwd = typeof j.cwd === "string" && j.cwd.length > 0 ? j.cwd : null;
@@ -81,9 +88,10 @@ function readMeta(dir: string): { cwd: string | null; dependsOn: string[]; pr: P
       : [];
     const pr = j.pr && typeof j.pr === "object" ? (j.pr as Pr) : null;
     const title = typeof j.title === "string" && j.title.length > 0 ? j.title : null;
-    return { cwd, dependsOn, pr, title };
+    const noPr = j.noPr === true;
+    return { cwd, dependsOn, pr, title, noPr };
   } catch {
-    return { cwd: null, dependsOn: [], pr: null, title: null };
+    return { cwd: null, dependsOn: [], pr: null, title: null, noPr: false };
   }
 }
 
