@@ -306,6 +306,11 @@ function scanTasks(): Task[] {
       dirty,
     });
   }
+  // repoRoot は cwd を持つタスクだけ派生する
+  const repoRootByTask = new Map<string, string>();
+  for (const r of raws) {
+    if (r.meta.cwd) repoRootByTask.set(r.id, deriveRepoRoot(r.meta.cwd));
+  }
   // graphql で全タスク分の PR を一括取得（失敗時は空 Map → meta.pr にフォールバック）
   const livePrs = fetchLivePrs(gitInputs);
   const tasks: Task[] = raws.map((r) => {
