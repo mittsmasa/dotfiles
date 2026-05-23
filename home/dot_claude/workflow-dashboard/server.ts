@@ -4,6 +4,7 @@ import hljs from "highlight.js";
 import { readdirSync, readFileSync, existsSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
+import { spawnSync } from "node:child_process";
 
 const WORKFLOW_ROOT = join(homedir(), ".claude", "workflow");
 // portless 経由なら proxy が PORT を注入する。単体起動（PORT 未設定）は 4519
