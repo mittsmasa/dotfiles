@@ -104,6 +104,10 @@ main {
   color: var(--review);
   background: rgba(163, 113, 247, 0.15);
 }
+.phase-pr-pending {
+  color: var(--pr-pending);
+  background: rgba(219, 109, 40, 0.15);
+}
 .phase-pr-open {
   color: var(--pr-open);
   background: rgba(47, 129, 247, 0.15);
