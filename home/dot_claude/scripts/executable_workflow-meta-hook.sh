@@ -53,15 +53,39 @@ else
   CWD="${META_HOOK_CWD:-$PWD}"
 fi
 
+# verify-results.md 書き込み時のみ、$CWD で gh pr view を実行して現ブランチの PR を取得。
+# 取れたら meta.pr を {number, url, merged} で更新（merged は state == "MERGED"）。
+# 失敗時は PR_JSON="" のままで既存 pr を維持（silent fail）。
+PR_JSON=""
+if [[ "$(basename "$FILE_PATH")" == "verify-results.md" ]] \
+  && [[ -n "$CWD" ]] && [[ -d "$CWD" ]] \
+  && command -v gh >/dev/null 2>&1; then
+  RAW=$(cd "$CWD" && timeout 3 gh pr view --json number,url,state 2>/dev/null) || RAW=""
+  if [[ -n "$RAW" ]]; then
+    PR_JSON=$(echo "$RAW" | jq -c '{number, url, merged: (.state == "MERGED")}' 2>/dev/null) || PR_JSON=""
+  fi
+fi
+
 # 一時ファイルに書いてから mv（jq 失敗時に meta.json を壊さない）。
 # 既存 meta.json があれば dependsOn/pr 等を残し cwd/createdAt のみマージ更新。
+# PR_JSON が非空なら pr フィールドも上書きする。
 TMP=$(mktemp "${TMPDIR:-/tmp}/workflow-meta.XXXXXX") || exit 0
 if [[ -f "$META" ]]; then
-  jq --arg cwd "$CWD" --arg created "$CREATED" \
-    '.cwd = $cwd | .createdAt = $created' "$META" >"$TMP" 2>/dev/null
+  if [[ -n "$PR_JSON" ]]; then
+    jq --arg cwd "$CWD" --arg created "$CREATED" --argjson pr "$PR_JSON" \
+      '.cwd = $cwd | .createdAt = $created | .pr = $pr' "$META" >"$TMP" 2>/dev/null
+  else
+    jq --arg cwd "$CWD" --arg created "$CREATED" \
+      '.cwd = $cwd | .createdAt = $created' "$META" >"$TMP" 2>/dev/null
+  fi
 else
-  jq -n --arg cwd "$CWD" --arg created "$CREATED" \
-    '{cwd: $cwd, createdAt: $created}' >"$TMP" 2>/dev/null
+  if [[ -n "$PR_JSON" ]]; then
+    jq -n --arg cwd "$CWD" --arg created "$CREATED" --argjson pr "$PR_JSON" \
+      '{cwd: $cwd, createdAt: $created, pr: $pr}' >"$TMP" 2>/dev/null
+  else
+    jq -n --arg cwd "$CWD" --arg created "$CREATED" \
+      '{cwd: $cwd, createdAt: $created}' >"$TMP" 2>/dev/null
+  fi
 fi
 if [[ -s "$TMP" ]]; then
   mv "$TMP" "$META"
