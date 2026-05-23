@@ -330,6 +330,7 @@ function scanTasks(): Task[] {
       docs: r.docs,
       updatedAt: r.updatedAt,
       cwd: r.meta.cwd,
+      repoRoot: repoRootByTask.get(r.id) ?? null,
       dependsOn: r.meta.dependsOn,
       pr,
       noPr: r.meta.noPr,
