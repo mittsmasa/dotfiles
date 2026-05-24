@@ -106,9 +106,13 @@ MVP_STANCE_FILE="$PROMPTS_DIR/_mvp-stance.md"
 REVIEWERS=(simplicity correctness verifiability)
 
 # レビュア状態:
-#   STATUS[reviewer]  = ok | skipped
-#   VERDICT[reviewer] = pass | needs_revision | skipped
-declare -A STATUS VERDICT
+#   STATUS_<reviewer>  = ok | skipped
+#   VERDICT_<reviewer> = pass | needs_revision | skipped
+# bash 3.2 互換のため declare -A は使わず動的変数名 + indirect expansion で扱う
+get_status()  { local v="STATUS_$1";  echo "${!v:-}"; }
+set_status()  { eval "STATUS_$1=\"\$2\""; }
+get_verdict() { local v="VERDICT_$1"; echo "${!v:-}"; }
+set_verdict() { eval "VERDICT_$1=\"\$2\""; }
 
 # --- 前提チェック ---
 
