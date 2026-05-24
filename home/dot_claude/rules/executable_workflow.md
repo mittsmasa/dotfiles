@@ -46,7 +46,7 @@ tmux / cmux があれば main.0=Claude / main.1=dev server / main.2=動作確認
 `$WORKFLOW_DIR/plan.md` を作成。必須セクション: 目的 / 方針 / 実装ステップ（チェックリスト）/ 変更対象ファイル / リスクと対策 / 動作確認項目 / Review Status / Approval。
 
 - 動作確認項目は**実行可能で検証可能**に（具体コマンド + 期待結果。手動確認はその旨明記）
-- ヘッダ: `Review Status: pending / Round: 0 / Last Review Hash: (none)` と `Plan Status: draft / Approval Status: pending`
+- ヘッダ: `Review Status: pending` と `Plan Status: draft / Approval Status: pending`（hash / round はレビュー hook が末尾マーカー `<!-- auto-review: ... -->` に記録するので plan.md には書かない）
 
 ## Phase 3: Plan Review Loop（hook 自動）
 
