@@ -366,7 +366,7 @@ function page(title: string, body: string, opts: { withCleanDrawer?: boolean } =
 </head><body>
 <header class="topbar">
   <a class="brand" href="/">&#9881; Workflow Dashboard</a>
-  ${opts.withCleanDrawer ? '<button type="button" class="topbar__clean" data-clean-open aria-label="クリーンアップ"><span class="topbar__clean-icon" aria-hidden="true">&#9873;</span><span class="topbar__clean-label">Clean</span></button>' : ""}
+  ${opts.withCleanDrawer ? '<button type="button" class="topbar__clean" data-clean-open aria-label="クリーンアップ"><span class="topbar__clean-icon" aria-hidden="true">🧹</span><span class="topbar__clean-label">Clean</span></button>' : ""}
 </header>
 <main>${body}</main>
 ${drawer}
