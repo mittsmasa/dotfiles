@@ -120,6 +120,8 @@ PR を作らないタスク（例: ローカル設定変更、調査のみ、che
 
 宣言を忘れたタスクは `pr-pending` に降格する。手で `meta.json` を直せば回復する。
 
+ただし `cwd` が `~/.claude/` 配下のタスクは `workflow-meta-hook.sh` が新規 `meta.json` 生成時に `noPr: true` を自動で補完する（既存 `meta.json` には触らない）。chezmoi 経由で自動 push される設定ファイル群は宣言を書かなくても Done に到達できる。
+
 サマリー報告（変更概要 / 確認結果 / SKIP 手動確認依頼 / フォローアップ）。
 
 ---
