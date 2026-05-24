@@ -257,7 +257,7 @@ function fetchLivePrs(
     const data = json.data ?? {};
     const result = new Map<string, Pr>();
     for (const { taskId, alias } of aliases) {
-      const node = data[alias]?.ref?.associatedPullRequests?.nodes?.[0];
+      const node = data[alias]?.pullRequests?.nodes?.[0];
       if (!node) continue;
       result.set(taskId, {
         number: node.number,
