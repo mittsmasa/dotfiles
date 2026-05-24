@@ -120,7 +120,7 @@ case "$SESSION_CWD" in
 You are running inside a worktree under `.claude/worktrees/`.
 
 - `.serena/` と `.env.local` 系は SessionStart hook が自動コピー済み（初回のみ）。
-- 作業は通常通り進めてよい。終了時の cleanup は `git worktree remove <path>` / `git branch -D worktree-<name>` を手動で行う（詳細は `~/.claude/rules/worktree.md`）。
+- 作業は通常通り進めてよい。終了時の cleanup は `git worktree remove <path>` / `git branch -D worktree-<name>` を手動で行う。`.claude/worktrees/` は gitignore 必須。
 EOF
 )
     context="${context}${worktree_ctx}"
