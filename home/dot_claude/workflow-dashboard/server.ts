@@ -334,7 +334,11 @@ function scanTasks(): Task[] {
     .sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
-function page(title: string, body: string, opts: { withCleanDrawer?: boolean } = {}): string {
+function page(
+  title: string,
+  body: string,
+  opts: { withCleanDrawer?: boolean; withLayoutToggle?: boolean } = {},
+): string {
   const drawer = opts.withCleanDrawer
     ? `
 <div class="clean-overlay" data-clean-overlay hidden></div>
