@@ -463,7 +463,6 @@ function scanCleanCandidates(): CleanCandidates {
   for (const dirent of readdirSync(WORKFLOW_ROOT, { withFileTypes: true })) {
     if (!dirent.isDirectory()) continue;
     const id = dirent.name;
-    if (liveById.has(id)) continue;
     const dir = join(WORKFLOW_ROOT, id);
     const meta = readMeta(dir);
     const docs = DOC_FILES.filter((f) => existsSync(join(dir, f)));
