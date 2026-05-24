@@ -19,6 +19,17 @@ const TASK_DETAIL_JS = readFileSync(
   join(import.meta.dir, "task-detail.js"),
   "utf8",
 );
+const CLEAN_DRAWER_JS = readFileSync(
+  join(import.meta.dir, "clean-drawer.js"),
+  "utf8",
+);
+const WORKFLOW_ROOT_REAL = (() => {
+  try {
+    return realpathSync(WORKFLOW_ROOT);
+  } catch {
+    return WORKFLOW_ROOT;
+  }
+})();
 
 function esc(s: string): string {
   return s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
