@@ -538,14 +538,65 @@ function html(body: string, status = 200): Response {
   return new Response(body, { status, headers: { "content-type": "text/html; charset=utf-8" } });
 }
 
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "content-type": "application/json; charset=utf-8" },
+  });
+}
+
 const server = Bun.serve({
   port: PORT,
-  fetch(req) {
+  async fetch(req) {
     const url = new URL(req.url);
     const path = url.pathname;
     if (path === "/") {
       const filter = url.searchParams.get("cwd") ?? "";
       return html(renderBoard(filter));
+    }
+    if (path === "/api/clean/candidates" && req.method === "GET") {
+      return jsonResponse(scanCleanCandidates());
+    }
+    if (path === "/api/clean/delete" && req.method === "POST") {
+      let body: unknown;
+      try {
+        body = await req.json();
+      } catch {
+        return jsonResponse({ error: "invalid json" }, 400);
+      }
+      const ids = (body as { ids?: unknown })?.ids;
+      if (!Array.isArray(ids) || !ids.every((x) => typeof x === "string")) {
+        return jsonResponse({ error: "ids must be string[]" }, 400);
+      }
+      // 不正形式（パストラバーサル等）が混ざっていたら全体を 400 で拒否する
+      for (const id of ids as string[]) {
+        if (!id || id.includes("/") || id.includes("..") || id.includes("\0")) {
+          return jsonResponse({ error: "invalid id", id }, 400);
+        }
+      }
+      const candidates = scanCleanCandidates();
+      const candidateIds = new Set<string>([
+        ...candidates.done.map((c) => c.id),
+        ...candidates.orphan.map((c) => c.id),
+        ...candidates.empty.map((c) => c.id),
+      ]);
+      const deleted: string[] = [];
+      const skipped: { id: string; reason: string }[] = [];
+      const failed: { id: string; reason: string }[] = [];
+      for (const id of ids as string[]) {
+        const reason = validateCleanTarget(id, candidateIds);
+        if (reason) {
+          skipped.push({ id, reason });
+          continue;
+        }
+        try {
+          rmSync(join(WORKFLOW_ROOT, id), { recursive: true, force: true });
+          deleted.push(id);
+        } catch (e) {
+          failed.push({ id, reason: e instanceof Error ? e.message : String(e) });
+        }
+      }
+      return jsonResponse({ deleted, skipped, failed });
     }
     if (path === "/style.css") {
       return new Response(Bun.file(join(import.meta.dir, "style.css")), {
