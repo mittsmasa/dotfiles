@@ -1,7 +1,7 @@
 // workflow-dashboard — ~/.claude/workflow/ の md 成果物をカンバン + プレビューで見る
 import { marked } from "marked";
 import hljs from "highlight.js";
-import { readdirSync, readFileSync, existsSync, statSync } from "node:fs";
+import { readdirSync, readFileSync, existsSync, statSync, rmSync, realpathSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { spawnSync } from "node:child_process";
