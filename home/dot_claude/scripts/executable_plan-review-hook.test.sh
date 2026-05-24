@@ -211,7 +211,7 @@ export MOCK_PLAN_FILE="$WS/.workflow/plan.md"
 run_hook "$WS"
 
 assert_match     "$WS/.workflow/plan.md" '^- Status: pass$'           "Status=pass after looping"
-assert_match     "$WS/.workflow/plan.md" '^- Round: 2$'               "Round=2"
+assert_match     "$WS/.workflow/plan.md" 'round=2'                    "marker round=2"
 assert_match     "$WS/.workflow/plan.md" '^- Plan Status: complete$'  "Plan Status=complete"
 assert_match     "$WS/.workflow/plan.md" '// applier edit pid='        "applier edit applied"
 assert_file_exists "$WS/.workflow/review-round-1.md"                    "round 1 report exists"
