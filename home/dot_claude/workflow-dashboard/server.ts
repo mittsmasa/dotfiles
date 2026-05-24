@@ -330,7 +330,32 @@ function scanTasks(): Task[] {
     .sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
-function page(title: string, body: string): string {
+function page(title: string, body: string, opts: { withCleanDrawer?: boolean } = {}): string {
+  const drawer = opts.withCleanDrawer
+    ? `
+<div class="clean-overlay" data-clean-overlay hidden></div>
+<aside class="clean-drawer" data-clean-drawer hidden aria-hidden="true" aria-labelledby="clean-drawer-title">
+  <header class="clean-drawer__head">
+    <h2 class="clean-drawer__title" id="clean-drawer-title">書庫の選別</h2>
+    <button type="button" class="clean-drawer__close" data-clean-close aria-label="閉じる">&times;</button>
+  </header>
+  <p class="clean-drawer__lede">削除すると元に戻せません。対象を選んでから実行してください。</p>
+  <div class="clean-drawer__body" data-clean-body>
+    <p class="clean-drawer__loading">読み込み中…</p>
+  </div>
+  <footer class="clean-drawer__foot" data-clean-foot hidden>
+    <div class="clean-confirm" data-clean-confirm hidden>
+      <p class="clean-confirm__msg" data-clean-confirm-msg></p>
+      <div class="clean-confirm__actions">
+        <button type="button" class="clean-btn clean-btn--ghost" data-clean-cancel>キャンセル</button>
+        <button type="button" class="clean-btn clean-btn--danger" data-clean-confirm-go>削除を実行</button>
+      </div>
+    </div>
+    <button type="button" class="clean-btn clean-btn--primary" data-clean-trigger disabled>0 件を削除</button>
+  </footer>
+</aside>
+<script type="module">${CLEAN_DRAWER_JS}</script>`
+    : "";
   return `<!doctype html>
 <html lang="ja"><head>
 <meta charset="utf-8">
@@ -339,8 +364,12 @@ function page(title: string, body: string): string {
 <link rel="stylesheet" href="/style.css">
 <style>${HLJS_THEME_CSS}</style>
 </head><body>
-<header class="topbar"><a class="brand" href="/">&#9881; Workflow Dashboard</a></header>
+<header class="topbar">
+  <a class="brand" href="/">&#9881; Workflow Dashboard</a>
+  ${opts.withCleanDrawer ? '<button type="button" class="topbar__clean" data-clean-open aria-label="クリーンアップ"><span class="topbar__clean-icon" aria-hidden="true">&#9873;</span><span class="topbar__clean-label">Clean</span></button>' : ""}
+</header>
 <main>${body}</main>
+${drawer}
 </body></html>`;
 }
 
