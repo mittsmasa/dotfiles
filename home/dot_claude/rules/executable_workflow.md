@@ -136,4 +136,4 @@ Approval=approved, Review=pass, hash 一致を満たさない限り `$WORKFLOW_D
 
 ## 環境変数
 
-`WORKFLOW_DIR`: 成果物出力先。`.workflow` symlink を張った場合は `.workflow/`、張らない場合は中央 task dir（`~/.claude/workflow/{task-id}/`）を直接指す。`plan-review-hook.sh` / `workflow-meta-hook.sh` は環境変数が未設定なら `tool_input.file_path` の親 dir を採用するため、symlink の有無に関わらず動く。dashboard も中央 dir を直接走査する。
+`WORKFLOW_DIR`: 成果物出力先。task dir の真のソースは `~/.claude/workflow/{task-id}/` のみで、`.workflow` symlink は任意の短縮パス。`plan-review-hook.sh` / `workflow-meta-hook.sh` は環境変数が未設定なら `tool_input.file_path` の親 dir を `pwd -P` 経由で実体に解決するので、symlink 経由でも中央 dir に到達する。dashboard も中央 dir を直接走査する。`WORKFLOW_DIR` の env 経由オーバーライドはテストハーネス用途に限定する（実運用では未設定が前提）。
