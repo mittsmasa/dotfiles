@@ -237,7 +237,7 @@ function fetchLivePrs(
     const repo = gqlEscape(info.repo);
     const branch = gqlEscape(info.branch);
     fragments.push(
-      `${alias}: repository(owner: "${owner}", name: "${repo}") { ref(qualifiedName: "refs/heads/${branch}") { associatedPullRequests(first: 1, orderBy: {field: CREATED_AT, direction: DESC}) { nodes { number url state } } } }`,
+      `${alias}: repository(owner: "${owner}", name: "${repo}") { pullRequests(headRefName: "${branch}", states: [OPEN, MERGED], first: 1, orderBy: {field: CREATED_AT, direction: DESC}) { nodes { number url state } } }`,
     );
   }
   const query = `query { ${fragments.join(" ")} }`;
