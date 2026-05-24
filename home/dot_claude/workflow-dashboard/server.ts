@@ -541,7 +541,7 @@ function renderBoard(filter: string): string {
   return page(
     "Workflow Dashboard",
     `${renderFilterBar(tasks, filter)}<div class="board">${cols}</div>`,
-    { withCleanDrawer: true },
+    { withCleanDrawer: true, withLayoutToggle: true },
   );
 }
 
