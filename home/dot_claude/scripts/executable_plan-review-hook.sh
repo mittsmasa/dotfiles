@@ -248,7 +248,7 @@ aggregate_verdict() {
       if [[ "$v" == "pass" || "$v" == "needs_revision" ]]; then
         STATUS[$r]="ok"
         VERDICT[$r]="$v"
-        [[ "$v" == "needs_revision" ]] && FAILED+=("$r")
+        if [[ "$v" == "needs_revision" ]]; then FAILED+=("$r"); fi
         echo "[plan-review] $r: $v" >&2
       else
         STATUS[$r]="skipped"
