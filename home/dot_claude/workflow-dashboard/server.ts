@@ -408,6 +408,73 @@ function renderFilterBar(allTasks: Task[], filter: string): string {
     </form>`;
 }
 
+interface CleanCandidate {
+  id: string;
+  title: string;
+  cwd: string | null;
+}
+interface CleanCandidates {
+  done: CleanCandidate[];
+  orphan: CleanCandidate[];
+  empty: CleanCandidate[];
+}
+
+// scanTasks と独立に走らせ、Clean drawer 用に 3 種類の削除候補を集める。
+// orphan / empty は scanTasks では弾かれるので、ここで個別に拾い直す。
+function scanCleanCandidates(): CleanCandidates {
+  const result: CleanCandidates = { done: [], orphan: [], empty: [] };
+  if (!existsSync(WORKFLOW_ROOT)) return result;
+  const liveTasks = scanTasks();
+  const liveById = new Map(liveTasks.map((t) => [t.id, t]));
+  for (const t of liveTasks) {
+    if (t.phase === "done") {
+      result.done.push({ id: t.id, title: t.title, cwd: t.cwd });
+    }
+  }
+  for (const dirent of readdirSync(WORKFLOW_ROOT, { withFileTypes: true })) {
+    if (!dirent.isDirectory()) continue;
+    const id = dirent.name;
+    if (liveById.has(id)) continue;
+    const dir = join(WORKFLOW_ROOT, id);
+    const meta = readMeta(dir);
+    const docs = DOC_FILES.filter((f) => existsSync(join(dir, f)));
+    if (meta.cwd && !existsSync(meta.cwd)) {
+      const plan = readMaybe(join(dir, "plan.md"));
+      const research = readMaybe(join(dir, "research.md"));
+      result.orphan.push({
+        id,
+        title: deriveTitle(id, plan, research, meta.title),
+        cwd: meta.cwd,
+      });
+      continue;
+    }
+    if (!existsSync(join(dir, "meta.json")) && docs.length === 0) {
+      result.empty.push({ id, title: id, cwd: null });
+    }
+  }
+  return result;
+}
+
+// 単一 id を実削除する前のガード。失敗理由を文字列で返す（null なら OK）。
+function validateCleanTarget(id: string, candidateIds: Set<string>): string | null {
+  if (!id || id.includes("/") || id.includes("..") || id.includes("\0")) {
+    return "invalid id";
+  }
+  if (!candidateIds.has(id)) return "not in candidates";
+  const dir = join(WORKFLOW_ROOT, id);
+  if (!existsSync(dir)) return "missing";
+  let real: string;
+  try {
+    real = realpathSync(dir);
+  } catch {
+    return "realpath failed";
+  }
+  if (real !== join(WORKFLOW_ROOT_REAL, id) && !real.startsWith(WORKFLOW_ROOT_REAL + "/")) {
+    return "outside workflow root";
+  }
+  return null;
+}
+
 function renderBoard(filter: string): string {
   const tasks = scanTasks();
   const byId = new Map(tasks.map((t) => [t.id, t]));
