@@ -393,11 +393,13 @@ while :; do
     echo "- failed: [$FAILED_STR]"
     echo ""
     for r in "${REVIEWERS[@]}"; do
-      echo "## $r — ${VERDICT[$r]:-unknown}"
+      r_verdict=$(get_verdict "$r")
+      r_status=$(get_status "$r")
+      echo "## $r — ${r_verdict:-unknown}"
       echo ""
       json_out="$WORKFLOW_DIR/review-round-${NEXT_ROUND}-${r}.json"
       raw="$WORKFLOW_DIR/review-round-${NEXT_ROUND}-${r}.raw"
-      if [[ "${STATUS[$r]:-}" == "ok" && -f "$json_out" ]]; then
+      if [[ "$r_status" == "ok" && -f "$json_out" ]]; then
         echo '```json'
         cat "$json_out"
         echo '```'
