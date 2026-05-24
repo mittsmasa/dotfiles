@@ -235,6 +235,24 @@ main {
   overflow-y: auto;
 }
 
+/* --- board: vertical layout --- */
+body[data-layout="vertical"] .board {
+  flex-direction: column;
+  gap: 20px;
+  overflow-x: visible;
+}
+body[data-layout="vertical"] .col {
+  flex: initial;
+  width: 100%;
+  max-height: none;
+}
+body[data-layout="vertical"] .col-body {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 10px;
+  overflow: visible;
+}
+
 /* --- card --- */
 .card {
   display: block;
