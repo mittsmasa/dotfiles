@@ -106,10 +106,15 @@ MVP_STANCE_FILE="$PROMPTS_DIR/_mvp-stance.md"
 
 REVIEWERS=(simplicity correctness verifiability)
 
-# レビュア状態:
+# レビュア状態を保持する擬似連想配列:
 #   STATUS_<reviewer>  = ok | skipped
 #   VERDICT_<reviewer> = pass | needs_revision | skipped
-# bash 3.2 互換のため declare -A は使わず動的変数名 + indirect expansion で扱う
+#
+# macOS デフォルトの bash 3.2 では `declare -A` が使えない。Homebrew bash 4+ を
+# 前提にすると環境差で hook が落ちるため、ここでは reviewer 名を変数名の一部に
+# 埋め込み、indirect expansion (`${!var}`) で読み出す形で代替している。
+# 名前は固定 3 種（simplicity / correctness / verifiability）で識別子として
+# そのまま使えることが前提。動的にユーザー入力から作るときは要注意。
 get_status()  { local v="STATUS_$1";  echo "${!v:-}"; }
 set_status()  { eval "STATUS_$1=\"\$2\""; }
 get_verdict() { local v="VERDICT_$1"; echo "${!v:-}"; }
