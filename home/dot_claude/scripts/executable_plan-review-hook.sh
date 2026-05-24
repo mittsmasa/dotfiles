@@ -2,7 +2,8 @@
 # plan-review-hook.sh
 # plan.md への書き込みを検知して 3 本のレビュアを並列実行する
 #
-# 前提: bash 4+（declare -A を使う）。Linux WSL / macOS Homebrew bash 4+ を想定。
+# 前提: bash 3.2 互換（macOS デフォルトの /bin/bash 3.2 でも動く）。
+#       連想配列は使えないので、動的変数名 + indirect expansion (${!var}) で代替している。
 #
 # レビュア構成:
 #   - simplicity     (veto 権あり: fail なら他がどうあれ needs_revision)
