@@ -2,6 +2,8 @@
 # plan-review-hook.sh
 # plan.md への書き込みを検知して 3 本のレビュアを並列実行する
 #
+# 前提: bash 4+（declare -A を使う）。Linux WSL / macOS Homebrew bash 4+ を想定。
+#
 # レビュア構成:
 #   - simplicity     (veto 権あり: fail なら他がどうあれ needs_revision)
 #   - correctness
@@ -29,15 +31,15 @@
 #      a. 前ラウンドの他 reviewer 出力を peers.md に集約 (1 ラウンド遅延)
 #      b. 3 本のレビュアを `$REVIEWER_BIN --print` で並列起動 → wait
 #      c. 各 raw 出力から JSON 抽出 (コードフェンス / 素 JSON / 抽出フォールバック)
-#      d. aggregator で round の verdict を決定
+#      d. aggregate_verdict で round の verdict を決定
 #      e. report (review-round-N.md) を生成
 #      f. verdict が pass / error なら break
-#      g. applier フェーズ: `$APPLIER_BIN --print` で plan.md を直接編集
+#      g. run_applier で plan.md を直接編集
 #      h. applier が exit 非ゼロ → plan.md.bak から復元して break
 #      i. applier 完了後、plan.md が `Approval Status: needs_human_review` に
 #         遷移していたら break (escalate)
 #      j. NEXT_ROUND を 1 進めて MAX_ROUNDS を超えたら break、超えなければ次イテレーションへ
-#   5. ループ終了後、最終 verdict / hash / round を plan.md に書き戻す (1 回だけ)
+#   5. ループ終了後、最終 verdict / hash を plan.md に書き戻す (1 回だけ)
 #
 # Aggregator (各ラウンド内):
 #   - 全レビュア skipped → verdict=error
@@ -57,15 +59,13 @@
 #   - plan.md に書き戻す `hash=` はループ終了時点の plan.md ハッシュ
 #   - 同じ内容で再度 plan.md が書かれたら冒頭の hash 比較で skip
 #   - 内容が変われば次回 hook 発火で改めてレビューが走る
-#   (旧仕様の PRE_APPLIER_HASH 据え置きは in-process ループ化により不要になった)
 #
 # plan.md に書き戻す内容 (ループ終了後 1 回):
-#   - マーカー行 (既存があれば置換、なければ末尾に追記):
-#       <!-- auto-review: verdict=...; hash=...; round=...; skipped=[...]; failed=[...] -->
+#   - マーカー行: `<!-- auto-review: verdict=...; hash=...; round=...; skipped=[...]; failed=[...] -->`
+#     既存マーカー行があれば一度削除してから末尾に新規追記する（任意の文字を含めても安全）
 #   - `- Status: ...` 行を最終 verdict で更新
-#   - `- Round: ...` 行を最後に完走したラウンド番号で更新
-#   - `- Last Review Hash: ...` 行を FINAL_HASH で更新
 #   - verdict=pass のときのみ `- Plan Status: ...` を complete に更新
+#   - 旧 `- Round:` / `- Last Review Hash:` 行は書き戻し対象外（マーカーが真のソース）
 #
 # 出力ファイル (各ラウンドごとに分かれる):
 #   $WORKFLOW_DIR/review-round-N.md         - 集約レポート
@@ -104,6 +104,11 @@ RESEARCH_FILE="$WORKFLOW_DIR/research.md"
 MVP_STANCE_FILE="$PROMPTS_DIR/_mvp-stance.md"
 
 REVIEWERS=(simplicity correctness verifiability)
+
+# レビュア状態:
+#   STATUS[reviewer]  = ok | skipped
+#   VERDICT[reviewer] = pass | needs_revision | skipped
+declare -A STATUS VERDICT
 
 # --- 前提チェック ---
 
@@ -167,13 +172,6 @@ extract_json() {
   return 1
 }
 
-# 疑似連想配列 (bash 3.2 互換: declare -A が使えないため printf -v で動的変数に格納)
-# 変数名: VERDICT_<reviewer>, STATUS_<reviewer>
-#   STATUS_*  = ok | skipped
-#   VERDICT_* = pass | needs_revision | skipped
-set_kv() { printf -v "$1" '%s' "$2"; }
-get_kv() { local k="$1"; echo "${!k-}"; }
-
 join_csv() {
   local IFS=,
   echo "$*"
@@ -223,6 +221,105 @@ $(cat "$prompt_file")"
   rm -rf "$tmp_dir"
 }
 
+# verdict 集計。STATUS / VERDICT / SKIPPED / FAILED / FINAL_VERDICT / SKIPPED_STR / FAILED_STR
+# をグローバルに更新する（メインループとの共有が多いため関数化はしてもグローバル）。
+aggregate_verdict() {
+  local round="$1"
+  SKIPPED=()
+  FAILED=()
+  local r raw json_out exit_marker exit_status json v
+  for r in "${REVIEWERS[@]}"; do
+    raw="$WORKFLOW_DIR/review-round-${round}-${r}.raw"
+    json_out="$WORKFLOW_DIR/review-round-${round}-${r}.json"
+    exit_marker="$WORKFLOW_DIR/review-round-${round}-${r}.exit"
+    exit_status=$(cat "$exit_marker" 2>/dev/null || echo "fail:unknown")
+
+    if [[ "$exit_status" != "ok" ]]; then
+      STATUS[$r]="skipped"
+      VERDICT[$r]="skipped"
+      SKIPPED+=("$r")
+      echo "[plan-review] $r: SKIPPED ($exit_status)" >&2
+      continue
+    fi
+
+    if json=$(extract_json "$raw"); then
+      echo "$json" > "$json_out"
+      v=$(echo "$json" | jq -r '.verdict // "skipped"' 2>/dev/null)
+      if [[ "$v" == "pass" || "$v" == "needs_revision" ]]; then
+        STATUS[$r]="ok"
+        VERDICT[$r]="$v"
+        [[ "$v" == "needs_revision" ]] && FAILED+=("$r")
+        echo "[plan-review] $r: $v" >&2
+      else
+        STATUS[$r]="skipped"
+        VERDICT[$r]="skipped"
+        SKIPPED+=("$r")
+        echo "[plan-review] $r: SKIPPED (no valid verdict)" >&2
+      fi
+    else
+      STATUS[$r]="skipped"
+      VERDICT[$r]="skipped"
+      SKIPPED+=("$r")
+      echo "[plan-review] $r: SKIPPED (unparseable JSON)" >&2
+    fi
+  done
+
+  if [[ "${#SKIPPED[@]}" -eq "${#REVIEWERS[@]}" ]]; then
+    FINAL_VERDICT="error"
+  elif [[ "${VERDICT[simplicity]:-}" == "needs_revision" ]]; then
+    FINAL_VERDICT="needs_revision"
+  elif [[ "${#FAILED[@]}" -gt 0 ]]; then
+    FINAL_VERDICT="needs_revision"
+  else
+    FINAL_VERDICT="pass"
+  fi
+
+  SKIPPED_STR=$(join_csv "${SKIPPED[@]:-}")
+  FAILED_STR=$(join_csv "${FAILED[@]:-}")
+  [[ -z "$SKIPPED_STR" ]] && SKIPPED_STR="none"
+  [[ -z "$FAILED_STR" ]] && FAILED_STR="none"
+}
+
+# applier 実行 + escalate 検出。成功 0 / applier 失敗 1 / escalate 2 を返す。
+run_applier() {
+  local round="$1"
+  local report="$WORKFLOW_DIR/review-round-${round}.md"
+  cp "$PLAN_FILE" "$WORKFLOW_DIR/plan.md.bak"
+
+  local workflow_abs
+  workflow_abs=$(realpath "$WORKFLOW_DIR" 2>/dev/null || echo "$WORKFLOW_DIR")
+  local research_abs="$workflow_abs/research.md"
+  local plan_abs="$workflow_abs/plan.md"
+  local report_abs="$workflow_abs/review-round-${round}.md"
+
+  local user_prompt="以下を読んで plan.md を編集してください:
+- $research_abs
+- $plan_abs
+- $report_abs"
+
+  echo "[applier] starting (round $round)" >&2
+  if (
+    cd "$workflow_abs" && \
+    PLAN_REVIEW_HOOK_RUNNING=1 WORKFLOW_DIR="$workflow_abs" \
+      "$APPLIER_BIN" --print \
+      --allowedTools Edit,Read \
+      --system-prompt "$(cat "$PROMPTS_DIR/applier.md")" \
+      "$user_prompt" >&2
+  ); then
+    echo "[applier] exit 0" >&2
+  else
+    echo "[applier] exit non-zero, rolling back" >&2
+    cp "$WORKFLOW_DIR/plan.md.bak" "$PLAN_FILE"
+    return 1
+  fi
+
+  if grep -q '^- Approval Status: needs_human_review' "$PLAN_FILE"; then
+    echo "[applier] escalated (Approval Status: needs_human_review). Breaking loop." >&2
+    return 2
+  fi
+  return 0
+}
+
 # --- メインループ ---
 # 1 イテレーション = 1 round (reviewers 並列 → aggregator → 必要なら applier)。
 # pass / error / escalate / applier 失敗 / max rounds のいずれかで break。
@@ -232,12 +329,14 @@ LAST_ROUND="$CURRENT_ROUND"
 FINAL_VERDICT=""
 SKIPPED_STR="none"
 FAILED_STR="none"
+SKIPPED=()
+FAILED=()
 
 while :; do
   PREV_ROUND=$((NEXT_ROUND - 1))
 
-  # peers.md を前ラウンドの per-reviewer JSON から生成。
-  # round 1 では前ラウンドが無いので空ファイルになる。
+  # --- build peers.md ---
+  # 前ラウンドの per-reviewer JSON から生成。round 1 では前ラウンドが無いので空ファイル。
   PEERS_FILE="$WORKFLOW_DIR/review-round-${NEXT_ROUND}-peers.md"
   {
     if [[ "$PREV_ROUND" -ge 1 ]]; then
@@ -263,9 +362,8 @@ while :; do
     fi
   } > "$PEERS_FILE"
 
+  # --- run reviewers (parallel) ---
   echo "[plan-review] Starting review round $NEXT_ROUND (3 reviewers in parallel)..." >&2
-
-  # reviewers 並列実行
   pids=()
   for r in "${REVIEWERS[@]}"; do
     run_reviewer "$r" "$NEXT_ROUND" &
@@ -275,62 +373,10 @@ while :; do
     wait "$pid" || true
   done
 
-  # 各レビュアの verdict を抽出
-  SKIPPED=()
-  FAILED=()
-  for r in "${REVIEWERS[@]}"; do
-    raw="$WORKFLOW_DIR/review-round-${NEXT_ROUND}-${r}.raw"
-    json_out="$WORKFLOW_DIR/review-round-${NEXT_ROUND}-${r}.json"
-    exit_marker="$WORKFLOW_DIR/review-round-${NEXT_ROUND}-${r}.exit"
-    exit_status=$(cat "$exit_marker" 2>/dev/null || echo "fail:unknown")
+  # --- aggregate verdict ---
+  aggregate_verdict "$NEXT_ROUND"
 
-    if [[ "$exit_status" != "ok" ]]; then
-      set_kv "STATUS_$r"  "skipped"
-      set_kv "VERDICT_$r" "skipped"
-      SKIPPED+=("$r")
-      echo "[plan-review] $r: SKIPPED ($exit_status)" >&2
-      continue
-    fi
-
-    if json=$(extract_json "$raw"); then
-      echo "$json" > "$json_out"
-      v=$(echo "$json" | jq -r '.verdict // "skipped"' 2>/dev/null)
-      if [[ "$v" == "pass" || "$v" == "needs_revision" ]]; then
-        set_kv "STATUS_$r"  "ok"
-        set_kv "VERDICT_$r" "$v"
-        [[ "$v" == "needs_revision" ]] && FAILED+=("$r")
-        echo "[plan-review] $r: $v" >&2
-      else
-        set_kv "STATUS_$r"  "skipped"
-        set_kv "VERDICT_$r" "skipped"
-        SKIPPED+=("$r")
-        echo "[plan-review] $r: SKIPPED (no valid verdict)" >&2
-      fi
-    else
-      set_kv "STATUS_$r"  "skipped"
-      set_kv "VERDICT_$r" "skipped"
-      SKIPPED+=("$r")
-      echo "[plan-review] $r: SKIPPED (unparseable JSON)" >&2
-    fi
-  done
-
-  # aggregator
-  if [[ "${#SKIPPED[@]}" -eq "${#REVIEWERS[@]}" ]]; then
-    FINAL_VERDICT="error"
-  elif [[ "$(get_kv VERDICT_simplicity)" == "needs_revision" ]]; then
-    FINAL_VERDICT="needs_revision"
-  elif [[ "${#FAILED[@]}" -gt 0 ]]; then
-    FINAL_VERDICT="needs_revision"
-  else
-    FINAL_VERDICT="pass"
-  fi
-
-  SKIPPED_STR=$(join_csv "${SKIPPED[@]:-}")
-  FAILED_STR=$(join_csv "${FAILED[@]:-}")
-  [[ -z "$SKIPPED_STR" ]] && SKIPPED_STR="none"
-  [[ -z "$FAILED_STR" ]] && FAILED_STR="none"
-
-  # 集約レポート (applier に渡すために書き戻しより前に作る)
+  # --- write round report ---
   REPORT="$WORKFLOW_DIR/review-round-${NEXT_ROUND}.md"
   {
     echo "# Review Round $NEXT_ROUND"
@@ -341,11 +387,11 @@ while :; do
     echo "- failed: [$FAILED_STR]"
     echo ""
     for r in "${REVIEWERS[@]}"; do
-      echo "## $r — $(get_kv VERDICT_$r)"
+      echo "## $r — ${VERDICT[$r]:-unknown}"
       echo ""
       json_out="$WORKFLOW_DIR/review-round-${NEXT_ROUND}-${r}.json"
       raw="$WORKFLOW_DIR/review-round-${NEXT_ROUND}-${r}.raw"
-      if [[ "$(get_kv STATUS_$r)" == "ok" && -f "$json_out" ]]; then
+      if [[ "${STATUS[$r]:-}" == "ok" && -f "$json_out" ]]; then
         echo '```json'
         cat "$json_out"
         echo '```'
@@ -358,50 +404,25 @@ while :; do
 
   LAST_ROUND="$NEXT_ROUND"
 
-  # ループ終了判定 (verdict-based)
+  # --- break or continue ---
   if [[ "$FINAL_VERDICT" == "pass" || "$FINAL_VERDICT" == "error" ]]; then
     LOOP_BREAK_REASON="$FINAL_VERDICT"
     break
   fi
 
-  # applier フェーズ (needs_revision のときのみ)
-  cp "$PLAN_FILE" "$WORKFLOW_DIR/plan.md.bak"
-
-  RESEARCH_ABS=$(realpath "$RESEARCH_FILE" 2>/dev/null || echo "$RESEARCH_FILE")
-  PLAN_ABS=$(realpath "$PLAN_FILE" 2>/dev/null || echo "$PLAN_FILE")
-  REPORT_ABS=$(realpath "$REPORT" 2>/dev/null || echo "$REPORT")
-  WORKFLOW_ABS=$(realpath "$WORKFLOW_DIR" 2>/dev/null || echo "$WORKFLOW_DIR")
-
-  USER_PROMPT_APPLIER="以下を読んで plan.md を編集してください:
-- $RESEARCH_ABS
-- $PLAN_ABS
-- $REPORT_ABS"
-
-  echo "[applier] starting (round $NEXT_ROUND)" >&2
-  if (
-    cd "$WORKFLOW_ABS" && \
-    PLAN_REVIEW_HOOK_RUNNING=1 WORKFLOW_DIR="$WORKFLOW_ABS" \
-      "$APPLIER_BIN" --print \
-      --allowedTools Edit,Read \
-      --system-prompt "$(cat "$PROMPTS_DIR/applier.md")" \
-      "$USER_PROMPT_APPLIER" >&2
-  ); then
-    echo "[applier] exit 0" >&2
+  # --- run applier (needs_revision のときのみ) ---
+  if run_applier "$NEXT_ROUND"; then
+    :
   else
-    echo "[applier] exit non-zero, rolling back" >&2
-    cp "$WORKFLOW_DIR/plan.md.bak" "$PLAN_FILE"
-    LOOP_BREAK_REASON="applier_failed"
+    rc=$?
+    if [[ "$rc" -eq 2 ]]; then
+      LOOP_BREAK_REASON="escalate"
+    else
+      LOOP_BREAK_REASON="applier_failed"
+    fi
     break
   fi
 
-  # escalate 検出 (applier が Approval Status を needs_human_review に書き換えていたら抜ける)
-  if grep -q '^- Approval Status: needs_human_review' "$PLAN_FILE"; then
-    echo "[applier] escalated (Approval Status: needs_human_review). Breaking loop." >&2
-    LOOP_BREAK_REASON="escalate"
-    break
-  fi
-
-  # 次ラウンドへ
   NEXT_ROUND=$((NEXT_ROUND + 1))
   if [[ "$NEXT_ROUND" -gt "$MAX_ROUNDS" ]]; then
     echo "[plan-review] Max rounds ($MAX_ROUNDS) reached during loop. Stopping." >&2
@@ -423,16 +444,15 @@ sedi() {
   fi
 }
 
-if grep -q '<!-- auto-review:' "$PLAN_FILE"; then
-  ESCAPED_MARKER=$(printf '%s\n' "$MARKER" | sed -e 's/[\/&|]/\\&/g')
-  sedi "s|<!-- auto-review:.*-->|$ESCAPED_MARKER|" "$PLAN_FILE"
-else
-  echo "$MARKER" >> "$PLAN_FILE"
-fi
+# マーカー行は「既存行を削除 → 末尾に追記」で更新する。
+# sed 置換だと marker に `\` `&` `|` 等が含まれた場合に壊れるため、行ベースで扱う。
+TMP_PLAN=$(mktemp "${TMPDIR:-/tmp}/plan-marker.XXXXXX")
+grep -v '<!-- auto-review:' "$PLAN_FILE" > "$TMP_PLAN" || true
+# 末尾に改行が無い場合の連結事故を防ぐため、先頭に改行を 1 つ挟んでから追記
+printf '\n%s\n' "$MARKER" >> "$TMP_PLAN"
+mv "$TMP_PLAN" "$PLAN_FILE"
 
 sedi "s/^- Status: .*/- Status: $FINAL_VERDICT/" "$PLAN_FILE"
-sedi "s/^- Round: .*/- Round: $LAST_ROUND/" "$PLAN_FILE"
-sedi "s/^- Last Review Hash: .*/- Last Review Hash: $FINAL_HASH/" "$PLAN_FILE"
 
 if [[ "$FINAL_VERDICT" == "pass" ]]; then
   sedi "s/^- Plan Status: .*/- Plan Status: complete/" "$PLAN_FILE"
