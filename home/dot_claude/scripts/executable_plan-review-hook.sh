@@ -240,8 +240,8 @@ aggregate_verdict() {
     exit_status=$(cat "$exit_marker" 2>/dev/null || echo "fail:unknown")
 
     if [[ "$exit_status" != "ok" ]]; then
-      STATUS[$r]="skipped"
-      VERDICT[$r]="skipped"
+      set_status "$r" "skipped"
+      set_verdict "$r" "skipped"
       SKIPPED+=("$r")
       echo "[plan-review] $r: SKIPPED ($exit_status)" >&2
       continue
@@ -251,19 +251,19 @@ aggregate_verdict() {
       echo "$json" > "$json_out"
       v=$(echo "$json" | jq -r '.verdict // "skipped"' 2>/dev/null)
       if [[ "$v" == "pass" || "$v" == "needs_revision" ]]; then
-        STATUS[$r]="ok"
-        VERDICT[$r]="$v"
+        set_status "$r" "ok"
+        set_verdict "$r" "$v"
         if [[ "$v" == "needs_revision" ]]; then FAILED+=("$r"); fi
         echo "[plan-review] $r: $v" >&2
       else
-        STATUS[$r]="skipped"
-        VERDICT[$r]="skipped"
+        set_status "$r" "skipped"
+        set_verdict "$r" "skipped"
         SKIPPED+=("$r")
         echo "[plan-review] $r: SKIPPED (no valid verdict)" >&2
       fi
     else
-      STATUS[$r]="skipped"
-      VERDICT[$r]="skipped"
+      set_status "$r" "skipped"
+      set_verdict "$r" "skipped"
       SKIPPED+=("$r")
       echo "[plan-review] $r: SKIPPED (unparseable JSON)" >&2
     fi
@@ -271,7 +271,7 @@ aggregate_verdict() {
 
   if [[ "${#SKIPPED[@]}" -eq "${#REVIEWERS[@]}" ]]; then
     FINAL_VERDICT="error"
-  elif [[ "${VERDICT[simplicity]:-}" == "needs_revision" ]]; then
+  elif [[ "$(get_verdict simplicity)" == "needs_revision" ]]; then
     FINAL_VERDICT="needs_revision"
   elif [[ "${#FAILED[@]}" -gt 0 ]]; then
     FINAL_VERDICT="needs_revision"
