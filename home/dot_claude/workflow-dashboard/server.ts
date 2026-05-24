@@ -15,8 +15,12 @@ const HLJS_THEME_CSS = readFileSync(
   join(import.meta.dir, "node_modules/highlight.js/styles/github-dark.css"),
   "utf8",
 );
+const TASK_DETAIL_JS = readFileSync(
+  join(import.meta.dir, "task-detail.js"),
+  "utf8",
+);
 
-function escapeHtml(s: string): string {
+function esc(s: string): string {
   return s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
 }
 
@@ -26,13 +30,13 @@ marked.use({
   renderer: {
     code({ text, lang }: { text: string; lang?: string }) {
       if (lang === "mermaid") {
-        return `<pre class="mermaid">${escapeHtml(text)}</pre>\n`;
+        return `<pre class="mermaid">${esc(text)}</pre>\n`;
       }
       if (lang && hljs.getLanguage(lang)) {
         const html = hljs.highlight(text, { language: lang }).value;
-        return `<pre><code class="hljs language-${escapeHtml(lang)}">${html}\n</code></pre>\n`;
+        return `<pre><code class="hljs language-${esc(lang)}">${html}\n</code></pre>\n`;
       }
-      return `<pre><code class="hljs">${escapeHtml(text)}\n</code></pre>\n`;
+      return `<pre><code class="hljs">${esc(text)}\n</code></pre>\n`;
     },
   },
 });
@@ -70,30 +74,29 @@ function readMaybe(path: string): string | null {
   return existsSync(path) ? readFileSync(path, "utf8") : null;
 }
 
-// meta.json を読む。cwd は非空文字列のみ採用、dependsOn は string[]、pr は object のみ、
+// meta.json を読む。cwd は非空文字列のみ採用、dependsOn は string[]、
 // title は非空文字列のみ、noPr は boolean のみ（PR を作らないタスクの明示宣言）。
+// pr は読まない（PR 情報は dashboard 側で graphql から live 取得する）。
 function readMeta(dir: string): {
   cwd: string | null;
   dependsOn: string[];
-  pr: Pr | null;
   title: string | null;
   noPr: boolean;
 } {
   const raw = readMaybe(join(dir, "meta.json"));
   if (!raw)
-    return { cwd: null, dependsOn: [], pr: null, title: null, noPr: false };
+    return { cwd: null, dependsOn: [], title: null, noPr: false };
   try {
     const j = JSON.parse(raw);
     const cwd = typeof j.cwd === "string" && j.cwd.length > 0 ? j.cwd : null;
     const dependsOn = Array.isArray(j.dependsOn)
       ? j.dependsOn.filter((x: unknown): x is string => typeof x === "string")
       : [];
-    const pr = j.pr && typeof j.pr === "object" ? (j.pr as Pr) : null;
     const title = typeof j.title === "string" && j.title.length > 0 ? j.title : null;
     const noPr = j.noPr === true;
-    return { cwd, dependsOn, pr, title, noPr };
+    return { cwd, dependsOn, title, noPr };
   } catch {
-    return { cwd: null, dependsOn: [], pr: null, title: null, noPr: false };
+    return { cwd: null, dependsOn: [], title: null, noPr: false };
   }
 }
 
@@ -111,20 +114,10 @@ function deriveTitle(id: string, plan: string | null, research: string | null, m
   return m[1].replace(/^(Plan|Research)\s*[—-]\s*/, "").trim();
 }
 
-// phase は plan.md / verify-results.md のシグナルと、リアルタイム取得した
-// PR 状態 / 未コミット差分から派生する。
-// - pr は graphql 取得結果（live）、無ければ meta.pr（キャッシュ）が渡される
-// - dirty は meta.cwd で `git status --porcelain` を実行した結果。null は取得失敗
-//   （git 配下でない / cwd 消失など）
-// - noPr は meta.json で明示宣言された「PR を作らないタスク」フラグ
-//
-// Done 判定: PR が merged、または「差分なし or 取得失敗 + noPr=true」。
-// dirty===true（差分確定）のみ pr-pending に降格する。dirty===null（取得失敗）は
-// 「git 配下でない chezmoi 管理ディレクトリなど」を許容するため done を妨げない。
-// `Status: done` / `Plan Status: done` が立っていても上記を満たさなければ pr-pending に降格。
+// phase はマーカーシグナルと PR / dirty から派生する。
+// 詳細な状態→列の対応は workflow.md Phase 7「dashboard 列対応表」を参照。
 function derivePhase(
   plan: string | null,
-  hasResearch: boolean,
   pr: Pr | null,
   verify: string | null,
   noPr: boolean,
@@ -138,15 +131,8 @@ function derivePhase(
     if (dirty !== true && noPr) return "done";
     return "pr-pending";
   }
-  // 承認済み（Phase 5 実装中）は in-progress。Plan Status: complete のままなので
-  // review より先に判定する
   if (plan && /^- Approval Status:\s*approved/m.test(plan)) return "in-progress";
-  // レビュー完了・人間承認待ち。draft 段階（Approval Status: pending のまま）は
-  // ここに該当させない — Plan Status: complete を必須にする
   if (plan && /^- Plan Status:\s*complete/m.test(plan)) return "review";
-  if (plan) return "in-progress";
-  if (hasResearch) return "in-progress";
-  // plan/research 皆無のタスクも in-progress 扱い（Todo 列は廃止）
   return "in-progress";
 }
 
@@ -168,36 +154,51 @@ function runGit(cwd: string, args: string[]): { ok: boolean; stdout: string } {
   }
 }
 
-// cwd の現在ブランチと remote URL を取り、PR バッチ取得の入力に変換する
-function getGitInfo(
-  cwd: string,
-): { owner: string; repo: string; branch: string } | null {
-  const branch = runGit(cwd, ["branch", "--show-current"]);
-  if (!branch.ok || !branch.stdout) return null;
+interface RepoState {
+  dirty: boolean | null;
+  branch: string | null;
+  owner: string | null;
+  repo: string | null;
+  repoRoot: string;
+}
+
+// cwd 1 つから dashboard が必要とするすべての git 情報を集める。
+// spawn 回数: status (dirty + branch) / remote / rev-parse の 3 回。
+// 取得失敗時はそのフィールドだけ null（or fallback の cwd）になる。
+function getRepoState(cwd: string): RepoState {
+  // status --porcelain --branch:
+  //   1 行目: "## <branch>...<remote/branch> [ahead/behind]" または "## HEAD (no branch)"
+  //   2 行目以降: ファイル変更行（空なら clean）
+  let dirty: boolean | null = null;
+  let branch: string | null = null;
+  const status = runGit(cwd, ["status", "--porcelain=v1", "--branch"]);
+  if (status.ok) {
+    const lines = status.stdout.split("\n");
+    const head = lines[0] ?? "";
+    const m = head.match(/^## ([^.\s]+)/);
+    if (m) branch = m[1];
+    dirty = lines.slice(1).some((l) => l.length > 0);
+  }
+
+  let owner: string | null = null;
+  let repo: string | null = null;
   const remote = runGit(cwd, ["remote", "get-url", "origin"]);
-  if (!remote.ok || !remote.stdout) return null;
-  const parsed = parseRemote(remote.stdout);
-  if (!parsed) return null;
-  return { owner: parsed.owner, repo: parsed.repo, branch: branch.stdout };
-}
+  if (remote.ok && remote.stdout) {
+    const parsed = parseRemote(remote.stdout);
+    if (parsed) {
+      owner = parsed.owner;
+      repo = parsed.repo;
+    }
+  }
 
-// 未コミット差分の有無。取得失敗時は null（呼び出し側で「無効」扱いにする）
-function isDirty(cwd: string): boolean | null {
-  const r = runGit(cwd, ["status", "--porcelain"]);
-  if (!r.ok) return null;
-  return r.stdout.length > 0;
-}
-
-// cwd を含む git リポジトリのメインルートを返す。worktree から呼び出した場合は
-// main repo の `.git` を指す common-dir が返るので、その親を取れば main repo root。
-// git 配下でない場合は cwd 自身をフォールバックとして返す。
-function deriveRepoRoot(cwd: string): string {
+  // worktree から呼び出した場合は main repo の `.git` を指す common-dir が返る
+  let repoRoot = cwd;
   const r = runGit(cwd, ["rev-parse", "--path-format=absolute", "--git-common-dir"]);
-  if (!r.ok || !r.stdout) return cwd;
-  // common-dir が `.git` のとき親、`bare/repo.git` のときも親で OK
-  const idx = r.stdout.lastIndexOf("/");
-  if (idx <= 0) return cwd;
-  return r.stdout.slice(0, idx);
+  if (r.ok && r.stdout) {
+    const idx = r.stdout.lastIndexOf("/");
+    if (idx > 0) repoRoot = r.stdout.slice(0, idx);
+  }
+  return { dirty, branch, owner, repo, repoRoot };
 }
 
 function gqlEscape(s: string): string {
@@ -205,8 +206,8 @@ function gqlEscape(s: string): string {
 }
 
 // 全タスク分の PR を 1 リクエストでまとめて取得する。alias で複数 repository
-// ノードを束ねた単一 query を `gh api graphql` に投げる。失敗時は空 Map を返し、
-// 呼び出し側は meta.pr にフォールバックする
+// ノードを束ねた単一 query を `gh api graphql` に投げる。失敗時は空 Map を返す
+// （PR バッジは非表示になる。meta.json 側に PR キャッシュは持たない）
 function fetchLivePrs(
   inputs: Map<string, { owner: string; repo: string; branch: string }>,
 ): Map<string, Pr> {
@@ -257,12 +258,12 @@ function fetchLivePrs(
 
 // 1 リクエスト分の board ビルド:
 //   1) 各タスクの md / meta.json を読む
-//   2) cwd を持つタスクについて git info / dirty を集める
+//   2) cwd を持つタスクについて getRepoState で git 情報をまとめて取得
 //   3) graphql で全タスク分の PR を 1 リクエストで取得
 //   4) derivePhase に live pr / dirty / noPr を渡して phase を確定
 function scanTasks(): Task[] {
   if (!existsSync(WORKFLOW_ROOT)) return [];
-  type Raw = {
+  type Entry = {
     id: string;
     plan: string | null;
     research: string | null;
@@ -270,13 +271,13 @@ function scanTasks(): Task[] {
     docs: string[];
     meta: ReturnType<typeof readMeta>;
     updatedAt: number;
-    dirty: boolean | null;
+    repo: RepoState | null;
   };
-  const raws: Raw[] = [];
+  const entries: Entry[] = [];
   const gitInputs = new Map<string, { owner: string; repo: string; branch: string }>();
-  for (const entry of readdirSync(WORKFLOW_ROOT, { withFileTypes: true })) {
-    if (!entry.isDirectory()) continue;
-    const dir = join(WORKFLOW_ROOT, entry.name);
+  for (const dirent of readdirSync(WORKFLOW_ROOT, { withFileTypes: true })) {
+    if (!dirent.isDirectory()) continue;
+    const dir = join(WORKFLOW_ROOT, dirent.name);
     const plan = readMaybe(join(dir, "plan.md"));
     const research = readMaybe(join(dir, "research.md"));
     const verify = readMaybe(join(dir, "verify-results.md"));
@@ -284,63 +285,38 @@ function scanTasks(): Task[] {
     const meta = readMeta(dir);
     // orphan: cwd が指す作業ディレクトリが消えているタスクはボードに出さない
     if (meta.cwd && !existsSync(meta.cwd)) continue;
-    let updatedAt = 0;
-    for (const f of docs) {
-      const t = statSync(join(dir, f)).mtimeMs;
-      if (t > updatedAt) updatedAt = t;
-    }
-    let dirty: boolean | null = null;
+    const updatedAt = docs.reduce(
+      (max, f) => Math.max(max, statSync(join(dir, f)).mtimeMs),
+      0,
+    );
+    let repo: RepoState | null = null;
     if (meta.cwd) {
-      dirty = isDirty(meta.cwd);
-      const info = getGitInfo(meta.cwd);
-      if (info) gitInputs.set(entry.name, info);
+      repo = getRepoState(meta.cwd);
+      if (repo.owner && repo.repo && repo.branch) {
+        gitInputs.set(dirent.name, { owner: repo.owner, repo: repo.repo, branch: repo.branch });
+      }
     }
-    raws.push({
-      id: entry.name,
-      plan,
-      research,
-      verify,
-      docs,
-      meta,
-      updatedAt,
-      dirty,
-    });
+    entries.push({ id: dirent.name, plan, research, verify, docs, meta, updatedAt, repo });
   }
-  // repoRoot は cwd を持つタスクだけ派生する
-  const repoRootByTask = new Map<string, string>();
-  for (const r of raws) {
-    if (r.meta.cwd) repoRootByTask.set(r.id, deriveRepoRoot(r.meta.cwd));
-  }
-  // graphql で全タスク分の PR を一括取得（失敗時は空 Map → meta.pr にフォールバック）
+  // graphql で全タスク分の PR を一括取得（失敗時は空 Map → PR バッジ非表示）
   const livePrs = fetchLivePrs(gitInputs);
-  const tasks: Task[] = raws.map((r) => {
-    const livePr = livePrs.get(r.id) ?? null;
-    const pr = livePr ?? r.meta.pr;
-    return {
-      id: r.id,
-      title: deriveTitle(r.id, r.plan, r.research, r.meta.title),
-      phase: derivePhase(
-        r.plan,
-        r.research !== null,
+  return entries
+    .map<Task>((e) => {
+      const pr = livePrs.get(e.id) ?? null;
+      return {
+        id: e.id,
+        title: deriveTitle(e.id, e.plan, e.research, e.meta.title),
+        phase: derivePhase(e.plan, pr, e.verify, e.meta.noPr, e.repo?.dirty ?? null),
+        docs: e.docs,
+        updatedAt: e.updatedAt,
+        cwd: e.meta.cwd,
+        repoRoot: e.repo?.repoRoot ?? null,
+        dependsOn: e.meta.dependsOn,
         pr,
-        r.verify,
-        r.meta.noPr,
-        r.dirty,
-      ),
-      docs: r.docs,
-      updatedAt: r.updatedAt,
-      cwd: r.meta.cwd,
-      repoRoot: repoRootByTask.get(r.id) ?? null,
-      dependsOn: r.meta.dependsOn,
-      pr,
-      noPr: r.meta.noPr,
-    };
-  });
-  return tasks.sort((a, b) => b.updatedAt - a.updatedAt);
-}
-
-function esc(s: string): string {
-  return s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
+        noPr: e.meta.noPr,
+      };
+    })
+    .sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
 function page(title: string, body: string): string {
@@ -476,35 +452,7 @@ function renderTask(id: string): string | null {
       <div class="tabs">${tabs}</div>
       <div class="panels markdown">${panels}</div>
     </div>
-    <script type="module">
-      let mermaidPromise = null;
-      function ensureMermaid() {
-        if (!mermaidPromise) {
-          mermaidPromise = import("/vendor/mermaid.esm.min.mjs").then((m) => {
-            m.default.initialize({ startOnLoad: false, theme: "dark" });
-            return m.default;
-          });
-        }
-        return mermaidPromise;
-      }
-      async function renderMermaidIn(panel) {
-        const nodes = panel.querySelectorAll("pre.mermaid:not([data-processed])");
-        if (!nodes.length) return;
-        const mermaid = await ensureMermaid();
-        await mermaid.run({ nodes: Array.from(nodes) });
-      }
-      document.querySelectorAll(".tab").forEach((btn) => {
-        btn.addEventListener("click", () => {
-          const doc = btn.dataset.doc;
-          document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("active", b === btn));
-          document.querySelectorAll(".panel").forEach((p) => p.classList.toggle("active", p.dataset.doc === doc));
-          const active = document.querySelector(".panel.active");
-          if (active) renderMermaidIn(active);
-        });
-      });
-      const initial = document.querySelector(".panel.active");
-      if (initial) renderMermaidIn(initial);
-    </script>`,
+    <script type="module">${TASK_DETAIL_JS}</script>`,
   );
 }
 
