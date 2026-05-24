@@ -10,6 +10,7 @@ chezmoi = "2.70.2"
 gitleaks = "8.30.1"
 gh = "2.92.0"
 bun = "1.3.14"
+"npm:@github/copilot" = "1.0.48"
 
 [settings]
 idiomatic_version_file_enable_tools = ["node"]
