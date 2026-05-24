@@ -260,7 +260,7 @@ export MOCK_PLAN_FILE="$WS/.workflow/plan.md"
 run_hook "$WS"
 
 assert_match     "$WS/.workflow/plan.md" '^- Status: needs_revision$'        "Status=needs_revision"
-assert_match     "$WS/.workflow/plan.md" '^- Round: 1$'                      "Round=1"
+assert_match     "$WS/.workflow/plan.md" 'round=1'                           "marker round=1"
 assert_match     "$WS/.workflow/plan.md" '^- Approval Status: pending$'      "Approval Status pending (no escalate)"
 assert_no_match  "$WS/.workflow/plan.md" '^- Plan Status: complete$'         "Plan Status not complete"
 assert_file_absent "$WS/.workflow/review-round-2.md"                         "round 2 absent"
