@@ -59,6 +59,35 @@ a:hover {
   text-decoration: none;
   color: var(--accent);
 }
+.topbar__clean {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--fg-muted);
+  border-radius: 999px;
+  padding: 4px 12px 4px 10px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: color 0.12s, border-color 0.12s, background 0.12s;
+}
+.topbar__clean:hover {
+  color: var(--pr-pending);
+  border-color: rgba(219, 109, 40, 0.5);
+  background: rgba(219, 109, 40, 0.08);
+}
+.topbar__clean-icon {
+  font-size: 13px;
+  line-height: 1;
+}
+.topbar__clean-label {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
 
 main {
   padding: 20px;
