@@ -276,8 +276,9 @@ aggregate_verdict() {
 
   SKIPPED_STR=$(join_csv "${SKIPPED[@]:-}")
   FAILED_STR=$(join_csv "${FAILED[@]:-}")
-  [[ -z "$SKIPPED_STR" ]] && SKIPPED_STR="none"
-  [[ -z "$FAILED_STR" ]] && FAILED_STR="none"
+  if [[ -z "$SKIPPED_STR" ]]; then SKIPPED_STR="none"; fi
+  if [[ -z "$FAILED_STR" ]]; then FAILED_STR="none"; fi
+  return 0
 }
 
 # applier 実行 + escalate 検出。成功 0 / applier 失敗 1 / escalate 2 を返す。
