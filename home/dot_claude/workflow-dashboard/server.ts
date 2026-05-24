@@ -364,6 +364,15 @@ function page(
 </aside>
 <script type="module">${CLEAN_DRAWER_JS}</script>`
     : "";
+  const layoutToggle = opts.withLayoutToggle
+    ? `<div class="layout-toggle" role="group" aria-label="レイアウト切替">
+    <button type="button" class="layout-toggle__btn" data-layout-btn="horizontal" aria-pressed="true" title="横並び (カンバン)"><span class="layout-toggle__icon" aria-hidden="true">⊟</span>Horizontal</button>
+    <button type="button" class="layout-toggle__btn" data-layout-btn="vertical" aria-pressed="false" title="縦積み (grid)"><span class="layout-toggle__icon" aria-hidden="true">☰</span>Vertical</button>
+  </div>`
+    : "";
+  const layoutScript = opts.withLayoutToggle
+    ? `<script type="module">${LAYOUT_TOGGLE_JS}</script>`
+    : "";
   return `<!doctype html>
 <html lang="ja"><head>
 <meta charset="utf-8">
@@ -371,13 +380,15 @@ function page(
 <title>${esc(title)}</title>
 <link rel="stylesheet" href="/style.css">
 <style>${HLJS_THEME_CSS}</style>
-</head><body>
+</head><body data-layout="horizontal">
 <header class="topbar">
   <a class="brand" href="/">&#9881; Workflow Dashboard</a>
+  ${layoutToggle}
   ${opts.withCleanDrawer ? '<button type="button" class="topbar__clean" data-clean-open aria-label="クリーンアップ"><span class="topbar__clean-icon" aria-hidden="true">🧹</span><span class="topbar__clean-label">Clean</span></button>' : ""}
 </header>
 <main>${body}</main>
 ${drawer}
+${layoutScript}
 </body></html>`;
 }
 
