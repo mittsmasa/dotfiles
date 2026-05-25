@@ -6,6 +6,9 @@
 # meta.json は md から導けない安定情報のみを持つ:
 #   cwd       - タスクを実行したリポジトリ（worktree）の作業ディレクトリ
 #   createdAt - 初回生成時刻（ISO8601 UTC、以降不変）
+#   branch    - cwd 上の git HEAD のブランチ名。dependsOn 検知の手がかり。
+#               cwd が git でない or detached HEAD なら省略。
+#               既存 meta.json の branch が非空なら保持（手書き優先・リネーム時の事故防止）。
 #   noPr      - PR を作らないタスクであることの宣言。
 #               新規生成時、cwd が `~/.claude/` 配下なら自動で true を補完する。
 #               明示的な手書きも有効（既存 meta.json の noPr は jq マージで保持される）
