@@ -89,14 +89,18 @@ if [[ ! -f "$META" ]] && [[ -n "$CWD" ]] && [[ -d "$CWD" ]]; then
 fi
 
 # 一時ファイルに書いてから mv（jq 失敗時に meta.json を壊さない）。
-# 既存 meta.json があれば dependsOn/pr/noPr 等を残し cwd/createdAt のみマージ更新。
+# 既存 meta.json があれば dependsOn/pr/noPr 等を残し cwd/createdAt/branch のみマージ更新。
+# branch は既存が空のときだけ埋める（EXIST_BRANCH→BRANCH の解決で済んでいる）。
 TMP=$(mktemp "${TMPDIR:-/tmp}/workflow-meta.XXXXXX") || exit 0
 if [[ -f "$META" ]]; then
-  jq --arg cwd "$CWD" --arg created "$CREATED" \
-    '.cwd = $cwd | .createdAt = $created' "$META" >"$TMP" 2>/dev/null
+  jq --arg cwd "$CWD" --arg created "$CREATED" --arg branch "$BRANCH" \
+    '.cwd = $cwd | .createdAt = $created | (if $branch != "" then .branch = $branch else . end)' \
+    "$META" >"$TMP" 2>/dev/null
 else
-  jq -n --arg cwd "$CWD" --arg created "$CREATED" --argjson nopr "$NO_PR_INIT" \
-    '{cwd: $cwd, createdAt: $created} + (if $nopr then {noPr: true} else {} end)' >"$TMP" 2>/dev/null
+  jq -n --arg cwd "$CWD" --arg created "$CREATED" --arg branch "$BRANCH" --argjson nopr "$NO_PR_INIT" \
+    '{cwd: $cwd, createdAt: $created}
+     + (if $branch != "" then {branch: $branch} else {} end)
+     + (if $nopr then {noPr: true} else {} end)' >"$TMP" 2>/dev/null
 fi
 if [[ -s "$TMP" ]]; then
   mv "$TMP" "$META"
