@@ -47,12 +47,13 @@ esac
 META="$TASK_DIR/meta.json"
 NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
-# 既存 meta.json から createdAt / cwd を 1 回の jq で取得
+# 既存 meta.json から createdAt / cwd / branch を 1 回の jq で取得
 EXIST_CREATED=""
 EXIST_CWD=""
+EXIST_BRANCH=""
 if [[ -f "$META" ]]; then
-  { IFS= read -r EXIST_CREATED; IFS= read -r EXIST_CWD; } < <(
-    jq -r '.createdAt // "", .cwd // ""' "$META" 2>/dev/null
+  { IFS= read -r EXIST_CREATED; IFS= read -r EXIST_CWD; IFS= read -r EXIST_BRANCH; } < <(
+    jq -r '.createdAt // "", .cwd // "", .branch // ""' "$META" 2>/dev/null
   )
 fi
 
@@ -62,6 +63,16 @@ if [[ -n "$EXIST_CWD" ]]; then
   CWD="$EXIST_CWD"
 else
   CWD="${META_HOOK_CWD:-$PWD}"
+fi
+
+# branch: 既存が非空ならそれを保持（手書き優先）。
+# 空なら cwd の git HEAD から取得。git でない / detached HEAD / cwd が無いなら空。
+if [[ -n "$EXIST_BRANCH" ]]; then
+  BRANCH="$EXIST_BRANCH"
+elif [[ -n "$CWD" ]] && [[ -d "$CWD" ]]; then
+  BRANCH=$(git -C "$CWD" symbolic-ref --quiet --short HEAD 2>/dev/null || echo "")
+else
+  BRANCH=""
 fi
 
 # 新規 meta.json 生成時のみ、cwd が `~/.claude/` 配下なら noPr=true を補完する。
