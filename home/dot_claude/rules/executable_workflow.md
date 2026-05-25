@@ -28,8 +28,9 @@ dashboard の In Progress に出すため、モード問わず以下を実行:
 
 1. `task-id` 決定: `{YYYY-MM-DD}-{slug}`（kebab-case）
 2. 中央 task dir 作成: `mkdir -p ~/.claude/workflow/{task-id}/`
-3. `meta.json` 最小作成: `{"title":"<一行要約>","cwd":"<実作業 dir>"}`。`createdAt` は hook が自動補完
+3. `meta.json` 最小作成: `{"title":"<一行要約>","cwd":"<実作業 dir>"}`。`createdAt` / `branch` は hook が自動補完
 4. `.workflow` symlink は任意（リポジトリ内で短縮パスが欲しい場合のみ `ln -s`）。既に実 dir として存在するなら移行しない
+5. **dependsOn 判定**: `cwd` が git リポジトリで HEAD が `main`/`master` 以外から派生している場合、`~/.claude/workflow/*/meta.json` を grep して同じ派生元 `branch` を持つ task-id を探し、その PR が未マージなら `dependsOn: ["<task-id>", ...]` を meta.json に書く。該当なし or main 直系なら書かない
 
 モード別追加:
 - **直接実行**: 上記のみ。Phase 6 で `verify-results.md` 簡略版、Phase 7 で `- Status: done` 追記
