@@ -332,7 +332,9 @@ function scanTasks(): Task[] {
   const livePrs = fetchLivePrs(gitInputs);
   return entries
     .map<Task>((e) => {
-      const pr = livePrs.get(e.id) ?? null;
+      // live 取得を優先。ヒットなしのときだけ meta.json の手書き pr へ
+      // フォールバック（merge 済み feature ブランチが消えた後の done 判定に必要）
+      const pr = livePrs.get(e.id) ?? e.meta.pr ?? null;
       return {
         id: e.id,
         title: deriveTitle(e.id, e.plan, e.research, e.meta.title),
