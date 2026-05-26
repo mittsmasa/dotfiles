@@ -91,16 +91,19 @@ function readMaybe(path: string): string | null {
 
 // meta.json を読む。cwd は非空文字列のみ採用、dependsOn は string[]、
 // title は非空文字列のみ、noPr は boolean のみ（PR を作らないタスクの明示宣言）。
-// pr は読まない（PR 情報は dashboard 側で graphql から live 取得する）。
+// pr は手書きフォールバック用に読む。live 取得が成功したらそちらが優先され、
+// 失敗時 or 検索ヒットなしのときだけ meta.pr が使われる（merge 済み feature
+// ブランチが消えた後のタスクが pr-pending に降格するのを防ぐ）。
 function readMeta(dir: string): {
   cwd: string | null;
   dependsOn: string[];
   title: string | null;
   noPr: boolean;
+  pr: Pr | null;
 } {
+  const empty = { cwd: null, dependsOn: [], title: null, noPr: false, pr: null };
   const raw = readMaybe(join(dir, "meta.json"));
-  if (!raw)
-    return { cwd: null, dependsOn: [], title: null, noPr: false };
+  if (!raw) return empty;
   try {
     const j = JSON.parse(raw);
     const cwd = typeof j.cwd === "string" && j.cwd.length > 0 ? j.cwd : null;
@@ -109,10 +112,22 @@ function readMeta(dir: string): {
       : [];
     const title = typeof j.title === "string" && j.title.length > 0 ? j.title : null;
     const noPr = j.noPr === true;
-    return { cwd, dependsOn, title, noPr };
+    const pr = parseMetaPr(j.pr);
+    return { cwd, dependsOn, title, noPr, pr };
   } catch {
-    return { cwd: null, dependsOn: [], title: null, noPr: false };
+    return empty;
   }
+}
+
+// meta.json の手書き pr を厳密にバリデート。number / url / merged の 3 つが
+// すべて正しい型で揃ったときだけ採用し、それ以外は null（= PR 紐付けなし扱い）。
+function parseMetaPr(v: unknown): Pr | null {
+  if (!v || typeof v !== "object") return null;
+  const o = v as Record<string, unknown>;
+  if (typeof o.number !== "number" || !Number.isInteger(o.number)) return null;
+  if (typeof o.url !== "string" || o.url.length === 0) return null;
+  if (typeof o.merged !== "boolean") return null;
+  return { number: o.number, url: o.url, merged: o.merged };
 }
 
 function shortenHome(p: string): string {
