@@ -3,6 +3,7 @@
 
 const SECTIONS = [
   { key: "done", label: "Done" },
+  { key: "archived", label: "Archived" },
   { key: "orphan", label: "Orphan" },
   { key: "empty", label: "Empty" },
 ];
