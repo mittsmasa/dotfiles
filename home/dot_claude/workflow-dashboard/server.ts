@@ -147,6 +147,22 @@ function parseMetaPr(v: unknown): Pr | null {
 // - raw JSON をマージして書き戻し、createdAt / branch など既存キーを温存する。
 // - 同一 merged PR が既にキャッシュ済みなら何もしない（無駄な再書き込み回避）。
 // - 書き込み失敗は握りつぶす（phase 判定は live 値で続行、looks をクラッシュさせない）。
+// archived フラグを meta.json にマージ書き戻し。persistMergedPr と同じく
+// 既存キー（createdAt / branch など hook 補完分）を温存する。
+// 成功時に true、書き込み失敗時に false を返す（呼び出し側で 500 にする）。
+export function persistArchived(id: string, archived: boolean): boolean {
+  const path = join(WORKFLOW_ROOT, id, "meta.json");
+  try {
+    const raw = readMaybe(path);
+    const obj = raw ? JSON.parse(raw) : {};
+    obj.archived = archived;
+    writeFileSync(path, JSON.stringify(obj, null, 2) + "\n");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function persistMergedPr(id: string, pr: Pr): void {
   if (!pr.merged) return;
   const path = join(WORKFLOW_ROOT, id, "meta.json");
