@@ -27,8 +27,8 @@ const initial = document.querySelector(".panel.active");
 if (initial) renderMermaidIn(initial);
 
 // archive トグル: ボタンをクリックしたら現在状態を反転させて /api/archive に投げる。
-// 成功時は data-archived / aria-pressed / 文言 / アイコンを書き換え、ページ遷移は
-// しない（板に戻ったのを確認したいときは Board に戻ればよい）。
+// フィードバックはボタン文言（label） + data-archived 属性 + aria-pressed の更新に
+// 固定し、トースト等の新規 UI 機構は導入しない（plan の制約）。
 const archiveBtn = document.querySelector("[data-archive-toggle]");
 if (archiveBtn) {
   archiveBtn.addEventListener("click", async () => {
@@ -54,20 +54,14 @@ if (archiveBtn) {
       if (labelEl) labelEl.textContent = nextArchived ? "アーカイブ解除" : "アーカイブ";
       if (iconEl) iconEl.textContent = nextArchived ? "↩" : "📥";
       archiveBtn.title = nextArchived ? "ボードに戻す" : "ボードから片付ける";
-      toast(nextArchived ? "アーカイブしました" : "アーカイブを解除しました");
     } catch (e) {
-      if (labelEl) labelEl.textContent = prevLabel;
-      toast("失敗: " + (e?.message ?? e));
+      // 失敗時はラベルを「失敗」に置く（独自トースト機構は使わない）
+      if (labelEl) labelEl.textContent = "失敗: " + (e?.message ?? e);
+      setTimeout(() => {
+        if (labelEl) labelEl.textContent = prevLabel;
+      }, 2400);
     } finally {
       archiveBtn.disabled = false;
     }
   });
-}
-
-function toast(msg) {
-  const el = document.createElement("div");
-  el.className = "clean-toast";
-  el.textContent = msg;
-  document.body.appendChild(el);
-  setTimeout(() => el.remove(), 2600);
 }
