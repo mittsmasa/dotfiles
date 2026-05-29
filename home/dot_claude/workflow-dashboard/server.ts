@@ -560,7 +560,7 @@ interface CleanCandidates {
 // scanTasks と独立に走らせ、Clean drawer 用に 3 種類の削除候補を集める。
 // orphan / empty は scanTasks では弾かれるので、ここで個別に拾い直す。
 function scanCleanCandidates(): CleanCandidates {
-  const result: CleanCandidates = { done: [], orphan: [], empty: [] };
+  const result: CleanCandidates = { done: [], archived: [], orphan: [], empty: [] };
   if (!existsSync(WORKFLOW_ROOT)) return result;
   const liveTasks = scanTasks();
   const liveById = new Map(liveTasks.map((t) => [t.id, t]));
@@ -575,6 +575,17 @@ function scanCleanCandidates(): CleanCandidates {
     const dir = join(WORKFLOW_ROOT, id);
     const meta = readMeta(dir);
     const docs = DOC_FILES.filter((f) => existsSync(join(dir, f)));
+    // archived は明示的な意思表示なので orphan / empty より優先して拾う
+    if (meta.archived) {
+      const plan = readMaybe(join(dir, "plan.md"));
+      const research = readMaybe(join(dir, "research.md"));
+      result.archived.push({
+        id,
+        title: deriveTitle(id, plan, research, meta.title),
+        cwd: meta.cwd,
+      });
+      continue;
+    }
     if (meta.cwd && !existsSync(meta.cwd)) {
       const plan = readMaybe(join(dir, "plan.md"));
       const research = readMaybe(join(dir, "research.md"));
