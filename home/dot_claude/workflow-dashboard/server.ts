@@ -83,6 +83,7 @@ interface Task {
   dependsOn: string[];
   pr: Pr | null;
   noPr: boolean;
+  archived: boolean;
 }
 
 function readMaybe(path: string): string | null {
