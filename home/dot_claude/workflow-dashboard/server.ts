@@ -662,16 +662,26 @@ function renderBoard(filter: string): string {
   );
 }
 
+// 詳細ページ右上の archive トグル。挙動は task-detail.js が引き受ける。
+// data-archived は現在状態。クリック時はクライアントが反転させて API を叩く。
+function renderArchiveToggle(id: string, archived: boolean): string {
+  const label = archived ? "アーカイブ解除" : "アーカイブ";
+  return `<button type="button" class="archive-toggle" data-archive-toggle data-id="${esc(id)}" data-archived="${archived ? "true" : "false"}" aria-pressed="${archived ? "true" : "false"}" title="${archived ? "ボードに戻す" : "ボードから片付ける"}"><span class="archive-toggle__icon" aria-hidden="true">${archived ? "↩" : "📥"}</span><span class="archive-toggle__label">${label}</span></button>`;
+}
+
 function renderTask(id: string): string | null {
   // パストラバーサル対策: タスク id はディレクトリ名のみ許可
   if (id.includes("/") || id.includes("..")) return null;
   const dir = join(WORKFLOW_ROOT, id);
   if (!existsSync(dir) || !statSync(dir).isDirectory()) return null;
+  const meta = readMeta(dir);
+  const toggle = renderArchiveToggle(id, meta.archived);
   const docs = DOC_FILES.filter((f) => existsSync(join(dir, f)));
   if (docs.length === 0) {
     return page(
       id,
-      `<div class="detail"><a class="back" href="/">&larr; Board</a><h1>${esc(id)}</h1><p class="empty">md ドキュメントなし</p></div>`,
+      `<div class="detail"><div class="detail__head"><a class="back" href="/">&larr; Board</a>${toggle}</div><h1>${esc(id)}</h1><p class="empty">md ドキュメントなし</p></div>
+      <script type="module">${TASK_DETAIL_JS}</script>`,
     );
   }
   const tabs = docs
@@ -690,7 +700,10 @@ function renderTask(id: string): string | null {
   return page(
     id,
     `<div class="detail">
-      <a class="back" href="/">&larr; Board</a>
+      <div class="detail__head">
+        <a class="back" href="/">&larr; Board</a>
+        ${toggle}
+      </div>
       <h1>${esc(id)}</h1>
       <div class="tabs">${tabs}</div>
       <div class="panels markdown">${panels}</div>
