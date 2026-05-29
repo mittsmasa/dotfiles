@@ -379,6 +379,8 @@ function scanTasks(): Task[] {
     const verify = readMaybe(join(dir, "verify-results.md"));
     const docs = DOC_FILES.filter((f) => existsSync(join(dir, f)));
     const meta = readMeta(dir);
+    // archive: 明示的に片付けたタスクはボードに出さない（Clean ドロワーには出る）
+    if (meta.archived) continue;
     // orphan: cwd が指す作業ディレクトリが消えているタスクはボードに出さない
     if (meta.cwd && !existsSync(meta.cwd)) continue;
     const updatedAt = docs.reduce(
