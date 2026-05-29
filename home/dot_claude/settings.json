@@ -217,7 +217,8 @@
           },
           {
             "type": "command",
-            "command": "bash ~/.claude/scripts/plan-review-hook.sh"
+            "command": "bash ~/.claude/scripts/plan-review-hook.sh",
+            "timeout": 600
           },
           {
             "type": "command",

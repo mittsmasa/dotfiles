@@ -1,7 +1,7 @@
 // workflow-dashboard — ~/.claude/workflow/ の md 成果物をカンバン + プレビューで見る
 import { marked } from "marked";
 import hljs from "highlight.js";
-import { readdirSync, readFileSync, existsSync, statSync, rmSync, realpathSync } from "node:fs";
+import { readdirSync, readFileSync, writeFileSync, existsSync, statSync, rmSync, realpathSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { spawnSync } from "node:child_process";
@@ -130,6 +130,34 @@ function parseMetaPr(v: unknown): Pr | null {
   return { number: o.number, url: o.url, merged: o.merged };
 }
 
+// merged PR を meta.json に終端キャッシュする。merge 後に feature ブランチが
+// 削除されると live 検索（headRefName ベース）がヒットしなくなり done 判定が
+// 失われるため、merged を一度検知した時点で meta.json に焼き付けて永続化する。
+// - 終端状態（merged）のみ書く。open は transient なのでキャッシュしない。
+// - raw JSON をマージして書き戻し、createdAt / branch など既存キーを温存する。
+// - 同一 merged PR が既にキャッシュ済みなら何もしない（無駄な再書き込み回避）。
+// - 書き込み失敗は握りつぶす（phase 判定は live 値で続行、looks をクラッシュさせない）。
+export function persistMergedPr(id: string, pr: Pr): void {
+  if (!pr.merged) return;
+  const path = join(WORKFLOW_ROOT, id, "meta.json");
+  try {
+    const raw = readMaybe(path);
+    const obj = raw ? JSON.parse(raw) : {};
+    if (
+      obj.pr &&
+      obj.pr.merged === true &&
+      obj.pr.number === pr.number &&
+      obj.pr.url === pr.url
+    ) {
+      return;
+    }
+    obj.pr = { number: pr.number, url: pr.url, merged: true };
+    writeFileSync(path, JSON.stringify(obj, null, 2) + "\n");
+  } catch {
+    // noop: キャッシュ失敗時も live で得た pr で phase は確定済み
+  }
+}
+
 function shortenHome(p: string): string {
   const home = homedir();
   return p === home || p.startsWith(home + "/") ? "~" + p.slice(home.length) : p;
@@ -144,9 +172,20 @@ function deriveTitle(id: string, plan: string | null, research: string | null, m
   return m[1].replace(/^(Plan|Research)\s*[—-]\s*/, "").trim();
 }
 
+// plan.md / verify-results.md の status マーカーを行頭で拾う。
+// canonical 書式は行頭 "- " 付き（plan-review-hook / verify-results.md と統一）だが、
+// 旧 plan.md は dash 無し（"Plan Status: done"）で書かれていた時期があるため、
+// 行頭の list プレフィックス（"- " / "* "）は任意として両形式を等価に扱う。
+// キー名・値は ^ アンカー + 値直後の境界で厳密一致させ、本文中の散発的言及を誤検出しない。
+export function hasMarker(text: string | null, key: string, value: string): boolean {
+  if (!text) return false;
+  const re = new RegExp(`^[ \\t]*(?:[-*][ \\t]+)?${key}:[ \\t]*${value}(?![\\w-])`, "im");
+  return re.test(text);
+}
+
 // phase はマーカーシグナルと PR / dirty から派生する。
 // 詳細な状態→列の対応は workflow.md Phase 7「dashboard 列対応表」を参照。
-function derivePhase(
+export function derivePhase(
   plan: string | null,
   pr: Pr | null,
   verify: string | null,
@@ -154,15 +193,20 @@ function derivePhase(
   dirty: boolean | null,
 ): Phase {
   if (pr) return pr.merged ? "done" : "pr-open";
+  // 作業完了シグナル: plan.md の "Plan Status: done" か verify-results.md の "Status: done"
   const statusDone =
-    (plan && /^- Plan Status:\s*done/m.test(plan)) ||
-    (verify && /^- Status:\s*done/m.test(verify));
+    hasMarker(plan, "Plan Status", "done") || hasMarker(verify, "Status", "done");
   if (statusDone) {
-    if (dirty !== true && noPr) return "done";
+    // noPr タスク: PR を作らないので dirty で done / pr-pending を分ける。
+    //   dirty===true               → 未コミットあり → pr-pending（作業未完了扱い）
+    //   dirty===false または null   → clean、もしくは非 git（~/.claude 等）→ done
+    // PR タスク（!noPr）: done は PR 側（上の pr 分岐）が支配する。ここに到達した時点で
+    //   live / cache の PR が無い＝PR 未検出なので pr-pending で待つ。
+    if (noPr) return dirty === true ? "pr-pending" : "done";
     return "pr-pending";
   }
-  if (plan && /^- Approval Status:\s*approved/m.test(plan)) return "in-progress";
-  if (plan && /^- Plan Status:\s*complete/m.test(plan)) return "review";
+  if (hasMarker(plan, "Approval Status", "approved")) return "in-progress";
+  if (hasMarker(plan, "Plan Status", "complete")) return "review";
   return "in-progress";
 }
 
@@ -172,6 +216,20 @@ function parseRemote(url: string): { owner: string; repo: string } | null {
   const m = url.trim().match(/[:/]([\w.-]+)\/([\w.-]+?)(?:\.git)?$/);
   if (!m) return null;
   return { owner: m[1], repo: m[2] };
+}
+
+// porcelain --branch の 1 行目から branch 名を取り出す純関数。
+//   "## <branch>...<upstream> [ahead/behind]" / "## <branch>"（upstream 無し）
+//   / "## HEAD (no branch)"（detached）。
+// upstream 区切り "..." の手前を branch 名とする（ブランチ名中のドットは保持）。
+// detached HEAD や該当なしは null。
+export function parseBranchLine(head: string): string | null {
+  const bm = head.match(/^## (.+)$/);
+  if (!bm) return null;
+  const rest = bm[1];
+  if (/\(no branch\)/.test(rest)) return null;
+  const b = rest.split("...")[0].split(" ")[0];
+  return b.length > 0 ? b : null;
 }
 
 function runGit(cwd: string, args: string[]): { ok: boolean; stdout: string } {
@@ -204,9 +262,7 @@ function getRepoState(cwd: string): RepoState {
   const status = runGit(cwd, ["status", "--porcelain=v1", "--branch"]);
   if (status.ok) {
     const lines = status.stdout.split("\n");
-    const head = lines[0] ?? "";
-    const m = head.match(/^## ([^.\s]+)/);
-    if (m) branch = m[1];
+    branch = parseBranchLine(lines[0] ?? "");
     dirty = lines.slice(1).some((l) => l.length > 0);
   }
 
@@ -332,9 +388,12 @@ function scanTasks(): Task[] {
   const livePrs = fetchLivePrs(gitInputs);
   return entries
     .map<Task>((e) => {
-      // live 取得を優先。ヒットなしのときだけ meta.json の手書き pr へ
+      // live 取得を優先。ヒットなしのときだけ meta.json の手書き / キャッシュ pr へ
       // フォールバック（merge 済み feature ブランチが消えた後の done 判定に必要）
-      const pr = livePrs.get(e.id) ?? e.meta.pr ?? null;
+      const livePr = livePrs.get(e.id);
+      const pr = livePr ?? e.meta.pr ?? null;
+      // live で merged を検知したら meta.json に焼き付ける（次回ブランチ消滅でも done 維持）
+      if (livePr?.merged) persistMergedPr(e.id, livePr);
       return {
         id: e.id,
         title: deriveTitle(e.id, e.plan, e.research, e.meta.title),
@@ -610,7 +669,8 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
-const server = Bun.serve({
+function startServer() {
+  return Bun.serve({
   port: PORT,
   async fetch(req) {
     const url = new URL(req.url);
@@ -691,6 +751,11 @@ const server = Bun.serve({
     }
     return new Response("Not Found", { status: 404 });
   },
-});
+  });
+}
 
-console.log(`workflow-dashboard → http://localhost:${server.port}`);
+// 直接起動時のみ listen する（test から import したときはサーバを立てない）
+if (import.meta.main) {
+  const server = startServer();
+  console.log(`workflow-dashboard → http://localhost:${server.port}`);
+}
