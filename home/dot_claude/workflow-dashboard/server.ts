@@ -675,15 +675,17 @@ function renderTask(id: string): string | null {
   const dir = join(WORKFLOW_ROOT, id);
   if (!existsSync(dir) || !statSync(dir).isDirectory()) return null;
   const meta = readMeta(dir);
-  const toggle = renderArchiveToggle(id, meta.archived);
   const docs = DOC_FILES.filter((f) => existsSync(join(dir, f)));
   if (docs.length === 0) {
+    // 早期 return パスは TASK_DETAIL_JS を注入しないので archive トグルも出さない
+    // （ハンドラが付かず無反応ボタンになるため）。実 archived タスクは research.md
+    // を残すので通常 docs>=1 のパスを通る。
     return page(
       id,
-      `<div class="detail"><div class="detail__head"><a class="back" href="/">&larr; Board</a>${toggle}</div><h1>${esc(id)}</h1><p class="empty">md ドキュメントなし</p></div>
-      <script type="module">${TASK_DETAIL_JS}</script>`,
+      `<div class="detail"><a class="back" href="/">&larr; Board</a><h1>${esc(id)}</h1><p class="empty">md ドキュメントなし</p></div>`,
     );
   }
+  const toggle = renderArchiveToggle(id, meta.archived);
   const tabs = docs
     .map(
       (f, i) =>
