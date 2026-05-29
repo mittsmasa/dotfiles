@@ -727,6 +727,7 @@ function startServer() {
       const candidates = scanCleanCandidates();
       const candidateIds = new Set<string>([
         ...candidates.done.map((c) => c.id),
+        ...candidates.archived.map((c) => c.id),
         ...candidates.orphan.map((c) => c.id),
         ...candidates.empty.map((c) => c.id),
       ]);
