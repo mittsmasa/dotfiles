@@ -25,3 +25,49 @@ document.querySelectorAll(".tab").forEach((btn) => {
 });
 const initial = document.querySelector(".panel.active");
 if (initial) renderMermaidIn(initial);
+
+// archive トグル: ボタンをクリックしたら現在状態を反転させて /api/archive に投げる。
+// 成功時は data-archived / aria-pressed / 文言 / アイコンを書き換え、ページ遷移は
+// しない（板に戻ったのを確認したいときは Board に戻ればよい）。
+const archiveBtn = document.querySelector("[data-archive-toggle]");
+if (archiveBtn) {
+  archiveBtn.addEventListener("click", async () => {
+    if (archiveBtn.disabled) return;
+    const id = archiveBtn.dataset.id;
+    const currentArchived = archiveBtn.dataset.archived === "true";
+    const nextArchived = !currentArchived;
+    archiveBtn.disabled = true;
+    const labelEl = archiveBtn.querySelector(".archive-toggle__label");
+    const iconEl = archiveBtn.querySelector(".archive-toggle__icon");
+    const prevLabel = labelEl?.textContent ?? "";
+    if (labelEl) labelEl.textContent = "更新中…";
+    try {
+      const res = await fetch("/api/archive", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id, archived: nextArchived }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "更新に失敗しました");
+      archiveBtn.dataset.archived = nextArchived ? "true" : "false";
+      archiveBtn.setAttribute("aria-pressed", nextArchived ? "true" : "false");
+      if (labelEl) labelEl.textContent = nextArchived ? "アーカイブ解除" : "アーカイブ";
+      if (iconEl) iconEl.textContent = nextArchived ? "↩" : "📥";
+      archiveBtn.title = nextArchived ? "ボードに戻す" : "ボードから片付ける";
+      toast(nextArchived ? "アーカイブしました" : "アーカイブを解除しました");
+    } catch (e) {
+      if (labelEl) labelEl.textContent = prevLabel;
+      toast("失敗: " + (e?.message ?? e));
+    } finally {
+      archiveBtn.disabled = false;
+    }
+  });
+}
+
+function toast(msg) {
+  const el = document.createElement("div");
+  el.className = "clean-toast";
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 2600);
+}
