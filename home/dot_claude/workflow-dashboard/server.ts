@@ -417,6 +417,7 @@ function scanTasks(): Task[] {
         dependsOn: e.meta.dependsOn,
         pr,
         noPr: e.meta.noPr,
+        archived: e.meta.archived,
       };
     })
     .sort((a, b) => b.updatedAt - a.updatedAt);
