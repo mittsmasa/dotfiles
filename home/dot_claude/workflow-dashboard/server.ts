@@ -765,6 +765,42 @@ function startServer() {
       }
       return jsonResponse({ deleted, skipped, failed });
     }
+    // archive トグル: meta.json の archived フラグを更新する。
+    // 任意のタスクが対象（candidate チェックなし）。id はパストラバーサル拒否 +
+    // realpath が WORKFLOW_ROOT 配下であることだけ確認する。
+    if (path === "/api/archive" && req.method === "POST") {
+      let body: unknown;
+      try {
+        body = await req.json();
+      } catch {
+        return jsonResponse({ error: "invalid json" }, 400);
+      }
+      const id = (body as { id?: unknown })?.id;
+      const archived = (body as { archived?: unknown })?.archived;
+      if (typeof id !== "string" || !id || id.includes("/") || id.includes("..") || id.includes("\0")) {
+        return jsonResponse({ error: "invalid id" }, 400);
+      }
+      if (typeof archived !== "boolean") {
+        return jsonResponse({ error: "archived must be boolean" }, 400);
+      }
+      const dir = join(WORKFLOW_ROOT, id);
+      if (!existsSync(dir) || !statSync(dir).isDirectory()) {
+        return jsonResponse({ error: "task not found" }, 404);
+      }
+      let real: string;
+      try {
+        real = realpathSync(dir);
+      } catch {
+        return jsonResponse({ error: "realpath failed" }, 500);
+      }
+      if (real !== join(WORKFLOW_ROOT_REAL, id) && !real.startsWith(WORKFLOW_ROOT_REAL + "/")) {
+        return jsonResponse({ error: "outside workflow root" }, 400);
+      }
+      if (!persistArchived(id, archived)) {
+        return jsonResponse({ error: "write failed" }, 500);
+      }
+      return jsonResponse({ id, archived });
+    }
     if (path === "/style.css") {
       return new Response(Bun.file(join(import.meta.dir, "style.css")), {
         headers: { "content-type": "text/css; charset=utf-8" },
