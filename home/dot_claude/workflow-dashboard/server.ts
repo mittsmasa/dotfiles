@@ -552,6 +552,7 @@ interface CleanCandidate {
 }
 interface CleanCandidates {
   done: CleanCandidate[];
+  archived: CleanCandidate[];
   orphan: CleanCandidate[];
   empty: CleanCandidate[];
 }
