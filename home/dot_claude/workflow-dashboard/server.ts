@@ -101,8 +101,16 @@ function readMeta(dir: string): {
   title: string | null;
   noPr: boolean;
   pr: Pr | null;
+  archived: boolean;
 } {
-  const empty = { cwd: null, dependsOn: [], title: null, noPr: false, pr: null };
+  const empty = {
+    cwd: null,
+    dependsOn: [],
+    title: null,
+    noPr: false,
+    pr: null,
+    archived: false,
+  };
   const raw = readMaybe(join(dir, "meta.json"));
   if (!raw) return empty;
   try {
@@ -114,7 +122,8 @@ function readMeta(dir: string): {
     const title = typeof j.title === "string" && j.title.length > 0 ? j.title : null;
     const noPr = j.noPr === true;
     const pr = parseMetaPr(j.pr);
-    return { cwd, dependsOn, title, noPr, pr };
+    const archived = j.archived === true;
+    return { cwd, dependsOn, title, noPr, pr, archived };
   } catch {
     return empty;
   }
