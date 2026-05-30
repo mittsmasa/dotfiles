@@ -51,6 +51,7 @@ user-prompt には以下のファイルパスが渡される:
 - 解消済みなら再指摘しない。残っていれば同 severity で再指摘
 - 新規視点での「削れ」は severity を 1 段下げる（critical → major、major → minor、minor → 出さない）
 - `peers.md` で他 reviewer が必要と認めている機構を「削れ」と指摘するのは管轄越境。出さない
+- **ユーザー明示決定の不可侵**: plan に「ユーザー明示決定」「ユーザー裁定」「不可侵」「削除禁止」等と明記された設計判断（採用ライブラリ・アーキテクチャの選択など）は、ユーザーが simplicity とのトレードオフを理解した上で選んだもの。simplicity 観点で過剰に見えても **veto しない**: `must_remove` に入れず、`verdict` は他に問題が無ければ `pass` を維持し、指摘は `minor` の findings に記録するに留める。ユーザーの明示選択を simplicity 一存で覆さない（applier に削除させない）
 
 ## 出力形式
 
