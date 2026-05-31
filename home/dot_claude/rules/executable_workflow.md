@@ -51,6 +51,13 @@ dashboard の In Progress に出すため、モード問わず以下を実行:
 - 動作確認項目は実行可能・検証可能に（具体コマンド + 期待結果。手動はその旨明記）
 - ヘッダ（行頭 `- ` 付きの canonical 書式で書く。hook の sed と dashboard の `derivePhase` がこの形を前提）: `- Review Status: pending` / `- Plan Status: draft` / `- Approval Status: pending`（hash/round は hook が末尾 `<!-- auto-review: ... -->` に記録、手動記載不要）
 
+### UI / フロントエンド実装を含む場合（必須）
+
+plan に UI / フロントエンド（web コンポーネント / ページ / 画面 / artifact 等）の実装が含まれるなら:
+
+1. **`frontend-design` skill を必ず意識する**。設計前に skill の Design Thinking（Purpose / Tone / Constraints / Differentiation）を通し、"AI slop"（凡庸で量産的な UI）を避ける方針を plan に反映する
+2. **plan.md にワイヤフレームを必ず掲載する**。ASCII 図などで主要画面のレイアウト・要素配置・状態（空 / ローディング / エラー等）を示す。レビューア・人間が承認時に UI の構造を視認できる粒度で書く
+
 ## Phase 3: Plan Review Loop（hook 自動）
 
 `plan.md` 書き込みを `~/.claude/scripts/plan-review-hook.sh` が検知し **simplicity（veto 権）/ correctness / verifiability** の 3 レビュアを並列実行。
