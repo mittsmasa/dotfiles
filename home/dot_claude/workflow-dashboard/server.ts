@@ -340,9 +340,11 @@ function fetchLivePrs(
   const query = `query { ${fragments.join(" ")} }`;
   let stdout = "";
   try {
-    // timeout 5s で hard cancel。gh の認証は既存設定をそのまま使う
-    const r = spawnSync("timeout", ["5", "gh", "api", "graphql", "-f", `query=${query}`], {
+    // timeout 5s で hard cancel。spawnSync の timeout で打ち切る（外部 timeout(1)
+    // コマンドは macOS に無いため依存しない）。gh の認証は既存設定をそのまま使う
+    const r = spawnSync("gh", ["api", "graphql", "-f", `query=${query}`], {
       encoding: "utf8",
+      timeout: 5000,
     });
     if (r.status !== 0) return new Map();
     stdout = r.stdout ?? "";
