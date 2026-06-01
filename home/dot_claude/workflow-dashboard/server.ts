@@ -39,19 +39,101 @@ function esc(s: string): string {
   return s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
 }
 
+// 行コメント機能用: トークンに元ソースの開始/終了行を仕込むためのキー。
+// renderer がこれを読んで data-sl / data-el を出力し、クライアントが
+// 「ブロック ↔ 元ソース行」の対応付けに使う。
+type LineToken = { _sl?: number; _el?: number };
+
+// data-sl / data-el 属性文字列を組む（行情報が無いトークンは空文字 = 属性なし）。
+function lineAttrs(t: LineToken): string {
+  if (typeof t._sl !== "number" || typeof t._el !== "number") return "";
+  return ` data-sl="${t._sl}" data-el="${t._el}"`;
+}
+
+// marked のトークン列に元ソース行番号を仕込む。トークンは raw を持ち、
+// ドキュメント順に並ぶので cursor を前進させつつ indexOf で各 raw のオフセットを
+// 確定する（marker prefix 等のオフセット計算を避けるため連結ではなく検索ベース）。
+// list は items に再帰し、item 内のネストした list/blockquote にも再帰する。
+function assignLineNumbers(tokens: any[], src: string): void {
+  const lineStarts: number[] = [0];
+  for (let i = 0; i < src.length; i++) if (src[i] === "\n") lineStarts.push(i + 1);
+  const lineAt = (off: number): number => {
+    let lo = 0,
+      hi = lineStarts.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1;
+      if (lineStarts[mid] <= off) lo = mid;
+      else hi = mid - 1;
+    }
+    return lo + 1;
+  };
+  // ネストでも単調前進になるよう cursor は単一の参照で持ち回す
+  const cursor = { pos: 0 };
+  const walk = (toks: any[]): void => {
+    for (const t of toks) {
+      if (typeof t.raw !== "string" || t.raw.length === 0) continue;
+      const off = src.indexOf(t.raw, cursor.pos);
+      if (off < 0) continue;
+      // raw 末尾の空行を行範囲に含めない（trailing newline を除いた末尾位置で算出）
+      const trimmedLen = t.raw.replace(/\n+$/, "").length;
+      t._sl = lineAt(off);
+      t._el = lineAt(off + Math.max(0, trimmedLen - 1));
+      cursor.pos = off + t.raw.length;
+      // list は items を、item / blockquote は子トークンを辿る
+      if (t.type === "list" && Array.isArray(t.items)) {
+        const savedPos = cursor.pos;
+        cursor.pos = off; // items は list raw の内側に並ぶ
+        walk(t.items);
+        if (cursor.pos < savedPos) cursor.pos = savedPos;
+      } else if (Array.isArray(t.tokens) && (t.type === "blockquote" || t.type === "list_item")) {
+        const savedPos = cursor.pos;
+        cursor.pos = off;
+        walk(t.tokens);
+        if (cursor.pos < savedPos) cursor.pos = savedPos;
+      }
+    }
+  };
+  walk(tokens);
+}
+
 // fenced code: lang=mermaid は pre.mermaid（クライアント側で図に変換）、
-// それ以外は hljs でサーバ側ハイライト
+// それ以外は hljs でサーバ側ハイライト。
+// heading / paragraph / listitem / blockquote / code には data-sl / data-el を付与し、
+// クライアントの行コメント機能が「ブロック ↔ 元ソース行」を引けるようにする。
+// _sl が未確定のトークンは属性なしのデフォルト描画にフォールバック（コメント不可）。
 marked.use({
   renderer: {
-    code({ text, lang }: { text: string; lang?: string }) {
+    code({ text, lang, _sl, _el }: { text: string; lang?: string } & LineToken) {
+      const attr = lineAttrs({ _sl, _el });
       if (lang === "mermaid") {
-        return `<pre class="mermaid">${esc(text)}</pre>\n`;
+        return `<pre class="mermaid"${attr}>${esc(text)}</pre>\n`;
       }
       if (lang && hljs.getLanguage(lang)) {
         const html = hljs.highlight(text, { language: lang }).value;
-        return `<pre><code class="hljs language-${esc(lang)}">${html}\n</code></pre>\n`;
+        return `<pre${attr}><code class="hljs language-${esc(lang)}">${html}\n</code></pre>\n`;
       }
-      return `<pre><code class="hljs">${esc(text)}\n</code></pre>\n`;
+      return `<pre${attr}><code class="hljs">${esc(text)}\n</code></pre>\n`;
+    },
+    heading(token: any) {
+      const text = this.parser.parseInline(token.tokens);
+      const d = token.depth;
+      return `<h${d}${lineAttrs(token)}>${text}</h${d}>\n`;
+    },
+    paragraph(token: any) {
+      return `<p${lineAttrs(token)}>${this.parser.parseInline(token.tokens)}</p>\n`;
+    },
+    blockquote(token: any) {
+      const body = this.parser.parse(token.tokens);
+      return `<blockquote${lineAttrs(token)}>\n${body}</blockquote>\n`;
+    },
+    listitem(token: any) {
+      // marked デフォルトの task-list checkbox を再現（plan.md のチェックリスト用）
+      let checkbox = "";
+      if (token.task) {
+        checkbox = `<input ${token.checked ? 'checked="" ' : ""}disabled="" type="checkbox"> `;
+      }
+      const inner = this.parser.parse(token.tokens, !!token.loose);
+      return `<li${lineAttrs(token)}>${checkbox}${inner}</li>\n`;
     },
   },
 });
