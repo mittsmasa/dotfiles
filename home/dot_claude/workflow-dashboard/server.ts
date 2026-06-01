@@ -131,13 +131,11 @@ marked.use({
       return `<blockquote${lineAttrs(token)}>\n${body}</blockquote>\n`;
     },
     listitem(token: any) {
-      // marked デフォルトの task-list checkbox を再現（plan.md のチェックリスト用）
-      let checkbox = "";
-      if (token.task) {
-        checkbox = `<input ${token.checked ? 'checked="" ' : ""}disabled="" type="checkbox"> `;
-      }
+      // marked 18 では task-list の checkbox は token.tokens 内の独立した
+      // checkbox トークンとして描画されるため、ここで自前に足すと二重になる。
+      // inner の描画にそのまま任せ、行コメント用の属性だけ付ける。
       const inner = this.parser.parse(token.tokens, !!token.loose);
-      return `<li${lineAttrs(token)}>${checkbox}${inner}</li>\n`;
+      return `<li${lineAttrs(token)}>${inner}</li>\n`;
     },
   },
 });
