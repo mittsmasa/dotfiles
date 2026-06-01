@@ -27,6 +27,10 @@ const LAYOUT_TOGGLE_JS = readFileSync(
   join(import.meta.dir, "layout-toggle.js"),
   "utf8",
 );
+const COMMENTS_JS = readFileSync(
+  join(import.meta.dir, "comments.js"),
+  "utf8",
+);
 const WORKFLOW_ROOT_REAL = (() => {
   try {
     return realpathSync(WORKFLOW_ROOT);
