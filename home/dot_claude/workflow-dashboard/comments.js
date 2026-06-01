@@ -60,29 +60,35 @@ if (detail) {
   // ---- ＋ボタンのホバー追従 ----
   let hoverBlock = null;
 
-  function placeAddBtn(block) {
-    if (!block) {
-      addBtn.hidden = true;
-      hoverBlock = null;
-      return;
-    }
+  // ＋ボタンをブロックの左ガターに置く。縦位置はマウスの高さ(clientY)に追従させ
+  // （ブロック内にクランプ）、いま見ている行のすぐ左に出るようにする。
+  // GitHub / difit と同様、ガターへ水平移動すれば必ず＋に届く。
+  function placeAddBtn(block, clientY) {
+    if (!block) return;
     hoverBlock = block;
     const pr = panelsWrap.getBoundingClientRect();
     const br = block.getBoundingClientRect();
-    // panelsWrap は position:relative。左ガター内に縦位置をブロック頭へ合わせる
-    addBtn.style.top = `${br.top - pr.top + panelsWrap.scrollTop}px`;
+    const half = (addBtn.offsetHeight || 22) / 2;
+    // ボタン中心がブロック内に収まるようクランプ
+    const centerY = Math.max(br.top + half, Math.min(br.bottom - half, clientY));
+    addBtn.style.top = `${centerY - half - pr.top + panelsWrap.scrollTop}px`;
     addBtn.hidden = false;
   }
 
   panelsWrap.addEventListener("mousemove", (e) => {
     if (dragging) return;
-    const panel = activePanel();
-    const block = toTopBlock(panel, e.target.closest("[data-sl]"));
-    if (block && block !== hoverBlock) placeAddBtn(block);
-    else if (!block && !addBtn.matches(":hover")) {
-      // ガター（ブロック外）に居るときは消さない（＋を押しに行けるように）
-      if (!e.target.closest("[data-sl]")) addBtn.hidden = true, (hoverBlock = null);
-    }
+    const block = toTopBlock(activePanel(), e.target.closest("[data-sl]"));
+    // ブロック上ならそこへ追従。ブロックが無い（左ガター/＋の上）なら何もしない
+    // ＝消さない。これで「＋に近づくと消える」のを防ぐ。
+    if (block) placeAddBtn(block, e.clientY);
+  });
+
+  // panels から完全に出たときだけ＋を隠す（＋は panels の子なので、＋へ移動しても
+  // mouseleave は発火しない）
+  panelsWrap.addEventListener("mouseleave", () => {
+    if (dragging) return;
+    addBtn.hidden = true;
+    hoverBlock = null;
   });
 
   // ---- ＋からのドラッグ範囲選択 ----
