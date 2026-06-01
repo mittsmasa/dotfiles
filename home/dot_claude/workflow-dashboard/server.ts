@@ -971,6 +971,85 @@ function startServer() {
       }
       return jsonResponse({ id, archived });
     }
+    // 行コメント一覧取得: ?task=<id>。task dir の comments.json をそのまま返す。
+    if (path === "/api/comments" && req.method === "GET") {
+      const taskId = url.searchParams.get("task");
+      const resolved = resolveTaskDir(taskId);
+      if ("error" in resolved) return jsonResponse({ error: resolved.error }, resolved.status);
+      return jsonResponse(readComments(taskId as string));
+    }
+    // 行コメント追加: body {task, doc, startLine, endLine, body}。id / createdAt はサーバ採番。
+    if (path === "/api/comments" && req.method === "POST") {
+      let body: unknown;
+      try {
+        body = await req.json();
+      } catch {
+        return jsonResponse({ error: "invalid json" }, 400);
+      }
+      const b = (body ?? {}) as Record<string, unknown>;
+      const resolved = resolveTaskDir(b.task);
+      if ("error" in resolved) return jsonResponse({ error: resolved.error }, resolved.status);
+      const doc = b.doc;
+      if (typeof doc !== "string" || !(DOC_FILES as readonly string[]).includes(doc)) {
+        return jsonResponse({ error: "invalid doc" }, 400);
+      }
+      const startLine = b.startLine;
+      const endLine = b.endLine;
+      if (
+        typeof startLine !== "number" ||
+        typeof endLine !== "number" ||
+        !Number.isInteger(startLine) ||
+        !Number.isInteger(endLine) ||
+        startLine < 1 ||
+        endLine < startLine
+      ) {
+        return jsonResponse({ error: "invalid line range" }, 400);
+      }
+      const text = b.body;
+      if (typeof text !== "string" || text.trim().length === 0) {
+        return jsonResponse({ error: "body must be non-empty string" }, 400);
+      }
+      const taskId = b.task as string;
+      const list = readComments(taskId);
+      const comment: Comment = {
+        id: crypto.randomUUID(),
+        doc,
+        startLine,
+        endLine,
+        body: text,
+        createdAt: Date.now(),
+      };
+      list.push(comment);
+      if (!writeComments(taskId, list)) {
+        return jsonResponse({ error: "write failed" }, 500);
+      }
+      return jsonResponse(comment);
+    }
+    // 行コメント削除: body {task, id} で単体、{task, all:true} で全削除。
+    if (path === "/api/comments" && req.method === "DELETE") {
+      let body: unknown;
+      try {
+        body = await req.json();
+      } catch {
+        return jsonResponse({ error: "invalid json" }, 400);
+      }
+      const b = (body ?? {}) as Record<string, unknown>;
+      const resolved = resolveTaskDir(b.task);
+      if ("error" in resolved) return jsonResponse({ error: resolved.error }, resolved.status);
+      const taskId = b.task as string;
+      const all = b.all === true;
+      const commentId = b.id;
+      if (!all && typeof commentId !== "string") {
+        return jsonResponse({ error: "id or all required" }, 400);
+      }
+      const next = all
+        ? []
+        : readComments(taskId).filter((c) => c.id !== commentId);
+      if (!writeComments(taskId, next)) {
+        return jsonResponse({ error: "write failed" }, 500);
+      }
+      return jsonResponse({ ok: true, remaining: next.length });
+    }
     if (path === "/style.css") {
       return new Response(Bun.file(join(import.meta.dir, "style.css")), {
         headers: { "content-type": "text/css; charset=utf-8" },
