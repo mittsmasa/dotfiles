@@ -266,6 +266,50 @@ export function persistMergedPr(id: string, pr: Pr): void {
   }
 }
 
+// 行コメント 1 件。doc は DOC_FILES のいずれか、startLine/endLine は元ソース行。
+interface Comment {
+  id: string;
+  doc: string;
+  startLine: number;
+  endLine: number;
+  body: string;
+  createdAt: number;
+}
+
+// task dir の comments.json を読む。不在 / パース失敗 / 形式不正は空配列。
+// 配列要素も型を厳密に検証し、壊れたエントリは捨てる（初回 GET / add で落ちない）。
+function readComments(id: string): Comment[] {
+  const raw = readMaybe(join(WORKFLOW_ROOT, id, "comments.json"));
+  if (!raw) return [];
+  try {
+    const j = JSON.parse(raw);
+    if (!Array.isArray(j)) return [];
+    return j.filter(
+      (c: unknown): c is Comment =>
+        !!c &&
+        typeof c === "object" &&
+        typeof (c as Comment).id === "string" &&
+        typeof (c as Comment).doc === "string" &&
+        typeof (c as Comment).startLine === "number" &&
+        typeof (c as Comment).endLine === "number" &&
+        typeof (c as Comment).body === "string" &&
+        typeof (c as Comment).createdAt === "number",
+    );
+  } catch {
+    return [];
+  }
+}
+
+// comments.json を書き戻す。成功で true、失敗で false（呼び出し側で 500）。
+function writeComments(id: string, list: Comment[]): boolean {
+  try {
+    writeFileSync(join(WORKFLOW_ROOT, id, "comments.json"), JSON.stringify(list, null, 2) + "\n");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function shortenHome(p: string): string {
   const home = homedir();
   return p === home || p.startsWith(home + "/") ? "~" + p.slice(home.length) : p;
