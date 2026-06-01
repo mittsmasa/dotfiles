@@ -779,8 +779,12 @@ function renderTask(id: string): string | null {
   const panels = docs
     .map((f, i) => {
       const raw = readFileSync(join(dir, f), "utf8");
-      const rendered = marked.parse(raw) as string;
-      return `<article class="panel${i === 0 ? " active" : ""}" data-doc="${f}">${rendered}</article>`;
+      // 行コメント用: lexer でトークン化 → 元ソース行を仕込む → parser で描画
+      const tokens = marked.lexer(raw);
+      assignLineNumbers(tokens, raw);
+      const rendered = marked.parser(tokens) as string;
+      const absPath = join(dir, f);
+      return `<article class="panel${i === 0 ? " active" : ""}" data-doc="${f}" data-doc-rel="${esc(f)}" data-path="${esc(absPath)}">${rendered}</article>`;
     })
     .join("");
   return page(
