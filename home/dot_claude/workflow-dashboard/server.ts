@@ -767,6 +767,29 @@ function validateCleanTarget(id: string, candidateIds: Set<string>): string | nu
   return null;
 }
 
+// API 用: task id を検証し、実体が WORKFLOW_ROOT 配下のディレクトリであることを
+// realpath で確認する。OK なら dir を、NG なら {error,status} を返す。
+// /api/archive のインラインガードと同じ規約（パストラバーサル拒否 + realpath 配下確認）。
+function resolveTaskDir(id: unknown): { dir: string } | { error: string; status: number } {
+  if (typeof id !== "string" || !id || id.includes("/") || id.includes("..") || id.includes("\0")) {
+    return { error: "invalid id", status: 400 };
+  }
+  const dir = join(WORKFLOW_ROOT, id);
+  if (!existsSync(dir) || !statSync(dir).isDirectory()) {
+    return { error: "task not found", status: 404 };
+  }
+  let real: string;
+  try {
+    real = realpathSync(dir);
+  } catch {
+    return { error: "realpath failed", status: 500 };
+  }
+  if (real !== join(WORKFLOW_ROOT_REAL, id) && !real.startsWith(WORKFLOW_ROOT_REAL + "/")) {
+    return { error: "outside workflow root", status: 400 };
+  }
+  return { dir };
+}
+
 function renderBoard(filter: string): string {
   const tasks = scanTasks();
   const byId = new Map(tasks.map((t) => [t.id, t]));
