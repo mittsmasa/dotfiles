@@ -858,18 +858,52 @@ function renderTask(id: string): string | null {
       return `<article class="panel${i === 0 ? " active" : ""}" data-doc="${f}" data-doc-rel="${esc(f)}" data-path="${esc(absPath)}">${rendered}</article>`;
     })
     .join("");
+  // 行コメント機能: 詳細ページに data-task を持たせ、クライアント(comments.js)が
+  // API 呼び出し時の task id として読む。一覧は右ドック(drawer 風 aside)。
   return page(
     id,
-    `<div class="detail">
+    `<div class="detail" data-task="${esc(id)}">
       <div class="detail__head">
         <a class="back" href="/">&larr; Board</a>
-        ${toggle}
+        <div class="detail__actions">
+          <button type="button" class="comments-toggle" data-comments-open aria-expanded="false" title="コメント一覧">
+            <span class="comments-toggle__icon" aria-hidden="true">&#128172;</span>
+            <span class="comments-toggle__label">コメント</span>
+            <span class="comments-toggle__count" data-comments-count hidden>0</span>
+          </button>
+          ${toggle}
+        </div>
       </div>
       <h1>${esc(id)}</h1>
       <div class="tabs">${tabs}</div>
       <div class="panels markdown">${panels}</div>
     </div>
-    <script type="module">${TASK_DETAIL_JS}</script>`,
+    <button type="button" class="comment-add-btn" data-comment-add hidden title="この行にコメント">+</button>
+    <div class="comment-overlay" data-comment-overlay hidden></div>
+    <aside class="comment-dock" data-comment-dock hidden aria-hidden="true" aria-labelledby="comment-dock-title">
+      <header class="comment-dock__head">
+        <h2 class="comment-dock__title" id="comment-dock-title">コメント <span data-comments-count-dock>0</span></h2>
+        <button type="button" class="comment-dock__close" data-comments-close aria-label="閉じる">&times;</button>
+      </header>
+      <div class="comment-dock__body" data-comment-list>
+        <p class="comment-dock__empty">読み込み中…</p>
+      </div>
+      <footer class="comment-dock__foot">
+        <div class="comment-confirm" data-clear-confirm hidden>
+          <p class="comment-confirm__msg" data-clear-confirm-msg></p>
+          <div class="comment-confirm__actions">
+            <button type="button" class="comment-btn comment-btn--ghost" data-clear-cancel>キャンセル</button>
+            <button type="button" class="comment-btn comment-btn--danger" data-clear-go>削除する</button>
+          </div>
+        </div>
+        <div class="comment-dock__foot-actions">
+          <button type="button" class="comment-btn comment-btn--danger-ghost" data-clear-all disabled>&#128465; 全削除</button>
+          <button type="button" class="comment-btn comment-btn--primary" data-copy-all disabled>&#128203; 全部コピー</button>
+        </div>
+      </footer>
+    </aside>
+    <script type="module">${TASK_DETAIL_JS}</script>
+    <script type="module">${COMMENTS_JS}</script>`,
   );
 }
 
