@@ -862,7 +862,7 @@ function renderTask(id: string, activeDoc?: string): string | null {
   const tabs = docs
     .map(
       (f, i) =>
-        `<button class="tab${i === 0 ? " active" : ""}" data-doc="${f}">${f.replace(".md", "")}</button>`,
+        `<button class="tab${i === activeIdx ? " active" : ""}" data-doc="${f}">${f.replace(".md", "")}</button>`,
     )
     .join("");
   const panels = docs
