@@ -1122,7 +1122,7 @@ function startServer() {
     const m = path.match(/^\/task\/(.+)$/);
     if (m) {
       const id = decodeURIComponent(m[1]);
-      const body = renderTask(id);
+      const body = renderTask(id, url.searchParams.get("doc") ?? undefined);
       if (body) return html(body);
       return html(
         page(
