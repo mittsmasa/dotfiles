@@ -873,7 +873,7 @@ function renderTask(id: string, activeDoc?: string): string | null {
       assignLineNumbers(tokens, raw);
       const rendered = marked.parser(tokens) as string;
       const absPath = join(dir, f);
-      return `<article class="panel${i === 0 ? " active" : ""}" data-doc="${f}" data-doc-rel="${esc(f)}" data-path="${esc(absPath)}">${rendered}</article>`;
+      return `<article class="panel${i === activeIdx ? " active" : ""}" data-doc="${f}" data-doc-rel="${esc(f)}" data-path="${esc(absPath)}">${rendered}</article>`;
     })
     .join("");
   // 行コメント機能: 詳細ページに data-task を持たせ、クライアント(comments.js)が
