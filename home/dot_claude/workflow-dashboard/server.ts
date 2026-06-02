@@ -838,13 +838,17 @@ function renderArchiveToggle(id: string, archived: boolean): string {
   return `<button type="button" class="archive-toggle" data-archive-toggle data-id="${esc(id)}" data-archived="${archived ? "true" : "false"}" aria-pressed="${archived ? "true" : "false"}" title="${archived ? "ボードに戻す" : "ボードから片付ける"}"><span class="archive-toggle__icon" aria-hidden="true">${archived ? "↩" : "📥"}</span><span class="archive-toggle__label">${label}</span></button>`;
 }
 
-function renderTask(id: string): string | null {
+function renderTask(id: string, activeDoc?: string): string | null {
   // パストラバーサル対策: タスク id はディレクトリ名のみ許可
   if (id.includes("/") || id.includes("..")) return null;
   const dir = join(WORKFLOW_ROOT, id);
   if (!existsSync(dir) || !statSync(dir).isDirectory()) return null;
   const meta = readMeta(dir);
   const docs = DOC_FILES.filter((f) => existsSync(join(dir, f)));
+  // クエリパラメータ ?doc=<file> で初期タブを決める。サーバ側で active を確定させる
+  // ことで、ハードリロードしても先頭タブへ戻らず（ちらつきも無く）指定タブが開く。
+  // 無効値・未指定は先頭(0)にフォールバック。
+  const activeIdx = activeDoc && docs.includes(activeDoc) ? docs.indexOf(activeDoc) : 0;
   if (docs.length === 0) {
     // 早期 return パスは TASK_DETAIL_JS を注入しないので archive トグルも出さない
     // （ハンドラが付かず無反応ボタンになるため）。実 archived タスクは research.md
