@@ -19,6 +19,11 @@ document.querySelectorAll(".tab").forEach((btn) => {
     const doc = btn.dataset.doc;
     document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("active", b === btn));
     document.querySelectorAll(".panel").forEach((p) => p.classList.toggle("active", p.dataset.doc === doc));
+    // 選択タブを URL に焼き付ける。ハードリロード時はサーバが ?doc= を読んで同じ
+    // タブを active にするので、リロードで先頭タブへ戻らない。履歴は汚さず replaceState。
+    const u = new URL(window.location.href);
+    u.searchParams.set("doc", doc);
+    history.replaceState(null, "", u);
     const active = document.querySelector(".panel.active");
     if (active) renderMermaidIn(active);
   });
