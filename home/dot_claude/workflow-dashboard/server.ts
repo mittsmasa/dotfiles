@@ -31,6 +31,10 @@ const COMMENTS_JS = readFileSync(
   join(import.meta.dir, "comments.js"),
   "utf8",
 );
+const BOARD_LIVE_JS = readFileSync(
+  join(import.meta.dir, "board-live.js"),
+  "utf8",
+);
 const WORKFLOW_ROOT_REAL = (() => {
   try {
     return realpathSync(WORKFLOW_ROOT);
@@ -588,7 +592,7 @@ function scanTasks(): Task[] {
 function page(
   title: string,
   body: string,
-  opts: { withCleanDrawer?: boolean; withLayoutToggle?: boolean } = {},
+  opts: { withCleanDrawer?: boolean; withLayoutToggle?: boolean; withLiveControls?: boolean } = {},
 ): string {
   const drawer = opts.withCleanDrawer
     ? `
@@ -624,6 +628,16 @@ function page(
   const layoutScript = opts.withLayoutToggle
     ? `<script type="module">${LAYOUT_TOGGLE_JS}</script>`
     : "";
+  // 自動更新インジケータ（&#10227; 回転 = 稼働 / 淡色 = 停止）と通知トグル。ボードページのみ。
+  const liveControls = opts.withLiveControls
+    ? `<div class="live-controls" data-live-controls>
+    <span class="live-indicator" data-live-indicator data-state="live" title="15 秒ごとに自動更新中"><span class="live-indicator__icon" aria-hidden="true">&#10227;</span><span class="live-indicator__label">自動更新</span></span>
+    <button type="button" class="notify-toggle" data-notify-toggle aria-pressed="false" data-denied="false" title="クリックで承認待ちを通知"><span class="notify-toggle__icon" data-notify-icon aria-hidden="true">&#128276;</span><span class="notify-toggle__label">通知</span></button>
+  </div>`
+    : "";
+  const liveScript = opts.withLiveControls
+    ? `<script type="module">${BOARD_LIVE_JS}</script>`
+    : "";
   return `<!doctype html>
 <html lang="ja"><head>
 <meta charset="utf-8">
@@ -635,11 +649,13 @@ function page(
 <header class="topbar">
   <a class="brand" href="/">&#9881; Workflow Dashboard</a>
   ${layoutToggle}
+  ${liveControls}
   ${opts.withCleanDrawer ? '<button type="button" class="topbar__clean" data-clean-open aria-label="クリーンアップ"><span class="topbar__clean-icon" aria-hidden="true">🧹</span><span class="topbar__clean-label">Clean</span></button>' : ""}
 </header>
 <main>${body}</main>
 ${drawer}
 ${layoutScript}
+${liveScript}
 </body></html>`;
 }
 
@@ -808,11 +824,11 @@ function resolveTaskDir(id: unknown): { dir: string } | { error: string; status:
   return { dir };
 }
 
-function renderBoard(filter: string): string {
-  const tasks = scanTasks();
-  const byId = new Map(tasks.map((t) => [t.id, t]));
+// COLUMNS ごとに section を組む。`/`（renderBoard）と `/api/board`（自動更新）で
+// 共有し、カード描画を単一の真実に保つ（クライアントに renderCard を複製しない）。
+function renderColumns(tasks: Task[], byId: Map<string, Task>, filter: string): string {
   const filtered = tasks.filter((t) => matchesFilter(t, filter));
-  const cols = COLUMNS.map(({ phase, label }) => {
+  return COLUMNS.map(({ phase, label }) => {
     const inCol = filtered.filter((t) => t.phase === phase);
     const cards = inCol.map((t) => renderCard(t, byId)).join("");
     return `
@@ -824,10 +840,16 @@ function renderBoard(filter: string): string {
         <div class="col-body">${cards || '<p class="empty">&mdash;</p>'}</div>
       </section>`;
   }).join("");
+}
+
+function renderBoard(filter: string): string {
+  const tasks = scanTasks();
+  const byId = new Map(tasks.map((t) => [t.id, t]));
+  const cols = renderColumns(tasks, byId, filter);
   return page(
     "Workflow Dashboard",
     `${renderFilterBar(tasks, filter)}<div class="board">${cols}</div>`,
-    { withCleanDrawer: true, withLayoutToggle: true },
+    { withCleanDrawer: true, withLayoutToggle: true, withLiveControls: true },
   );
 }
 
@@ -936,15 +958,26 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
-function startServer() {
-  return Bun.serve({
-  port: PORT,
-  async fetch(req) {
+// ルーティング本体。startServer から fetch ハンドラとして渡すほか、
+// test が Request を直接渡してエンドポイントを叩けるよう export している。
+export async function handleRequest(req: Request): Promise<Response> {
     const url = new URL(req.url);
     const path = url.pathname;
     if (path === "/") {
       const filter = url.searchParams.get("cwd") ?? "";
       return html(renderBoard(filter));
+    }
+    // 自動更新用: ボードの cols fragment と各タスクの phase/title を JSON で返す。
+    // クライアント(board-live.js)が html を `.board` に差し込み、states で phase 遷移を
+    // 検知して通知する。cwd フィルタは `/` と同じ matchesFilter で揃える。
+    if (path === "/api/board" && req.method === "GET") {
+      const filter = url.searchParams.get("cwd") ?? "";
+      const tasks = scanTasks();
+      const byId = new Map(tasks.map((t) => [t.id, t]));
+      const states = tasks
+        .filter((t) => matchesFilter(t, filter))
+        .map((t) => ({ id: t.id, phase: t.phase, title: t.title }));
+      return jsonResponse({ html: renderColumns(tasks, byId, filter), states });
     }
     if (path === "/api/clean/candidates" && req.method === "GET") {
       return jsonResponse(scanCleanCandidates());
@@ -1133,8 +1166,10 @@ function startServer() {
       );
     }
     return new Response("Not Found", { status: 404 });
-  },
-  });
+}
+
+function startServer() {
+  return Bun.serve({ port: PORT, fetch: handleRequest });
 }
 
 // 直接起動時のみ listen する（test から import したときはサーバを立てない）

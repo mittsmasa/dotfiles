@@ -89,6 +89,87 @@ a:hover {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
+/* --- live controls (自動更新インジケータ + 通知トグル) --- */
+.live-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: 16px;
+}
+/* layout-toggle の margin-left:auto で右ブロック化した後、clean との間隔を確保 */
+.live-controls + .topbar__clean {
+  margin-left: 10px;
+}
+.live-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--done);
+}
+.live-indicator__icon {
+  display: inline-block;
+  font-size: 13px;
+  line-height: 1;
+  animation: live-spin 2.4s linear infinite;
+}
+.live-indicator__label {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+/* idle: 取得失敗 / hidden 中。淡色 + 回転停止 */
+.live-indicator[data-state="idle"] {
+  color: var(--fg-muted);
+}
+.live-indicator[data-state="idle"] .live-indicator__icon {
+  animation: none;
+  opacity: 0.5;
+}
+@keyframes live-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .live-indicator__icon {
+    animation: none;
+  }
+}
+.notify-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--fg-muted);
+  border-radius: 999px;
+  padding: 4px 12px 4px 10px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: color 0.12s, border-color 0.12s, background 0.12s;
+}
+.notify-toggle:hover {
+  color: var(--review);
+  border-color: rgba(163, 113, 247, 0.5);
+  background: rgba(163, 113, 247, 0.08);
+}
+.notify-toggle[aria-pressed="true"] {
+  color: var(--review);
+  border-color: rgba(163, 113, 247, 0.6);
+  background: rgba(163, 113, 247, 0.12);
+}
+.notify-toggle[data-denied="true"] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.notify-toggle__label {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
 /* --- layout toggle (segmented control) --- */
 .layout-toggle {
   margin-left: auto;

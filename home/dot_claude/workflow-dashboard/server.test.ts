@@ -8,7 +8,7 @@
 // import してもサーバーは起動しない（純関数だけが手に入る）。
 
 import { describe, expect, test } from "bun:test";
-import { derivePhase, hasMarker, parseBranchLine } from "./server.ts";
+import { derivePhase, handleRequest, hasMarker, parseBranchLine } from "./server.ts";
 
 // テスト用のマーカー行ヘルパ。plan.md / verify-results.md の canonical 書式
 // （行頭 "- " 付き）を組み立てる。
@@ -109,6 +109,49 @@ describe("hasMarker", () => {
   test("複数行のうち 1 行にあればマッチ", () => {
     const text = "# plan\n\n- Plan Status: complete\n- Approval Status: pending\n";
     expect(hasMarker(text, "Approval Status", "pending")).toBe(true);
+  });
+});
+
+// 自動更新 endpoint。handleRequest を直接叩いて実ルート（cwd パース・状態整形）を
+// 検証する。scanTasks() は実際の ~/.claude/workflow を読むので、件数の固定値ではなく
+// 形状・不変条件・フィルタの効き方だけをアサートする（データに依存しない範囲で）。
+describe("/api/board endpoint", () => {
+  const req = (qs: string) =>
+    handleRequest(new Request(`http://localhost/api/board${qs}`));
+
+  test("renderColumns 抽出: `/` の board fragment と /api/board の html が一致", async () => {
+    const [home, api] = await Promise.all([
+      handleRequest(new Request("http://localhost/")),
+      req(""),
+    ]);
+    const homeHtml = await home.text();
+    const { html } = await api.json();
+    // `/` は cols を <div class="board">…</div> で包むだけ。抽出関数を共有している限り
+    // api の html 文字列が `/` HTML にそのまま含まれる（分割でのリグレッションを検知）。
+    expect(typeof html).toBe("string");
+    expect(homeHtml).toContain(`<div class="board">${html}</div>`);
+  });
+
+  test("JSON 形状: html は string、states は {id, phase, title} の配列", async () => {
+    const res = await req("");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("application/json");
+    const data = await res.json();
+    expect(typeof data.html).toBe("string");
+    expect(Array.isArray(data.states)).toBe(true);
+    for (const s of data.states) {
+      expect(typeof s.id).toBe("string");
+      expect(typeof s.phase).toBe("string");
+      expect(typeof s.title).toBe("string");
+    }
+  });
+
+  test("cwd フィルタが効く: 該当なしの cwd は states 0、無指定が上限", async () => {
+    const [all, none] = await Promise.all([req(""), req("?cwd=/__no_such_repo__")]);
+    const allStates = (await all.json()).states;
+    const noneStates = (await none.json()).states;
+    expect(noneStates.length).toBe(0);
+    expect(allStates.length).toBeGreaterThanOrEqual(noneStates.length);
   });
 });
 
