@@ -441,6 +441,17 @@ function getRepoState(cwd: string): RepoState {
   return { dirty, branch, owner, repo, repoRoot };
 }
 
+// develop / main / master / release・staging 系は「長命ブランチ」。タスク用の
+// feature ブランチではないので、ここから出ている PR（例: 定期リリース PR
+// "develop to release/..."）を「そのタスクの PR」と取り違えると、無関係な merged
+// PR で done 判定されてしまう。長命ブランチでは live PR も meta.pr キャッシュも使わ
+// ない（PR バッジ非表示・PR 由来の phase 判定を無効化し、plan/verify/dirty で判定）。
+function isLongLivedBranch(branch: string | null): boolean {
+  if (!branch) return false;
+  if (/^(develop|main|master|trunk|staging|production)$/.test(branch)) return true;
+  return /^release\//.test(branch);
+}
+
 function gqlEscape(s: string): string {
   return s.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
