@@ -129,6 +129,32 @@ PR を作らないタスク（ローカル設定、調査のみ、chezmoi 経由
 
 ---
 
+## 並列実行: dynamic workflow（Scope Guard 連動オプトイン）
+
+Claude の Workflow ツール（`agent()` / `parallel()` / `pipeline()` をスクリプトで回す multi-agent orchestration）を、特定フェーズの実行エンジンとして任意発動で使う。常用しない。
+
+### 発動条件（すべて満たす）
+
+1. Phase 1 の Scope Guard が警告（2 つ以上該当）を出した
+2. 対象が次のいずれか: Research の多面探索 / Verify の多項目並列 / 設計案の judge panel
+3. Claude が「ここは並列が効く」と提案し、ユーザーが承認した（autonomy.md の設計判断ゲートに従う。自動起動はしない）
+
+この workflow.md に発動条件を明記することをもって、Workflow ツールの explicit opt-in 要件を満たす standing opt-in とする。発動はフェーズ単位の都度承認制。
+
+### 適用してよいフェーズ
+
+| フェーズ | 使い方 |
+|---|---|
+| Research | サブシステムごとに並列読み込み → research.md に集約 |
+| Verify | plan.md の動作確認項目ごとに並列検証 |
+| 設計探索 | 複数方針を独立生成 → 評価・統合（judge panel） |
+
+### 不可侵
+
+- Phase 3 Plan Review Loop には使わない。hook（`plan-review-hook.sh`）が既に並列レビューを担う。二重化しない。
+- Phase 4 Approval は人間のみ。dynamic workflow に承認を委ねない。
+- コスト節度（過剰実装回避）を優先。Scope Guard 非警告のタスクには使わない。
+
 ## Implementation Guard
 
 Approval=approved, Review=pass, hash 一致を満たさない限り `$WORKFLOW_DIR` 外へのソース書き込みと実装系 Bash をブロック。research.md / plan.md 編集は常に許可。
