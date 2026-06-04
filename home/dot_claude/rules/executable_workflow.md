@@ -31,6 +31,7 @@ dashboard の In Progress に出すため、モード問わず以下を実行:
 3. `meta.json` 最小作成: `{"title":"<一行要約>","cwd":"<実作業 dir>"}`。`createdAt` / `branch` は hook が自動補完
 4. `.workflow` symlink は任意（リポジトリ内で短縮パスが欲しい場合のみ `ln -s`）。既に実 dir として存在するなら移行しない
 5. **dependsOn 判定**: `cwd` が git リポジトリで HEAD が `main`/`master` 以外から派生している場合、`~/.claude/workflow/*/meta.json` を grep して同じ派生元 `branch` を持つ task-id を探し、その PR が未マージなら `dependsOn: ["<task-id>", ...]` を meta.json に書く。該当なし or main 直系なら書かない
+6. **cwd 分離判定**: dependsOn を 1 つ以上書いた場合、その派生元タスクと同じ作業ディレクトリを共有しない。`git worktree add .claude/worktrees/{slug} {branch}` で専用 worktree を切り、`meta.cwd` をその worktree パスにする。理由: dashboard は 1 ディレクトリにつき現在チェックアウト中の 1 ブランチしか観測できず、cwd を共有するとブランチ切替で先行タスクの PR 検出が壊れ、PR Open → PR Pending に誤降格する
 
 モード別追加:
 - **直接実行**: 上記のみ。Phase 6 で `verify-results.md` 簡略版、Phase 7 で `- Status: done` 追記
