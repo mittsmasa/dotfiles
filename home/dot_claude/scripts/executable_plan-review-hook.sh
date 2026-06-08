@@ -221,6 +221,7 @@ $(cat "$prompt_file")"
      PLAN_REVIEW_REVIEWER_NAME="$name" \
      PLAN_REVIEW_REVIEWER_ROUND="$round" \
      "$REVIEWER_BIN" --print \
+       --add-dir "$WORKFLOW_DIR" \
        --system-prompt "$sys_prompt" \
        "$user_prompt" \
        > "$out" 2>&1; then
