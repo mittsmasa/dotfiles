@@ -16,3 +16,8 @@ just = "latest"
 [settings]
 idiomatic_version_file_enable_tools = ["node"]
 minimum_release_age = "7d"
+
+# gh は keyring にトークンを保存しており mise のデフォルト hosts.yml 連携では読めないため、
+# gh に直接問い合わせてトークンを取得する。これで GitHub API の rate limit (403) を回避する。
+[settings.github]
+credential_command = "gh auth token"
