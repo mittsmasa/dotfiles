@@ -1,4 +1,5 @@
 {
+  "autoMemoryEnabled": false,
   "env": {
     "ENABLE_TOOL_SEARCH": "true"
   },
@@ -266,6 +267,5 @@
   "theme": "dark-daltonized",
   "agentPushNotifEnabled": true,
   "skipAutoPermissionPrompt": true,
-  "voiceEnabled": false,
-  "skipWorkflowUsageWarning": true
+  "voiceEnabled": false
 }
