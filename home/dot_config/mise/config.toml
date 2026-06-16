@@ -12,14 +12,10 @@ bun = "1.3.14"
 "npm:@github/copilot" = "1.0.48"
 just = "latest"
 "npm:vercel" = "54.5.1"
+uv = "0.11.16"
 age = "latest"
 "github:jdx/fnox" = "1.26.0"
 
 [settings]
 idiomatic_version_file_enable_tools = ["node"]
 minimum_release_age = "7d"
-
-# gh は keyring にトークンを保存しており mise のデフォルト hosts.yml 連携では読めないため、
-# gh に直接問い合わせてトークンを取得する。これで GitHub API の rate limit (403) を回避する。
-[settings.github]
-credential_command = "gh auth token"
