@@ -258,7 +258,7 @@
   },
   "outputStyle": "maaya",
   "language": "日本語",
-  "effortLevel": "high",
+  "effortLevel": "xhigh",
   "autoUpdatesChannel": "latest",
   "voice": {
     "enabled": false,

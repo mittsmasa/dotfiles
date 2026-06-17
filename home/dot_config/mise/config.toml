@@ -12,6 +12,8 @@ bun = "1.3.14"
 "npm:@github/copilot" = "1.0.48"
 just = "latest"
 "npm:vercel" = "54.5.1"
+age = "latest"
+"github:jdx/fnox" = "1.26.0"
 
 [settings]
 idiomatic_version_file_enable_tools = ["node"]
