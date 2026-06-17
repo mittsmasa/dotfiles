@@ -1,0 +1,273 @@
+{
+  "autoMemoryEnabled": false,
+  "env": {
+    "ENABLE_TOOL_SEARCH": "true"
+  },
+  "permissions": {
+    "allow": [
+      "Bash(node:*)",
+      "Bash(tsx:*)",
+      "Bash(tsc:*)",
+      "Bash(tsgo:*)",
+      "Bash(ts-node:*)",
+      "Bash(pnpm:*)",
+      "Bash(yarn:*)",
+      "Bash(bun:*)",
+      "Bash(envchain npm pnpm:*)",
+      "Bash(deno:*)",
+      "Bash(deno task:*)",
+      "Bash(deno test:*)",
+      "Bash(deno fmt:*)",
+      "Bash(deno lint:*)",
+      "Bash(deno compile:*)",
+      "Bash(eslint:*)",
+      "Bash(prettier:*)",
+      "Bash(biome:*)",
+      "Bash(pnpm biome:*)",
+      "Bash(oxlint:*)",
+      "Bash(vitest:*)",
+      "Bash(pnpm vitest:*)",
+      "Bash(jest:*)",
+      "Bash(ava:*)",
+      "Bash(mocha:*)",
+      "Bash(tap:*)",
+      "Bash(coverage:*)",
+      "Bash(webpack:*)",
+      "Bash(vite:*)",
+      "Bash(rollup:*)",
+      "Bash(parcel:*)",
+      "Bash(swc:*)",
+      "Bash(esbuild:*)",
+      "Bash(next:*)",
+      "Bash(nuxt:*)",
+      "Bash(astro:*)",
+      "Bash(svelte:*)",
+      "Bash(sveltekit:*)",
+      "Bash(remix:*)",
+      "Bash(turbo:*)",
+      "Bash(turborepo:*)",
+      "Bash(nx:*)",
+      "Bash(lerna:*)",
+      "Bash(mise:*)",
+      "Bash(direnv:*)",
+      "Bash(asdf:*)",
+      "Bash(rtx:*)",
+      "Bash(uv:*)",
+      "Bash(uvx:*)",
+      "Bash(git:*)",
+      "Bash(gh:*)",
+      "Bash(tig:*)",
+      "Bash(ls:*)",
+      "Bash(exa:*)",
+      "Bash(cat:*)",
+      "Bash(bat:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)",
+      "Bash(grep:*)",
+      "Bash(rg:*)",
+      "Bash(fd:*)",
+      "Bash(fzf:*)",
+      "Bash(find:*)",
+      "Bash(tree:*)",
+      "Bash(wc:*)",
+      "Bash(sort:*)",
+      "Bash(diff:*)",
+      "Bash(jq:*)",
+      "Bash(mkdir:*)",
+      "Bash(touch:*)",
+      "Bash(cp:*)",
+      "Bash(mv:*)",
+      "Bash(rm:*)",
+      "Bash(ln:*)",
+      "Bash(chmod:*)",
+      "Bash(chown:*)",
+      "Bash(echo:*)",
+      "Bash(which:*)",
+      "Bash(pwd)",
+      "Bash(cd:*)",
+      "Bash(tee:*)",
+      "Bash(open:*)",
+      "Bash(xargs:*)",
+      "Bash(awk:*)",
+      "Bash(sed:*)",
+      "Bash(test:*)",
+      "Bash(true)",
+      "Bash(false)",
+      "Bash(date:*)",
+      "Bash(whoami)",
+      "Bash(env)",
+      "Bash(export:*)",
+      "Bash(history)",
+      "Bash(alias:*)",
+      "Bash(time:*)",
+      "Bash(timeout:*)",
+      "Bash(curl:*)",
+      "Bash(playwright-cli:*)",
+      "Bash(playwright:*)",
+      "Bash(wget:*)",
+      "Bash(ssh:*)",
+      "Bash(scp:*)",
+      "Bash(rsync:*)",
+      "Bash(ping:*)",
+      "Bash(nslookup:*)",
+      "Bash(dig:*)",
+      "Bash(ps:*)",
+      "Bash(kill:*)",
+      "Bash(killall:*)",
+      "Bash(pkill:*)",
+      "Bash(lsof:*)",
+      "Bash(netstat:*)",
+      "Bash(perf:*)",
+      "Bash(unzip:*)",
+      "Bash(tar:*)",
+      "Bash(gzip:*)",
+      "Bash(gunzip:*)",
+      "Bash(7z:*)",
+      "Bash(chezmoi:*)",
+      "Bash(tmux:*)",
+      "Bash(cmux:*)",
+      "Bash(fresh:*)",
+      "Bash(agent-browser:*)",
+      "Bash(claude mcp add:*)",
+      "Bash(claude mcp list:*)",
+      "Bash(claude mcp get:*)",
+      "Bash(similarity-ts:*)",
+      "Bash(zizmor:*)",
+      "Bash(tsg:*)",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:vitest.dev)",
+      "WebFetch(domain:pnpm.io)",
+      "WebFetch(domain:www.cve.org)",
+      "WebFetch(domain:docs.astral.sh)",
+      "mcp__context7__resolve-library-id",
+      "mcp__context7__get-library-docs",
+      "mcp__chrome__list_pages",
+      "mcp__chrome__navigate_page",
+      "mcp__chrome__wait_for",
+      "mcp__chrome__take_screenshot",
+      "mcp__chrome__new_page",
+      "mcp__chrome__take_snapshot",
+      "mcp__chrome-devtools__list_pages",
+      "mcp__chrome-devtools__navigate_page",
+      "mcp__chrome-devtools__take_snapshot",
+      "mcp__chrome-devtools__take_screenshot",
+      "mcp__chrome-devtools__evaluate_script",
+      "mcp__playwright__browser_navigate",
+      "mcp__playwright__browser_take_screenshot",
+      "mcp__Figma_Dev_Mode_MCP__get_design_context",
+      "mcp__Figma_Dev_Mode_MCP__get_screenshot",
+      "mcp__Figma_Dev_Mode_MCP__get_variable_defs",
+      "mcp__Figma_Dev_Mode_MCP__get_metadata",
+      "mcp__Figma_Dev_Mode_MCP__get_code_connect_map",
+      "mcp__figma-dev-mode-mcp-server__get_design_context",
+      "mcp__figma-dev-mode-mcp-server__get_screenshot",
+      "mcp__next-devtools__upgrade_nextjs_16",
+      "mcp__serena__list_dir",
+      "mcp__serena__search_for_pattern",
+      "mcp__serena__find_file",
+      "mcp__serena__get_symbols_overview",
+      "mcp__serena__find_symbol",
+      "SlashCommand(/create-component:*)",
+      "SlashCommand(/generate-stories:*)"
+    ],
+    "deny": [
+      "Bash(npx:*)"
+    ],
+    "defaultMode": "auto"
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/scripts/detect-multiplexer.sh"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/scripts/concise-jp-reminder.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/scripts/concise-jp-reminder.sh",
+            "if": "Bash(gh *)"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/scripts/workflow-meta-hook.sh"
+          },
+          {
+            "type": "command",
+            "command": "bash ~/.claude/scripts/plan-review-hook.sh",
+            "timeout": 600
+          },
+          {
+            "type": "command",
+            "command": "bash ~/.claude/scripts/chezmoi-sync-hook.sh"
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/scripts/notify.sh"
+          }
+        ]
+      }
+    ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "bash ~/.claude/statusline.sh"
+  },
+  "enabledPlugins": {
+    "document-skills@anthropic-agent-skills": false,
+    "context7@claude-plugins-official": true,
+    "using-cmux@hummer98-using-cmux": true
+  },
+  "extraKnownMarketplaces": {
+    "hummer98-using-cmux": {
+      "source": {
+        "source": "github",
+        "repo": "hummer98/using-cmux"
+      }
+    }
+  },
+  "outputStyle": "maaya",
+  "language": "日本語",
+  "effortLevel": "high",
+  "autoUpdatesChannel": "latest",
+  "voice": {
+    "enabled": false,
+    "mode": "hold"
+  },
+  "theme": "dark-daltonized",
+  "agentPushNotifEnabled": true,
+  "skipAutoPermissionPrompt": true,
+  "voiceEnabled": false,
+  "skipWorkflowUsageWarning": true,
+  "model": "claude-opus-4-6"
+}
