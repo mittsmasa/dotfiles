@@ -45,6 +45,11 @@ if command -v mise &> /dev/null; then
   export PATH="$HOME/.local/share/mise/shims:$PATH"
 fi
 
+# fnox (fnox.toml のあるディレクトリに cd すると env=true の secrets を自動ロード)
+if command -v fnox &> /dev/null; then
+  eval "$(fnox activate zsh)"
+fi
+
 # sudo でも mise 管理ツール（pnpm 等）を使えるようにする
 alias sudo='sudo env "PATH=$PATH"'
 
@@ -77,7 +82,5 @@ eval "$(starship init zsh)"
 # Local overrides (secrets, machine-specific settings)
 [ -f "$HOME/.zshrc.local" ] && source "$HOME/.zshrc.local"
 
-{{ if eq .chezmoi.os "linux" -}}
 # Turso
-export PATH="$PATH:/home/mittsmasa/.turso"
-{{ end -}}
+export PATH="$PATH:{{ .chezmoi.homeDir }}/.turso"
