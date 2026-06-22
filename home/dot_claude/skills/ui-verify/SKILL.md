@@ -1,6 +1,6 @@
 ---
 name: ui-verify
-description: Visual verification skill for UI/frontend work. Use proactively after any UI implementation, style change, or component edit — accessibility snapshots cannot judge CSS, layout, color, or "does it look right". Drives playwright-cli in two stages: (1) self-check via screenshot + snapshot diff to settle what the AI can judge alone, (2) when human judgment is needed (design fidelity, ambiguous selection, animation feel), open the Playwright Dashboard in annotation mode so the user can drag a region and leave a comment. Triggers: any task that ends with rendered UI changes; workflow.md Phase 6 verification items involving the browser; explicit requests like 「見た目を確認して」「UI レビュー」「動作確認」.
+description: "Visual verification skill for UI/frontend work. Use proactively after any UI implementation, style change, or component edit — accessibility snapshots cannot judge CSS, layout, color, or 'does it look right'. Drives playwright-cli in two stages: (1) self-check via screenshot + snapshot diff to settle what the AI can judge alone, (2) when human judgment is needed (design fidelity, ambiguous selection, animation feel), open the Playwright Dashboard in annotation mode so the user can drag a region and leave a comment. Triggers: any task that ends with rendered UI changes; workflow.md Phase 6 verification items involving the browser; explicit requests like 「見た目を確認して」「UI レビュー」「動作確認」."
 allowed-tools: Bash(playwright-cli:*) Bash(npx:*)
 ---
 
