@@ -890,6 +890,18 @@ function renderTask(id: string, activeDoc?: string): string | null {
     );
   }
   const toggle = renderArchiveToggle(id, meta.archived);
+  // phase を計算して承認バーの表示判定に使う
+  const plan = readMaybe(join(dir, "plan.md"));
+  const verify = readMaybe(join(dir, "verify-results.md"));
+  const cwd = meta.cwd;
+  const dirty = cwd ? getRepoState(cwd).dirty : null;
+  const taskPhase = derivePhase(plan, null, verify, meta.noPr, dirty);
+  const approvalBar = taskPhase === "review"
+    ? `<div class="approval-bar" data-approval-bar>
+        <button type="button" class="approve-btn" data-approve-btn data-id="${esc(id)}">Approve</button>
+        <button type="button" class="change-request-btn" data-change-request-btn data-id="${esc(id)}">Change Request</button>
+      </div>`
+    : "";
   const tabs = docs
     .map(
       (f, i) =>
