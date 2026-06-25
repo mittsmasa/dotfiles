@@ -8,7 +8,7 @@
 // import してもサーバーは起動しない（純関数だけが手に入る）。
 
 import { describe, expect, test } from "bun:test";
-import { derivePhase, handleRequest, hasMarker, parseBranchLine } from "./server.ts";
+import { derivePhase, handleRequest, hasMarker, parseBranchLine, replaceMarker } from "./server.ts";
 
 // テスト用のマーカー行ヘルパ。plan.md / verify-results.md の canonical 書式
 // （行頭 "- " 付き）を組み立てる。
