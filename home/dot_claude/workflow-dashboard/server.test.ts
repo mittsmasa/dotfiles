@@ -155,6 +155,34 @@ describe("/api/board endpoint", () => {
   });
 });
 
+describe("replaceMarker", () => {
+  test("canonical 書式（行頭 - 付き）を書き換える", () => {
+    const text = "# Plan\n\n- Approval Status: pending\n- Plan Status: complete\n";
+    const result = replaceMarker(text, "Approval Status", "approved");
+    expect(result).toContain("- Approval Status: approved");
+    expect(result).not.toContain("pending");
+    expect(result).toContain("- Plan Status: complete");
+  });
+
+  test("素のキー（- 無し）も書き換える", () => {
+    const text = "Approval Status: pending\n";
+    const result = replaceMarker(text, "Approval Status", "approved");
+    expect(result).toContain("- Approval Status: approved");
+  });
+
+  test("マーカーが無ければ null", () => {
+    expect(replaceMarker("# no marker", "Approval Status", "approved")).toBeNull();
+  });
+
+  test("他のマーカーに影響しない", () => {
+    const text = "- Plan Status: complete\n- Approval Status: pending\n- Review Status: pass\n";
+    const result = replaceMarker(text, "Approval Status", "needs_human_review");
+    expect(result).toContain("- Plan Status: complete");
+    expect(result).toContain("- Approval Status: needs_human_review");
+    expect(result).toContain("- Review Status: pass");
+  });
+});
+
 describe("parseBranchLine", () => {
   test("upstream 付き", () => {
     expect(parseBranchLine("## main...origin/main")).toBe("main");
