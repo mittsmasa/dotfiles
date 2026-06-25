@@ -881,12 +881,18 @@ function renderTask(id: string, activeDoc?: string): string | null {
   // 無効値・未指定は先頭(0)にフォールバック。
   const activeIdx = activeDoc && docs.includes(activeDoc) ? docs.indexOf(activeDoc) : 0;
   if (docs.length === 0) {
-    // 早期 return パスは TASK_DETAIL_JS を注入しないので archive トグルも出さない
-    // （ハンドラが付かず無反応ボタンになるため）。実 archived タスクは research.md
-    // を残すので通常 docs>=1 のパスを通る。
+    const emptyToggle = renderArchiveToggle(id, meta.archived);
     return page(
       id,
-      `<div class="detail"><a class="back" href="/">&larr; Board</a><h1>${esc(id)}</h1><p class="empty">md ドキュメントなし</p></div>`,
+      `<div class="detail">
+        <div class="detail__head">
+          <a class="back" href="/">&larr; Board</a>
+          <div class="detail__actions">${emptyToggle}</div>
+        </div>
+        <h1>${esc(id)}</h1>
+        <p class="empty">md ドキュメントなし</p>
+      </div>
+      <script type="module">${TASK_DETAIL_JS}</script>`,
     );
   }
   const toggle = renderArchiveToggle(id, meta.archived);
