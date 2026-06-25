@@ -70,3 +70,45 @@ if (archiveBtn) {
     }
   });
 }
+
+// Approve / Change Request ボタン
+const approvalBar = document.querySelector("[data-approval-bar]");
+if (approvalBar) {
+  const approveBtn = approvalBar.querySelector("[data-approve-btn]");
+  const changeReqBtn = approvalBar.querySelector("[data-change-request-btn]");
+
+  async function handleApproval(btn, endpoint, successMsg) {
+    if (btn.disabled) return;
+    const id = btn.dataset.id;
+    btn.disabled = true;
+    changeReqBtn.disabled = true;
+    approveBtn.disabled = true;
+    const prevText = btn.textContent;
+    btn.textContent = "更新中…";
+    try {
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ task: id }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "更新に失敗しました");
+      approvalBar.innerHTML = `<span class="approval-bar__result">${successMsg}</span>`;
+    } catch (e) {
+      btn.textContent = "失敗: " + (e?.message ?? e);
+      setTimeout(() => {
+        btn.textContent = prevText;
+        btn.disabled = false;
+        changeReqBtn.disabled = false;
+        approveBtn.disabled = false;
+      }, 2400);
+    }
+  }
+
+  approveBtn.addEventListener("click", () =>
+    handleApproval(approveBtn, "/api/approve", "承認しました"),
+  );
+  changeReqBtn.addEventListener("click", () =>
+    handleApproval(changeReqBtn, "/api/change-request", "差し戻しました"),
+  );
+}
