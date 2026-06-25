@@ -1069,6 +1069,66 @@ export async function handleRequest(req: Request): Promise<Response> {
       }
       return jsonResponse({ id, archived });
     }
+    // Approve: plan.md の Approval Status を approved に書き換える。
+    // review フェーズでなければ 409。マーカー行が無ければ 400。
+    if (path === "/api/approve" && req.method === "POST") {
+      let body: unknown;
+      try {
+        body = await req.json();
+      } catch {
+        return jsonResponse({ error: "invalid json" }, 400);
+      }
+      const id = (body as { task?: unknown })?.task;
+      const resolved = resolveTaskDir(id);
+      if ("error" in resolved) return jsonResponse({ error: resolved.error }, resolved.status);
+      const planPath = join(resolved.dir, "plan.md");
+      const plan = readMaybe(planPath);
+      if (!plan) return jsonResponse({ error: "plan.md not found" }, 404);
+      const verify = readMaybe(join(resolved.dir, "verify-results.md"));
+      const meta = readMeta(resolved.dir);
+      const cwd = meta.cwd;
+      const dirty = cwd ? getRepoState(cwd).dirty : null;
+      const phase = derivePhase(plan, null, verify, meta.noPr, dirty);
+      if (phase !== "review") return jsonResponse({ error: "not in review phase", phase }, 409);
+      const replaced = replaceMarker(plan, "Approval Status", "approved");
+      if (!replaced) return jsonResponse({ error: "Approval Status marker not found" }, 400);
+      try {
+        writeFileSync(planPath, replaced);
+      } catch {
+        return jsonResponse({ error: "write failed" }, 500);
+      }
+      return jsonResponse({ ok: true, phase: "in-progress" });
+    }
+    // Change Request: plan.md の Approval Status を needs_human_review に書き換える。
+    // 差し戻し理由は既存の行コメント機能で記入済みの前提。
+    if (path === "/api/change-request" && req.method === "POST") {
+      let body: unknown;
+      try {
+        body = await req.json();
+      } catch {
+        return jsonResponse({ error: "invalid json" }, 400);
+      }
+      const id = (body as { task?: unknown })?.task;
+      const resolved = resolveTaskDir(id);
+      if ("error" in resolved) return jsonResponse({ error: resolved.error }, resolved.status);
+      const planPath = join(resolved.dir, "plan.md");
+      const plan = readMaybe(planPath);
+      if (!plan) return jsonResponse({ error: "plan.md not found" }, 404);
+      const verify = readMaybe(join(resolved.dir, "verify-results.md"));
+      const meta = readMeta(resolved.dir);
+      const cwd = meta.cwd;
+      const dirty = cwd ? getRepoState(cwd).dirty : null;
+      const phase = derivePhase(plan, null, verify, meta.noPr, dirty);
+      if (phase !== "review") return jsonResponse({ error: "not in review phase", phase }, 409);
+      const replaced = replaceMarker(plan, "Approval Status", "needs_human_review");
+      if (!replaced) return jsonResponse({ error: "Approval Status marker not found" }, 400);
+      try {
+        writeFileSync(planPath, replaced);
+      } catch {
+        return jsonResponse({ error: "write failed" }, 500);
+      }
+      return jsonResponse({ ok: true, phase: "review" });
+    }
     // 行コメント一覧取得: ?task=<id>。task dir の comments.json をそのまま返す。
     if (path === "/api/comments" && req.method === "GET") {
       const taskId = url.searchParams.get("task");
