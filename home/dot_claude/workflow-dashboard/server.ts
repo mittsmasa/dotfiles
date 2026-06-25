@@ -341,6 +341,15 @@ export function hasMarker(text: string | null, key: string, value: string): bool
   return re.test(text);
 }
 
+// hasMarker と同じパターンでマーカー行を探し、canonical 書式で書き換える。
+// 見つからなければ null を返す（呼び出し側で 400）。
+export function replaceMarker(text: string, key: string, newValue: string): string | null {
+  const re = new RegExp(`^([ \\t]*(?:[-*][ \\t]+)?)${key}:[ \\t]*\\S[^\\n]*`, "im");
+  const m = text.match(re);
+  if (!m) return null;
+  return text.replace(re, `- ${key}: ${newValue}`);
+}
+
 // phase はマーカーシグナルと PR / dirty から派生する。
 // 詳細な状態→列の対応は workflow.md Phase 7「dashboard 列対応表」を参照。
 export function derivePhase(
