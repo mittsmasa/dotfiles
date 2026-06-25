@@ -1221,6 +1221,60 @@ a.dep:hover {
   justify-content: flex-end;
 }
 
+/* --- approval bar --- */
+.approval-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 20px;
+  padding: 14px 18px;
+  background: var(--canvas-subtle);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.approve-btn,
+.change-request-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 16px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.12s, border-color 0.12s, background 0.12s;
+}
+.approve-btn {
+  background: rgba(63, 185, 80, 0.12);
+  color: var(--done);
+  border-color: rgba(63, 185, 80, 0.4);
+}
+.approve-btn:hover:not(:disabled) {
+  background: rgba(63, 185, 80, 0.22);
+  border-color: rgba(63, 185, 80, 0.6);
+}
+.change-request-btn {
+  background: rgba(219, 109, 40, 0.12);
+  color: var(--pr-pending);
+  border-color: rgba(219, 109, 40, 0.4);
+}
+.change-request-btn:hover:not(:disabled) {
+  background: rgba(219, 109, 40, 0.22);
+  border-color: rgba(219, 109, 40, 0.6);
+}
+.approve-btn:disabled,
+.change-request-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.approval-bar__result {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg-muted);
+}
+
 /* hidden 属性で確実に隠す（display を持つ要素が [hidden] を上書きしてしまうため） */
 .comment-add-btn[hidden],
 .comment-dock[hidden],
