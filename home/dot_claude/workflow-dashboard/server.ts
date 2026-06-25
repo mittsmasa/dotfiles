@@ -938,6 +938,7 @@ function renderTask(id: string, activeDoc?: string): string | null {
       <h1>${esc(id)}</h1>
       <div class="tabs">${tabs}</div>
       <div class="panels markdown">${panels}</div>
+      ${approvalBar}
     </div>
     <button type="button" class="comment-add-btn" data-comment-add hidden title="この行にコメント">+</button>
     <div class="comment-overlay" data-comment-overlay hidden></div>
