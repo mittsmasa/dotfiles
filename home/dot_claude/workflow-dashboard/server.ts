@@ -359,7 +359,7 @@ export function derivePhase(
   noPr: boolean,
   dirty: boolean | null,
 ): Phase {
-  if (pr) return pr.merged ? "done" : "pr-open";
+  if (pr && !noPr) return pr.merged ? "done" : "pr-open";
   // 作業完了シグナル: plan.md の "Plan Status: done" か verify-results.md の "Status: done"
   const statusDone =
     hasMarker(plan, "Plan Status", "done") || hasMarker(verify, "Status", "done");
