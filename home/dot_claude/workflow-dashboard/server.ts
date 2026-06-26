@@ -575,10 +575,9 @@ function scanTasks(): Task[] {
       // フォールバック（merge 済み feature ブランチが消えた後の done 判定に必要）。
       // ただし現在が長命ブランチなら、過去に取り違えて焼き付いた meta.pr も信用
       // しない（develop 上のタスクが古い誤検出 PR で done に戻るのを防ぐ）。
-      const livePr = livePrs.get(e.id);
+      const livePr = e.meta.noPr ? undefined : livePrs.get(e.id);
       const onLongLived = isLongLivedBranch(e.repo?.branch ?? null);
-      const pr = livePr ?? (onLongLived ? null : e.meta.pr) ?? null;
-      // live で merged を検知したら meta.json に焼き付ける（次回ブランチ消滅でも done 維持）
+      const pr = livePr ?? (onLongLived || e.meta.noPr ? null : e.meta.pr) ?? null;
       if (livePr?.merged) persistMergedPr(e.id, livePr);
       return {
         id: e.id,
