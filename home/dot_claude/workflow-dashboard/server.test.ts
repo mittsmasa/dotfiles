@@ -23,12 +23,16 @@ const mergedPr = { number: 12, url: "https://github.com/o/r/pull/12", merged: tr
 describe("derivePhase: PR が最優先", () => {
   test("merged PR → done（plan/dirty に関わらず）", () => {
     expect(derivePhase(planComplete, mergedPr, null, false, true)).toBe("done");
-    expect(derivePhase(null, mergedPr, null, true, true)).toBe("done");
   });
 
   test("open PR → pr-open", () => {
     expect(derivePhase(planDone, openPr, verifyDone, false, false)).toBe("pr-open");
-    expect(derivePhase(null, openPr, null, true, null)).toBe("pr-open");
+  });
+
+  test("noPr: true のとき PR は無視される", () => {
+    expect(derivePhase(null, mergedPr, null, true, true)).toBe("in-progress");
+    expect(derivePhase(null, openPr, null, true, null)).toBe("in-progress");
+    expect(derivePhase(planDone, mergedPr, null, true, false)).toBe("done");
   });
 });
 
