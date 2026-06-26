@@ -359,16 +359,18 @@ export function derivePhase(
   noPr: boolean,
   dirty: boolean | null,
 ): Phase {
+  // plan.md が存在し、まだ承認前（approved でも done でもない）なら
+  // plan の状態を優先する。ブランチに無関係な merged PR が残っていても
+  // done に引きずられない。
+  if (plan) {
+    if (hasMarker(plan, "Plan Status", "complete") && !hasMarker(plan, "Approval Status", "approved")) {
+      return "review";
+    }
+  }
   if (pr && !noPr) return pr.merged ? "done" : "pr-open";
-  // 作業完了シグナル: plan.md の "Plan Status: done" か verify-results.md の "Status: done"
   const statusDone =
     hasMarker(plan, "Plan Status", "done") || hasMarker(verify, "Status", "done");
   if (statusDone) {
-    // noPr タスク: PR を作らないので dirty で done / pr-pending を分ける。
-    //   dirty===true               → 未コミットあり → pr-pending（作業未完了扱い）
-    //   dirty===false または null   → clean、もしくは非 git（~/.claude 等）→ done
-    // PR タスク（!noPr）: done は PR 側（上の pr 分岐）が支配する。ここに到達した時点で
-    //   live / cache の PR が無い＝PR 未検出なので pr-pending で待つ。
     if (noPr) return dirty === true ? "pr-pending" : "done";
     return "pr-pending";
   }
