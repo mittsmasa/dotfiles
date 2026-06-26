@@ -359,23 +359,23 @@ export function derivePhase(
   noPr: boolean,
   dirty: boolean | null,
 ): Phase {
-  // plan.md が存在し、まだ承認前（approved でも done でもない）なら
-  // plan の状態を優先する。ブランチに無関係な merged PR が残っていても
-  // done に引きずられない。
-  if (plan) {
-    if (hasMarker(plan, "Plan Status", "complete") && !hasMarker(plan, "Approval Status", "approved")) {
-      return "review";
-    }
+  // plan.md が承認前の段階では PR 状態を見ない。
+  // タスクがまだ専用ブランチを持っていない段階で、別タスクの merged PR が
+  // たまたまチェックアウト中のブランチにあると、誤って done になるのを防ぐ。
+  const approved = hasMarker(plan, "Approval Status", "approved");
+  const planDone = hasMarker(plan, "Plan Status", "done");
+  if (plan && !approved && !planDone) {
+    if (hasMarker(plan, "Plan Status", "complete")) return "review";
+    return "in-progress";
   }
   if (pr && !noPr) return pr.merged ? "done" : "pr-open";
   const statusDone =
-    hasMarker(plan, "Plan Status", "done") || hasMarker(verify, "Status", "done");
+    planDone || hasMarker(verify, "Status", "done");
   if (statusDone) {
     if (noPr) return dirty === true ? "pr-pending" : "done";
     return "pr-pending";
   }
-  if (hasMarker(plan, "Approval Status", "approved")) return "in-progress";
-  if (hasMarker(plan, "Plan Status", "complete")) return "review";
+  if (approved) return "in-progress";
   return "in-progress";
 }
 
