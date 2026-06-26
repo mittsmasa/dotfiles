@@ -560,9 +560,8 @@ function scanTasks(): Task[] {
     let repo: RepoState | null = null;
     if (meta.cwd) {
       repo = getRepoState(meta.cwd);
-      // 長命ブランチ（develop/main/release 等）では live PR を引かない。無関係な
-      // リリース PR を取り違えて done 判定するのを防ぐ（取り違え事故の根治）。
-      if (repo.owner && repo.repo && repo.branch && !isLongLivedBranch(repo.branch)) {
+      // noPr タスクおよび長命ブランチでは live PR を引かない。
+      if (!meta.noPr && repo.owner && repo.repo && repo.branch && !isLongLivedBranch(repo.branch)) {
         gitInputs.set(dirent.name, { owner: repo.owner, repo: repo.repo, branch: repo.branch });
       }
     }
