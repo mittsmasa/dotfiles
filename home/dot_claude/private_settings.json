@@ -1,5 +1,4 @@
 {
-  "autoMemoryEnabled": false,
   "env": {
     "ENABLE_TOOL_SEARCH": "true"
   },
@@ -176,6 +175,7 @@
     ],
     "defaultMode": "auto"
   },
+  "model": "claude-opus-4-6",
   "hooks": {
     "SessionStart": [
       {
@@ -246,7 +246,7 @@
   "enabledPlugins": {
     "document-skills@anthropic-agent-skills": false,
     "context7@claude-plugins-official": true,
-    "using-cmux@hummer98-using-cmux": true
+    "using-cmux@hummer98-using-cmux": false
   },
   "extraKnownMarketplaces": {
     "hummer98-using-cmux": {
@@ -264,10 +264,11 @@
     "enabled": false,
     "mode": "hold"
   },
+  "autoMemoryEnabled": false,
+  "skipWorkflowUsageWarning": true,
   "theme": "dark-daltonized",
   "agentPushNotifEnabled": true,
   "skipAutoPermissionPrompt": true,
   "voiceEnabled": false,
-  "skipWorkflowUsageWarning": true,
-  "model": "claude-opus-4-6"
+  "skipDangerousModePermissionPrompt": true
 }
