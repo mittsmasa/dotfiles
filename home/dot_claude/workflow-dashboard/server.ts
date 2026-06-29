@@ -1141,8 +1141,9 @@ export async function handleRequest(req: Request): Promise<Response> {
       if (phase !== "review") return jsonResponse({ error: "not in review phase", phase }, 409);
       const replaced = replaceMarker(plan, "Approval Status", "needs_human_review");
       if (!replaced) return jsonResponse({ error: "Approval Status marker not found" }, 400);
+      const replaced2 = replaceMarker(replaced, "Plan Status", "draft") ?? replaced;
       try {
-        writeFileSync(planPath, replaced);
+        writeFileSync(planPath, replaced2);
       } catch {
         return jsonResponse({ error: "write failed" }, 500);
       }
