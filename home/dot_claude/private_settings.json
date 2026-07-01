@@ -175,7 +175,7 @@
     ],
     "defaultMode": "auto"
   },
-  "model": "claude-opus-4-6",
+  "model": "claude-sonnet-5",
   "hooks": {
     "SessionStart": [
       {
@@ -265,10 +265,10 @@
     "mode": "hold"
   },
   "autoMemoryEnabled": false,
+  "skipDangerousModePermissionPrompt": true,
   "skipWorkflowUsageWarning": true,
   "theme": "dark-daltonized",
   "agentPushNotifEnabled": true,
   "skipAutoPermissionPrompt": true,
-  "voiceEnabled": false,
-  "skipDangerousModePermissionPrompt": true
+  "voiceEnabled": false
 }
