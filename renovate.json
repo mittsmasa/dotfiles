@@ -7,7 +7,6 @@
     "managerFilePatterns": ["/^home/dot_config/mise/config\\.toml$/"]
   },
   "minimumReleaseAge": "7 days",
-  "platformAutomerge": false,
   "automerge": true,
   "automergeType": "pr",
   "prHourlyLimit": 0,
