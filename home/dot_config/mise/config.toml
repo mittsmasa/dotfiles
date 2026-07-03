@@ -14,7 +14,7 @@ just = "1.52.0"
 "npm:vercel" = "54.14.0"
 uv = "0.11.24"
 age = "latest"
-"github:jdx/fnox" = "1.26.0"
+"github:jdx/fnox" = "1.28.0"
 ffmpeg = "8.1.2"
 
 [settings]
