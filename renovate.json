@@ -1,0 +1,13 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "timezone": "Asia/Tokyo",
+  "enabledManagers": ["mise"],
+  "mise": {
+    "managerFilePatterns": ["/^home/dot_config/mise/config\\.toml$/"]
+  },
+  "minimumReleaseAge": "7 days",
+  "platformAutomerge": false,
+  "automerge": true,
+  "automergeType": "pr"
+}
