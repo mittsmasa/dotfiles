@@ -175,7 +175,7 @@
     ],
     "defaultMode": "auto"
   },
-  "model": "claude-sonnet-5",
+  "model": "claude-opus-4-6",
   "hooks": {
     "SessionStart": [
       {

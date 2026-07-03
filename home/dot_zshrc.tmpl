@@ -84,3 +84,6 @@ eval "$(starship init zsh)"
 
 # Turso
 export PATH="$PATH:{{ .chezmoi.homeDir }}/.turso"
+
+# Cortex CLI completion (disable via /settings in cortex)
+[[ -s ~/.zsh/completions/cortex.zsh ]] && source ~/.zsh/completions/cortex.zsh
