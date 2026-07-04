@@ -1,0 +1,17 @@
+{
+  "skill_name": "slide-outline",
+  "evals": [
+    {
+      "id": 0,
+      "prompt": "このメモを元に、社内LT(10分)向けのスライドの流れを考えて slide.md を作ってほしい。メモ: e2e-memo.md",
+      "expected_output": "ターゲットとコアメッセージが冒頭に明記され、見出しだけで流れが通るスライド骨子。未検証事項を断定せず、スコープ外(flaky原因調査)を勝手に約束しない",
+      "files": ["test-inputs/e2e-memo.md"]
+    },
+    {
+      "id": 1,
+      "prompt": "この slide.md をレビューしてほしい。元ネタは notes.md。指摘を review.md に書き出して",
+      "expected_output": "ターゲット/コアメッセージ欠落、目次のネタバレ、批判トーン、未検証の断定、素材との突合(提案順序の欠落)などを、直し方とセットで指摘するレビュー",
+      "files": ["test-inputs/docs-search/slide.md", "test-inputs/docs-search/notes.md"]
+    }
+  ]
+}
