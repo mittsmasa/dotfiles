@@ -7,10 +7,9 @@
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&display=swap" rel="stylesheet">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { background-color: #f0f0f0; display: flex; justify-content: center; align-items: center; height: 100vh; font-family: 'Noto Sans JP', sans-serif; }
+        body { background-color: #f0f0f0; display: flex; justify-content: center; padding: 40px 0; font-family: 'Noto Sans JP', sans-serif; }
         .slide-container {
             width: 1280px;
-            min-height: 720px;
             background-color: #FFFFFF;
             position: relative;
             overflow: hidden;
@@ -30,111 +29,76 @@
         .dot-yellow { background-color: #FFBD2E; }
         .dot-green { background-color: #27C93F; }
 
-        .content-area {
-            flex-grow: 1;
-            padding: 40px 60px 18px;
-            display: flex;
-            flex-direction: column;
-        }
+        .content-area { padding: 40px 60px; display: flex; flex-direction: column; }
 
         h2.header-sample {
-            font-size: 38px;
-            color: #1A1A1A;
-            margin-bottom: 10px;
-            font-weight: 700;
-            border-bottom: 4px solid #1A1A1A;
-            padding-bottom: 10px;
+            font-size: 38px; color: #1A1A1A; margin-bottom: 10px; font-weight: 700;
+            border-bottom: 4px solid #1A1A1A; padding-bottom: 10px;
         }
-
         h3.subheader-sample {
-            font-size: 20px;
-            color: #555555;
-            margin-bottom: 30px;
-            font-weight: 400;
-            border-left: 4px solid #1A1A1A;
-            padding-left: 15px;
+            font-size: 20px; color: #555555; margin-bottom: 30px; font-weight: 400;
+            border-left: 4px solid #1A1A1A; padding-left: 15px;
         }
 
-        .components-grid {
-            display: flex;
-            justify-content: space-between;
-            flex-grow: 1;
-        }
+        .label { font-size: 12px; color: #999; margin: 26px 0 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; }
+        .note { font-size: 13px; color: #888; margin-top: 6px; }
 
-        .left-panel { width: 48%; display: flex; flex-direction: column; }
-        .right-panel { width: 48%; display: flex; flex-direction: column; }
-
-        .label { font-size: 12px; color: #999; margin-bottom: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; }
-
-        .component-box { margin-bottom: 18px; }
-
-        /* List Style */
+        /* 本文: 箇条書き(基本形。本文・例示・補足はすべてこれ) */
         ul.sample-list { list-style: none; }
         ul.sample-list li {
-            font-size: 18px;
-            color: #333;
-            margin-bottom: 8px;
-            padding-left: 25px;
-            position: relative;
-            line-height: 1.5;
+            font-size: 21px; color: #333; margin-bottom: 10px; padding-left: 28px;
+            position: relative; line-height: 1.55;
         }
         ul.sample-list li::before {
-            content: '';
-            position: absolute;
-            left: 0;
-            top: 8px;
-            width: 10px;
-            height: 10px;
-            background-color: #1A1A1A;
-            border-radius: 50%;
+            content: ''; position: absolute; left: 0; top: 11px;
+            width: 10px; height: 10px; background-color: #1A1A1A; border-radius: 50%;
+        }
+        ul.sample-list li.sub { font-size: 18px; color: #555; margin-left: 26px; }
+        ul.sample-list li.sub::before { width: 6px; height: 6px; background: #999; top: 11px; }
+
+        /* Key Message ボックス(専用。最下部・全幅・太字・中央寄せ) */
+        .km {
+            min-height: 64px; background: #F9F9F9; border: 1px solid #E0E0E0; border-radius: 8px;
+            padding: 14px 22px; font-size: 22px; font-weight: 700; color: #1A1A1A;
+            display: flex; align-items: center; justify-content: center;
         }
 
-        /* Box Styles */
-        .white-box {
-            background-color: #F9F9F9;
-            padding: 12px;
-            border-radius: 8px;
-            border: 1px solid #EEE;
-            font-size: 16px;
-            line-height: 1.6;
-            color: #555;
-        }
+        /* 図の要素(黒背景はここだけ) */
+        .fig-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+        .stage { background: #1A1A1A; color: #fff; padding: 14px 36px; border-radius: 8px; font-weight: 700; font-size: 22px; text-align: center; }
+        .arr { font-size: 24px; color: #999; }
 
-        .dark-box {
-            background-color: #1A1A1A;
-            color: #FFFFFF;
-            padding: 12px;
-            border-radius: 8px;
-            font-size: 16px;
-            line-height: 1.6;
-        }
+        /* 吹き出し(現場の台詞用) */
+        .bubble { background: #F9F9F9; border: 1px solid #DDD; border-radius: 10px; padding: 12px 14px; font-size: 16px; line-height: 1.5; color: #333; width: 280px; }
+        .bubble.dim { color: #BBB; border-color: #EEE; }
 
-        /* Layout Placeholder */
+        /* 知識チップ(図中の概念ラベル) */
+        .room { width: 250px; height: 150px; background: #F9F9F9; border: 1px solid #E0E0E0; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; }
+        .room .name { font-size: 16px; font-weight: 700; color: #555; }
+        .chip { background: #fff; border: 2px solid #1A1A1A; border-radius: 8px; padding: 8px 14px; font-size: 15px; font-weight: 700; color: #1A1A1A; text-align: center; line-height: 1.4; }
+        .wall { width: 14px; height: 180px; background: #1A1A1A; border-radius: 4px; }
+
+        /* テーブル */
+        table.sample-table { border-collapse: collapse; width: 100%; font-size: 18px; }
+        table.sample-table th { background: #1A1A1A; color: #fff; padding: 11px 18px; text-align: left; font-weight: 700; }
+        table.sample-table td { padding: 11px 18px; border-bottom: 1px solid #E8E8E8; color: #333; }
+
+        /* 目次(中扉) */
+        ol.agenda { list-style: none; }
+        ol.agenda li { font-size: 30px; line-height: 1.5; margin-bottom: 16px; color: #BBB; font-weight: 400; }
+        ol.agenda li.done { color: #999; }
+        ol.agenda li.now { color: #1A1A1A; font-weight: 700; }
+
+        /* 対比の箇条書き */
+        ul.vs-list { list-style: none; }
+        ul.vs-list li { font-size: 21px; color: #333; margin-bottom: 14px; padding-left: 28px; position: relative; line-height: 1.6; }
+        ul.vs-list li::before { content: ''; position: absolute; left: 0; top: 12px; width: 10px; height: 10px; background: #1A1A1A; border-radius: 50%; }
+
+        /* プレースホルダー */
         .placeholder-rect {
-            background-color: #F0F0F0;
-            border: 2px dashed #CCC;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            color: #999;
-            font-weight: 700;
-            border-radius: 8px;
-            width: 100%;
-            height: 150px;
-        }
-
-        .two-column-sample { display: flex; justify-content: space-between; margin-top: 10px; }
-        .col-sample {
-            width: 48%;
-            height: 80px;
-            background-color: #F9F9F9;
-            border: 1px solid #EEE;
-            border-radius: 4px;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            font-size: 12px;
-            color: #BBB;
+            background-color: #F0F0F0; border: 2px dashed #CCC;
+            display: flex; justify-content: center; align-items: center;
+            color: #999; font-weight: 700; border-radius: 8px; width: 100%; height: 120px;
         }
     </style>
 </head>
@@ -147,57 +111,59 @@
         </div>
 
         <div class="content-area">
-            <h2 class="header-sample">メインタイトル見本</h2>
-            <h3 class="subheader-sample">サブタイトル / キャッチコピー見本</h3>
+            <h2 class="header-sample">見出し h2(38px / 下線)</h2>
+            <h3 class="subheader-sample">サブタイトル h3(20px / 左バー)— 使用は任意</h3>
 
-            <div class="components-grid">
-                <div class="left-panel">
-                    <div class="component-box">
-                        <p class="label">Bullet List Style</p>
-                        <ul class="sample-list">
-                            <li>箇条書きのリストアイテム 1</li>
-                            <li>箇条書きのリストアイテム 2</li>
-                            <li><strong>強調テキスト</strong> を含むアイテム</li>
-                        </ul>
-                    </div>
+            <p class="label">本文: 箇条書き(基本形 21px)— 本文・例示・補足はすべてこれ。ボックスで囲まない</p>
+            <ul class="sample-list">
+                <li>キーワードだけの短い箇条書き。<strong>強調は太字</strong>で</li>
+                <li class="sub">補足はサブ項目(18px、小さいドット)</li>
+            </ul>
 
-                    <div class="component-box">
-                        <p class="label">Highlight Box (Light)</p>
-                        <div class="white-box">
-                            補足説明や引用、具体例などを入れるためのグレー背景のボックスです。
-                        </div>
-                    </div>
+            <p class="label">Key Message ボックス(専用)— 最下部・全幅・太字・中央寄せ。1スライド1個まで</p>
+            <p class="km">Key Message はこのグレーボックスに。黒背景にはしない(図と被る)</p>
 
-                    <div class="component-box">
-                        <p class="label">Highlight Box (Dark)</p>
-                        <div class="dark-box">
-                            結論や重要なメッセージ、インサイトを強調するための黒背景のボックスです。
-                        </div>
-                    </div>
-                </div>
-
-                <div class="right-panel">
-                    <div class="component-box">
-                        <p class="label">Image / Diagram Placeholder</p>
-                        <div class="placeholder-rect">IMAGE / DIAGRAM AREA</div>
-                    </div>
-
-                    <div class="component-box">
-                        <p class="label">2-Column Layout Sample</p>
-                        <div class="two-column-sample">
-                            <div class="col-sample">COLUMN A</div>
-                            <div class="col-sample">COLUMN B</div>
-                        </div>
-                    </div>
-
-                    <div class="component-box">
-                        <p class="label">Typography</p>
-                        <p style="font-size: 16px; color: #333; line-height: 1.8;">
-                            本文テキストのサイズ感（16px）。Noto Sans JP を使用し、適度な行間を保つことで可読性を確保しています。
-                        </p>
-                    </div>
-                </div>
+            <p class="label">図の要素(黒背景はここだけ)— プロセスのノード、循環図の箱、エージェント等</p>
+            <div class="fig-row">
+                <div class="stage">企画</div><span class="arr">→</span>
+                <div class="stage">デザイン</div><span class="arr">→</span>
+                <div class="stage">開発</div><span class="arr">→</span>
+                <div class="stage">QA</div>
             </div>
+
+            <p class="label">吹き出し(現場の台詞用)— グレーアウトで「前のスライドの残像」を表現できる</p>
+            <div class="fig-row">
+                <p class="bubble">既存のデータ構造が歪みそう...</p>
+                <p class="bubble dim">前のスライドの吹き出し(グレー)</p>
+            </div>
+
+            <p class="label">区画 + 知識チップ + 壁(図中の概念ラベル)— チップの文言はページ間で統一</p>
+            <div class="fig-row">
+                <div class="room"><p class="name">開発</p><p class="chip">データモデル</p></div>
+                <div class="wall"></div>
+                <div class="room"><p class="name">QA</p><p class="chip">テスト観点</p></div>
+            </div>
+
+            <p class="label">テーブル(18px)— ヘッダのみ黒</p>
+            <table class="sample-table">
+                <tr><th>役割</th><th>紐づく知識</th></tr>
+                <tr><td>企画</td><td>ユーザーのメタ的な情報・要望、ドメイン知識</td></tr>
+            </table>
+
+            <p class="label">目次(中扉)— 全章を最初から見せる。済み=グレー+✓、現在地=太字、未来=薄グレー</p>
+            <ol class="agenda">
+                <li class="done">1. 話し終えた章 ✓</li>
+                <li class="now">2. いま話している章</li>
+                <li>3. これから話す章</li>
+            </ol>
+
+            <p class="label">対比の箇条書き — 「太字リード → 向き合い方」の形。難所や Q&A 系に</p>
+            <ul class="vs-list">
+                <li><strong>問題の名前</strong> → それへの向き合い方をここに書く</li>
+            </ul>
+
+            <p class="label">画像・図のプレースホルダー(未確定の図)</p>
+            <div class="placeholder-rect">IMAGE / DIAGRAM AREA</div>
         </div>
     </div>
 </body>
