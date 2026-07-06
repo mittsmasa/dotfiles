@@ -57,3 +57,26 @@ writeFileSync(OUT, await pdf.save());
 - テキストの見切れ・はみ出し(特に SVG 内のラベル)
 - ページ間で同じ要素の位置ズレ
 - 余白の間延び、要素の端寄り
+
+## SVG矢印をHTML要素の位置に正確に合わせる
+
+エージェントのノードからチップ・ラベルなど特定の要素へ矢印を伸ばすとき、終点の座標を目分量で決めると大抵ズレる(手前の別要素を突っ切る、要素の中心まで刺さり込む等)。スクリーンショットで確認しながら数値を勘で調整するより、実際にレンダリングして `boundingBox()` で座標を取るほうが早い:
+
+```javascript
+// measure.mjs
+import { chromium } from 'playwright-core';
+const EXE = process.env.HOME + '/Library/Caches/ms-playwright/chromium_headless_shell-<rev>/chrome-headless-shell-mac-arm64/chrome-headless-shell';
+const browser = await chromium.launch({ executablePath: EXE });
+const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+await page.goto('file:///abs/path/to/slideNN.html', { waitUntil: 'networkidle' });
+await page.evaluate(() => document.fonts.ready);
+
+const containerBox = await page.locator('.diagram').boundingBox(); // 矢印オーバーレイの基準にする要素
+const targets = await page.locator('.chip').all();
+for (const t of targets) console.log(await t.boundingBox());
+await browser.close();
+```
+
+- 矢印オーバーレイ svg の座標系は、基準にした要素(上記の `.diagram`)の左上を原点にする。取得した `boundingBox()` の x/y からその要素の x/y を引けば、オーバーレイのローカル座標に変換できる
+- 矢印は要素の**中心**ではなく**縁(上端など)**を終点にする。中心まで伸ばすと図形やテキストを突き抜けて見える
+- 測定用スクリプトは scratchpad に置き、確認が終わったら削除する(成果物に残さない)
