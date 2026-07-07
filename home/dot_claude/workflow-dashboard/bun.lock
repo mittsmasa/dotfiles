@@ -4,11 +4,11 @@
   "workspaces": {
     "": {
       "dependencies": {
-        "highlight.js": "latest",
-        "marked": "latest",
-        "marked-highlight": "latest",
-        "mermaid": "latest",
-        "portless": "latest",
+        "highlight.js": "11.11.1",
+        "marked": "18.0.5",
+        "marked-highlight": "2.2.4",
+        "mermaid": "11.15.0",
+        "portless": "0.14.0",
       },
     },
   },
