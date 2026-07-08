@@ -23,6 +23,8 @@
 #                               (default: ~/.claude/scripts/plan-review-prompts)
 #   PLAN_REVIEW_REVIEWER_CMD  - reviewer コマンド差し替え (テスト用, default: claude)
 #   PLAN_REVIEW_APPLIER_CMD   - applier コマンド差し替え (テスト用, default: claude)
+#   PLAN_REVIEW_REVIEWER_TIMEOUT - reviewer 1 回あたりの秒数上限 (default: 300)
+#   PLAN_REVIEW_APPLIER_TIMEOUT  - applier 1 回あたりの秒数上限 (default: 300)
 #
 # 全体フロー:
 #   1. plan.md の書き込みを検知（PostToolUse hook）
