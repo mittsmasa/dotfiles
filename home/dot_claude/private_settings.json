@@ -175,7 +175,7 @@
     ],
     "defaultMode": "auto"
   },
-  "model": "claude-sonnet[1m]",
+  "model": "claude-sonnet-5",
   "hooks": {
     "SessionStart": [
       {
@@ -219,7 +219,7 @@
           {
             "type": "command",
             "command": "bash ~/.claude/scripts/plan-review-hook.sh",
-            "timeout": 600
+            "timeout": 1800
           },
           {
             "type": "command",
