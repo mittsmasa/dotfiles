@@ -334,6 +334,7 @@ run_applier() {
   if (
     cd "$workflow_abs" && \
     PLAN_REVIEW_HOOK_RUNNING=1 WORKFLOW_DIR="$workflow_abs" \
+      run_with_timeout "$APPLIER_TIMEOUT" \
       "$APPLIER_BIN" --print \
       --allowedTools Edit,Read \
       --system-prompt "$(cat "$PROMPTS_DIR/applier.md")" \
