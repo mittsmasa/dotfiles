@@ -191,6 +191,22 @@ join_csv() {
   echo "$*"
 }
 
+# macOS 標準には GNU coreutils の `timeout` が無いため、手作りのウォッチドッグで代替する。
+# 呼び出し先が固まっても secs 秒で SIGTERM を送り、必ず if/else に戻れるようにする。
+run_with_timeout() {
+  local secs="$1"
+  shift
+  "$@" &
+  local cmd_pid=$!
+  ( sleep "$secs"; kill -TERM "$cmd_pid" 2>/dev/null ) &
+  local watchdog_pid=$!
+  local rc=0
+  wait "$cmd_pid" || rc=$?
+  kill "$watchdog_pid" 2>/dev/null
+  wait "$watchdog_pid" 2>/dev/null || true
+  return "$rc"
+}
+
 run_reviewer() {
   local name="$1"
   local round="$2"
