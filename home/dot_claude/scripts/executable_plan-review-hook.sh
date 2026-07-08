@@ -237,9 +237,10 @@ $(cat "$prompt_file")"
   # 本物の claude には無害。
   local tmp_dir
   tmp_dir=$(mktemp -d "${TMPDIR:-/tmp}/plan-review-${name}.XXXXXX")
-  if TMPDIR="$tmp_dir" \
-     PLAN_REVIEW_REVIEWER_NAME="$name" \
-     PLAN_REVIEW_REVIEWER_ROUND="$round" \
+  export TMPDIR="$tmp_dir"
+  export PLAN_REVIEW_REVIEWER_NAME="$name"
+  export PLAN_REVIEW_REVIEWER_ROUND="$round"
+  if run_with_timeout "$REVIEWER_TIMEOUT" \
      "$REVIEWER_BIN" --print \
        --add-dir "$WORKFLOW_DIR" \
        --system-prompt "$sys_prompt" \
