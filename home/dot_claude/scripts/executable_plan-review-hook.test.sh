@@ -142,11 +142,8 @@ EOF
 # Plan
 ## 目的
 test plan body
-## Review Status
-- Status: pending
-- Round: 0
-- Last Review Hash: (none)
-## Approval
+
+- Review Status: pending
 - Plan Status: draft
 - Approval Status: pending
 EOF
