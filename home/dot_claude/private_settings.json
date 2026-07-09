@@ -175,7 +175,7 @@
     ],
     "defaultMode": "auto"
   },
-  "model": "claude-sonnet-5",
+  "model": "claude-sonnet[1m]",
   "hooks": {
     "SessionStart": [
       {
