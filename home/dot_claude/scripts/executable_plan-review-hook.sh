@@ -490,10 +490,10 @@ grep -v '<!-- auto-review:' "$PLAN_FILE" > "$TMP_PLAN" || true
 printf '\n%s\n' "$MARKER" >> "$TMP_PLAN"
 mv "$TMP_PLAN" "$PLAN_FILE"
 
-sedi "s/^- Status: .*/- Status: $FINAL_VERDICT/" "$PLAN_FILE"
+sedi -E "s/^[[:space:]]*([-*][[:space:]]+)?Review Status:[[:space:]]*.*/- Review Status: $FINAL_VERDICT/" "$PLAN_FILE"
 
 if [[ "$FINAL_VERDICT" == "pass" ]]; then
-  sedi "s/^- Plan Status: .*/- Plan Status: complete/" "$PLAN_FILE"
+  sedi -E "s/^[[:space:]]*([-*][[:space:]]+)?Plan Status:[[:space:]]*.*/- Plan Status: complete/" "$PLAN_FILE"
 fi
 
 echo "[plan-review] Loop ended: verdict=$FINAL_VERDICT, last_round=$LAST_ROUND, reason=${LOOP_BREAK_REASON:-unknown} (skipped=[$SKIPPED_STR], failed=[$FAILED_STR])" >&2
