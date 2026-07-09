@@ -8,171 +8,195 @@ accepts_args: true
 
 ## Overview
 
-Difit is a lightweight Git diff viewer that displays changes in a browser or terminal with a GitHub-like interface. It provides an easy way to review working directory changes, staged changes, commit history, and branch comparisons.
+Difit is a lightweight Git diff viewer that displays changes in a browser with a GitHub-like interface. It provides an easy way to review working directory changes, staged changes, commit history, and branch comparisons.
 
-**Note**: This skill documentation is based on difit v3.0.1. Newer versions (v3.1.2+) support direct arguments like `difit working`, `difit staged`, and `difit .` for simplified usage. For the current version, pipe git diff output to difit.
+**Note**: This skill documentation is based on difit v5.0.2. The CLI dropped the `git diff | difit` pipe interface and the `--mode`/`--tui` flags used in v3.x. Everything is now expressed as positional Git revision arguments (`difit <commit-ish> [compare-with]`), always rendered inline in the browser.
+
+## Usage
+
+```
+difit [options] [command] [commit-ish] [compare-with]
+```
+
+- `commit-ish` (default: `HEAD`): a Git commit, tag, branch, `HEAD~n` reference, or the literal `working` / `staged` / `.`
+- `compare-with` (optional): compare `commit-ish` against this commit/branch instead of its default base
+
+Special `commit-ish` values:
+- `working` — unstaged changes (working tree vs index). **Cannot** be combined with `compare-with` — a bare `working <other>` errors with `"working" shows unstaged changes and cannot be compared with another commit. Use "." instead.`
+- `staged` — staged changes (index vs HEAD)
+- `.` — all uncommitted changes (working tree vs HEAD). This is the one to use when you want "everything I haven't committed yet" compared against a specific base (e.g. `difit . develop`)
 
 ## Arguments
 
-The skill accepts the following arguments to specify what changes to view:
-
-- **No argument**: Show untracked files and unstaged changes with `git diff`
-- `head`: Show all uncommitted changes (working + staged) with `git diff HEAD`
-- `working` or `unstaged`: Show only unstaged changes with `git diff` (same as no argument)
-- `staged`: Show only staged changes with `git diff --staged`
-- `pr` or `pr <number>` or `pr <url>`: Show pull request changes
-  - `pr` alone: Show PR for current branch (uses `gh pr view`)
-  - `pr <number>`: Show specific PR by number
-  - `pr <url>`: Show PR from GitHub URL
-- `--tui`: Add this flag to any command to view in terminal UI mode
+- **No argument**: `difit` → same as `difit HEAD`, shows the last commit's changes
+- `head`: `difit HEAD` → last commit's changes (not "all uncommitted", despite the v3 naming)
+- `working` or `unstaged`: `difit working` → unstaged changes only
+- `staged`: `difit staged` → staged changes only
+- `.`: `difit .` → all uncommitted changes (working + staged) vs HEAD; pair with a second arg to diff against another base, e.g. `difit . develop`
+- `pr` or `pr <number>` or `pr <url>`: Show pull request changes (resolved to `--pr <url>`)
+  - `pr` alone: current branch's PR via `gh pr view --json url -q .url`
+  - `pr <number>`: resolved via `gh pr view <number> --json url -q .url`
+  - `pr <url>`: used directly
 
 Examples:
-- `/difit` → Shows untracked files and unstaged changes
-- `/difit head` → Shows all uncommitted changes (working + staged)
-- `/difit working` → Shows only unstaged changes
-- `/difit staged` → Shows only staged changes
-- `/difit pr` → Shows PR for current branch
-- `/difit pr 123` → Shows PR #123
-- `/difit pr https://github.com/owner/repo/pull/123` → Shows PR from URL
-- `/difit --tui` → Shows unstaged changes in terminal UI
+- `/difit` → `difit HEAD`
+- `/difit head` → `difit HEAD`
+- `/difit working` → `difit working`
+- `/difit staged` → `difit staged`
+- `/difit head vs develop` or "compare my uncommitted changes with develop" → `difit . develop`
+- `/difit pr` → resolves current branch's PR and runs `difit --pr <url>`
+- `/difit pr 123` → `difit --pr <url for #123>`
+- `/difit pr https://github.com/owner/repo/pull/123` → `difit --pr https://github.com/owner/repo/pull/123`
 
 ## Usage Workflow
 
-When the user requests to view diffs or review changes, follow these steps:
-
 1. **Verify Git repository**: Confirm the current directory is a Git repository
-2. **Parse arguments**: Determine which type of diff to show based on the provided arguments
-3. **Execute difit command**: Pipe the appropriate git diff output to difit
-4. **Inform user**: Let them know a browser will open with the diff (unless `--tui` or `--no-open` is specified)
+2. **Parse arguments**: Determine which revision(s) to pass as positional args
+3. **Execute difit command**: Run `difit [commit-ish] [compare-with]` directly — no piping
+4. **Inform user**: A browser opens automatically unless `--no-open` is passed
 
 ## Common Use Cases
 
 ### Review Working Directory Changes
 
 ```bash
-# Show untracked files and unstaged changes (default)
-git diff | difit --mode inline
+# Unstaged changes only
+difit working
 
-# Show all uncommitted changes (working + staged)
-git diff HEAD | difit --mode inline
+# All uncommitted changes (working + staged) vs HEAD
+difit .
 
-# Show only staged changes
-git diff --staged | difit --mode inline
+# Staged changes only
+difit staged
+
+# All uncommitted changes vs a specific branch (e.g. before opening a PR)
+difit . develop
 ```
 
 ### Review Commits
 
 ```bash
-# Show HEAD commit changes
-git show HEAD | difit --mode inline
+# Last commit
+difit HEAD
 
-# Show specific commit
-git show HEAD~3 | difit --mode inline
+# A specific commit back
+difit HEAD~3
 
-# Show changes from specific commit hash
-git show abc1234 | difit --mode inline
+# A specific commit hash
+difit abc1234
 ```
 
 ### Compare Branches
 
 ```bash
-# Compare current branch with main
-git diff main | difit --mode inline
+# Current branch vs main
+difit HEAD main
 
-# Compare two branches
-git diff main..develop | difit --mode inline
-```
+# Two arbitrary branches
+difit main develop
 
-### Terminal UI Mode
-
-For viewing diffs in the terminal without opening a browser:
-
-```bash
-# TUI mode for working changes
-git diff | difit --mode inline --tui
-
-# TUI mode for staged changes
-git diff --staged | difit --mode inline --tui
+# Resolve the merge-base first (like `git diff main...develop`)
+difit main develop --merge-base
 ```
 
 ### Review Pull Requests
 
 ```bash
-# Review a GitHub PR
-difit --pr <github-pr-url>
+difit --pr https://github.com/owner/repo/pull/123
 ```
 
-### Review Saved Patches
+### Untracked files
 
 ```bash
-# Review a saved patch file
-cat changes.patch | difit --mode inline
+# Include untracked files in the diff automatically
+difit . --include-untracked
 ```
 
-### Untracked / gitignored ファイルを開く
+No more manual `git diff --no-index /dev/null <file>` patching needed for untracked files — `--include-untracked` handles it.
 
-`.gitignore` 配下のファイルや、まだ `git add` していない新規ファイルは `git diff` には出てこないため、`git diff --no-index /dev/null <file>` でパッチ化して difit に流す:
+### Background / headless usage
 
 ```bash
-# 新規ファイル / gitignored ファイルを new file として表示
-git diff --no-index /dev/null path/to/file.md | difit --mode inline --no-open
+# Keep the server running in the background and print JSON info ({"port":...,"url":...,"pid":...})
+difit . develop --background
+
+# Don't auto-open a browser (useful in headless/remote environments)
+difit . --no-open
 ```
 
-### TUI モードの制約
+`--background` is the way to get a URL without blocking the shell (previously done by piping with `--no-open` in v3). Combine with `--no-open` if you also don't want the local browser launch attempt.
 
-`--tui` は **stdin が TTY であること** が必須。`git diff ... | difit --tui` のように pipe で渡すと `Error: TUI mode requires an interactive terminal (TTY).` で落ちる。
+### Server-side comments (new in v5, no v3 equivalent)
 
-pipe で渡したい場合の選択肢:
-- ブラウザで見る: `... | difit --mode inline --no-open` で URL だけ出して手動で開く（自動オープンが効かない WSL 等で有効）
-- TUI で見たい場合: 一度パッチをファイルに書き出してから `difit --tui < patch.diff` のように **直接渡す**（pipe ではなくリダイレクト）
+```bash
+# Inject initial review comments when starting the viewer
+difit . --comment '{"file":"src/foo.ts","line":10,"body":"needs a null check"}'
+
+# Add a comment to an already-running difit server
+difit comment add '{"file":"src/foo.ts","line":10,"body":"needs a null check"}'
+
+# Retrieve comments from a running server
+difit comment get
+```
 
 ## Available Options
 
-- `--mode <mode>`: Display mode (`side-by-side` or `inline`). Default: `inline`
-- `--tui`: Launch in terminal UI mode instead of browser
-- `--no-open`: Don't automatically open browser
-- `--pr <url>`: Review GitHub PR
+- `--port <port>`: preferred port (auto-assigned if occupied)
+- `--host <host>`: host address to bind (default: all interfaces)
+- `--no-open`: do not automatically open browser
+- `--comment <json>`: inject initial review comments (repeatable)
+- `--pr <url>`: review a GitHub PR
+- `--clean`: start with a clean slate, clearing all existing comments
+- `--include-untracked`: automatically include untracked files in the diff
+- `--keep-alive`: keep server running even after the browser disconnects
+- `--background`: keep the server running in the background and print JSON info (`port`, `url`, `pid`) to stdout
+- `--context <lines>`: number of context lines shown around each change
+- `--merge-base`: resolve the base revision via `git merge-base` before diffing (Git revision mode only)
+
+Removed since v3: `--mode` (side-by-side/inline toggle — the viewer is inline-only now) and `--tui` (no terminal UI mode anymore).
 
 ## Default Behavior
 
-- **Display mode**: Always use `inline` mode (overrides the default side-by-side)
-- **Browser launch**: Automatically opens browser unless `--tui` or `--no-open` is specified
-- **Installation path**: installed globally via pnpm (`pnpm add -g difit`)
+- **Display mode**: Browser-only, GitHub-like inline view (no side-by-side or TUI mode in v5)
+- **Browser launch**: Automatically opens browser unless `--no-open` is specified
+- **Installation path**: this environment has difit installed via mise (`mise install npm-difit`); check with `which difit` before assuming a global pnpm install
 
 ## Error Handling
 
 If difit is not available or the command fails:
 
 1. Check if the current directory is a Git repository
-2. Verify difit is installed: `pnpm list -g difit`
-3. If not installed, suggest: `pnpm add -g difit`
+2. Verify difit is installed: `which difit` (this environment: mise-managed) or `pnpm list -g difit`
+3. If not installed and mise is in use, install via mise config; otherwise `pnpm add -g difit`
+4. If a command like `difit working develop` errors, remember `working` can't take a `compare-with` arg — swap in `.` instead
 
 ## Argument Handling Logic
 
 When processing arguments:
 
-1. **Check for TUI flag**: Look for `--tui` in arguments
-2. **Determine diff type**:
-   - If no arguments: Use `git diff` (untracked files and unstaged changes only)
-   - If `head`: Use `git diff HEAD` (all uncommitted changes)
-   - If `working` or `unstaged`: Use `git diff` (unstaged changes only)
-   - If `staged`: Use `git diff --staged` (staged changes only)
-   - If `pr`: Handle pull request viewing (see PR Handling section below)
-3. **Build command**: Construct the appropriate `git diff | difit --mode inline` command
-4. **Add TUI flag**: If `--tui` was provided, append it to the difit command
+1. **Determine revision args**: map the requested scope to `commit-ish [compare-with]`:
+   - No arguments / `head`: `HEAD` (no compare-with)
+   - `working` / `unstaged`: `working` (no compare-with — errors if one is given)
+   - `staged`: `staged`
+   - `.` (or "all uncommitted changes"): `.`, optionally with a second branch/commit arg
+   - Two explicit revisions ("compare X and Y"): pass both positionally
+   - `pr [...]`: resolve to a URL and use `--pr <url>` instead of positional args
+2. **Build command**: `difit [commit-ish] [compare-with] [options]` — no shell piping
+3. **Untracked files**: add `--include-untracked` if the user wants them folded in
+4. **Background/headless**: add `--background` and/or `--no-open` as needed, then read the printed JSON for the URL
 
 ## PR Handling
 
 When `pr` argument is provided:
 
 1. **Parse PR argument**:
-   - `pr` alone: Get current branch's PR using `gh pr view --json url -q .url`
-   - `pr <number>`: Convert to GitHub URL format
-   - `pr <url>`: Use URL directly
+   - `pr` alone: `gh pr view --json url -q .url`
+   - `pr <number>`: `gh pr view <number> --json url -q .url`
+   - `pr <url>`: use directly
 
 2. **Execute difit with PR**:
-   - Use `difit --pr <url> --mode inline`
-   - Note: PR mode fetches the diff from GitHub, so no git diff piping is needed
+   - `difit --pr <url>`
+   - PR mode fetches the diff from GitHub; no positional revision args are used
 
 3. **Error handling**:
    - If `gh` CLI is not available, inform user to install it
@@ -180,59 +204,63 @@ When `pr` argument is provided:
 
 ## Examples
 
-User request: "/difit" or "Show me what I changed"
+User request: "/difit" or "Show me what I changed" (last commit)
 ```bash
-git diff | difit --mode inline
-```
-
-User request: "/difit head" or "Show me all uncommitted changes"
-```bash
-git diff HEAD | difit --mode inline
+difit HEAD
 ```
 
 User request: "/difit working" or "/difit unstaged"
 ```bash
-git diff | difit --mode inline
+difit working
 ```
 
 User request: "/difit staged" or "Review my staged changes"
 ```bash
-git diff --staged | difit --mode inline
+difit staged
 ```
 
-User request: "/difit --tui" or "Show me the diff in terminal"
+User request: "/difit ." or "Show me all my uncommitted changes"
 ```bash
-git diff | difit --mode inline --tui
+difit .
 ```
 
-User request: "/difit head --tui"
+User request: "Show me my uncommitted changes against develop"
 ```bash
-git diff HEAD | difit --mode inline --tui
+difit . develop
 ```
 
 User request: "Show me the last commit"
 ```bash
-git show HEAD | difit --mode inline
+difit HEAD
+```
+
+User request: "Show me 3 commits back"
+```bash
+difit HEAD~3
 ```
 
 User request: "Compare main and develop branches"
 ```bash
-git diff main..develop | difit --mode inline
+difit main develop
 ```
 
 User request: "/difit pr" or "Review this PR"
 ```bash
-# Get PR URL for current branch and open in difit
-gh pr view --json url -q .url | xargs -I {} difit --pr {} --mode inline
+gh pr view --json url -q .url | xargs -I {} difit --pr {}
 ```
 
 User request: "/difit pr 123"
 ```bash
-# Get PR URL by number and open in difit
-gh pr view 123 --json url -q .url | xargs -I {} difit --pr {} --mode inline
+gh pr view 123 --json url -q .url | xargs -I {} difit --pr {}
 ```
 
 User request: "/difit pr https://github.com/owner/repo/pull/123"
 ```bash
-difit --pr https://github.com/owner/repo/pull/123 --mode inline
+difit --pr https://github.com/owner/repo/pull/123
+```
+
+User request: "I need the diff URL without opening a browser, keep it running"
+```bash
+difit . develop --background --no-open
+# prints {"port":...,"url":"http://localhost:...","pid":...}
 ```
