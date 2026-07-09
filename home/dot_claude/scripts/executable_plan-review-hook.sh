@@ -349,7 +349,7 @@ run_applier() {
     return 1
   fi
 
-  if grep -q '^- Approval Status: needs_human_review' "$PLAN_FILE"; then
+  if grep -qE '^[[:space:]]*([-*][[:space:]]+)?Approval Status:[[:space:]]*needs_human_review' "$PLAN_FILE"; then
     echo "[applier] escalated (Approval Status: needs_human_review). Breaking loop." >&2
     return 2
   fi
