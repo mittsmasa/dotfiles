@@ -175,7 +175,7 @@
     ],
     "defaultMode": "auto"
   },
-  "model": "claude-sonnet[1m]",
+  "model": "claude-sonnet-5",
   "hooks": {
     "SessionStart": [
       {
@@ -204,6 +204,11 @@
             "type": "command",
             "command": "bash ~/.claude/scripts/concise-jp-reminder.sh",
             "if": "Bash(gh *)"
+          },
+          {
+            "type": "command",
+            "command": "bash ~/.claude/scripts/npx-redirect-hook.sh",
+            "if": "Bash(npx *)"
           }
         ]
       }
