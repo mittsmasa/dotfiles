@@ -125,7 +125,6 @@
       "Bash(chezmoi:*)",
       "Bash(tmux:*)",
       "Bash(cmux:*)",
-      "Bash(fresh:*)",
       "Bash(agent-browser:*)",
       "Bash(claude mcp add:*)",
       "Bash(claude mcp list:*)",
@@ -175,7 +174,7 @@
     ],
     "defaultMode": "auto"
   },
-  "model": "claude-sonnet-5",
+  "model": "claude-sonnet[1m]",
   "hooks": {
     "SessionStart": [
       {
@@ -250,17 +249,9 @@
   },
   "enabledPlugins": {
     "document-skills@anthropic-agent-skills": false,
-    "context7@claude-plugins-official": true,
-    "using-cmux@hummer98-using-cmux": false
+    "context7@claude-plugins-official": true
   },
-  "extraKnownMarketplaces": {
-    "hummer98-using-cmux": {
-      "source": {
-        "source": "github",
-        "repo": "hummer98/using-cmux"
-      }
-    }
-  },
+  "extraKnownMarketplaces": {},
   "outputStyle": "maaya",
   "language": "日本語",
   "effortLevel": "high",
