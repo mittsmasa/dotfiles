@@ -25,6 +25,9 @@
 #   PLAN_REVIEW_APPLIER_CMD   - applier コマンド差し替え (テスト用, default: claude)
 #   PLAN_REVIEW_REVIEWER_TIMEOUT - reviewer 1 回あたりの秒数上限 (default: 300)
 #   PLAN_REVIEW_APPLIER_TIMEOUT  - applier 1 回あたりの秒数上限 (default: 300)
+#   PLAN_REVIEW_MODEL         - reviewer / applier に渡すモデル (default: claude-sonnet-5)
+#                               settings.json のデフォルトモデル (claude-sonnet[1m] 等) が
+#                               非対話環境で使えないことがあるため常に明示する
 #
 # 全体フロー:
 #   1. plan.md の書き込みを検知（PostToolUse hook）
