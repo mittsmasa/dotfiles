@@ -105,6 +105,7 @@ MAX_ROUNDS="${MAX_REVIEW_ROUNDS:-3}"
 PROMPTS_DIR="${PLAN_REVIEW_PROMPTS:-$HOME/.claude/scripts/plan-review-prompts}"
 REVIEWER_BIN="${PLAN_REVIEW_REVIEWER_CMD:-claude}"
 APPLIER_BIN="${PLAN_REVIEW_APPLIER_CMD:-claude}"
+REVIEW_MODEL="${PLAN_REVIEW_MODEL:-claude-sonnet-5}"
 # 1 呼び出しあたりの上限（秒）。claude --print が混雑等で長時間化しても
 # .exit を確実に書いて後始末できるようにするための保険。
 REVIEWER_TIMEOUT="${PLAN_REVIEW_REVIEWER_TIMEOUT:-300}"
