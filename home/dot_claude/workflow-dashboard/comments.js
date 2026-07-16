@@ -254,6 +254,11 @@ if (detail) {
     }
     for (const [b, count] of byBlock) {
       if (count <= 0) continue;
+      // pre（hljs コードブロック / mermaid 図）には子要素を追加しない。
+      // 特に pre.mermaid は mermaid.run() が中身を図のソーステキストとして
+      // そのまま読むため、chip の <span> が混入すると構文エラーになる
+      // （タイミングによっては mermaid 処理前に appendChild が先行しうる）。
+      if (b.tagName === "PRE") continue;
       const chip = document.createElement("span");
       chip.className = "comment-chip";
       chip.textContent = count;
