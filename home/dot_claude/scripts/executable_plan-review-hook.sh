@@ -248,6 +248,7 @@ $(cat "$prompt_file")"
   export PLAN_REVIEW_REVIEWER_ROUND="$round"
   if run_with_timeout "$REVIEWER_TIMEOUT" \
      "$REVIEWER_BIN" --print \
+       --model "$REVIEW_MODEL" \
        --add-dir "$WORKFLOW_DIR" \
        --system-prompt "$sys_prompt" \
        "$user_prompt" \
