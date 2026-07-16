@@ -22,4 +22,4 @@ idiomatic_version_file_enable_tools = ["node"]
 minimum_release_age = "7d"
 # mise use を常に exact version で config に書く（--pin のデフォルト化）
 pin = true
-disable_backends = ["aqua", "asdf", "cargo", "conda", "dotnet", "forgejo", "gem", "gitlab", "go", "pipx", "spm", "http", "s3", "ubi", "vfox"]
+disable_backends = ["asdf", "cargo", "conda", "dotnet", "forgejo", "gem", "gitlab", "go", "pipx", "spm", "http", "s3", "ubi", "vfox"]
