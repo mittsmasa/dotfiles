@@ -161,11 +161,6 @@
       "mcp__figma-dev-mode-mcp-server__get_design_context",
       "mcp__figma-dev-mode-mcp-server__get_screenshot",
       "mcp__next-devtools__upgrade_nextjs_16",
-      "mcp__serena__list_dir",
-      "mcp__serena__search_for_pattern",
-      "mcp__serena__find_file",
-      "mcp__serena__get_symbols_overview",
-      "mcp__serena__find_symbol",
       "SlashCommand(/create-component:*)",
       "SlashCommand(/generate-stories:*)"
     ],
