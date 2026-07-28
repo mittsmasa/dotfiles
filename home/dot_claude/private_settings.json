@@ -174,7 +174,6 @@
     ],
     "defaultMode": "auto"
   },
-  "model": "claude-sonnet[1m]",
   "hooks": {
     "SessionStart": [
       {
@@ -249,7 +248,8 @@
   },
   "enabledPlugins": {
     "document-skills@anthropic-agent-skills": false,
-    "context7@claude-plugins-official": true
+    "context7@claude-plugins-official": false,
+    "cowork-plugin-management@inline": false
   },
   "extraKnownMarketplaces": {},
   "outputStyle": "maaya",
@@ -266,5 +266,32 @@
   "theme": "dark-daltonized",
   "agentPushNotifEnabled": true,
   "skipAutoPermissionPrompt": true,
-  "voiceEnabled": false
+  "voiceEnabled": false,
+  "skillOverrides": {
+    "agents-sdk": "off",
+    "ax": "off",
+    "cloudflare": "off",
+    "cloudflare-email-service": "off",
+    "cloudflare-one": "off",
+    "cloudflare-one-migrations": "off",
+    "cmux": "off",
+    "cmux-browser": "off",
+    "cmux-customization": "off",
+    "cmux-diagnostics": "off",
+    "cmux-markdown": "off",
+    "cmux-settings": "off",
+    "cmux-workspace": "off",
+    "difit": "off",
+    "durable-objects": "off",
+    "find-skills": "off",
+    "frontend-estimation": "off",
+    "gws": "off",
+    "sandbox-sdk": "off",
+    "tmux": "off",
+    "turnstile-spin": "off",
+    "web-design-guidelines": "off",
+    "web-perf": "off",
+    "workers-best-practices": "off",
+    "wrangler": "off"
+  }
 }
