@@ -10,7 +10,7 @@
 
 ## ペイン戦略
 
-tmux/cmux があれば main.0=Claude / main.1=dev server / main.2=動作確認。詳細は `rules/pane-strategy.md`。
+tmux/cmux があれば main.0=Claude / main.1=dev server / main.2=動作確認。詳細は `~/.agents/AGENTS.md` の「ペイン・ツール使い分け」節。
 
 ## CRITICAL: Phase 0 — Consult
 
