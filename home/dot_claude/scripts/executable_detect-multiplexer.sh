@@ -90,7 +90,7 @@ EOF
 
 You are running inside **cmux**.
 
-- For pane / workspace operations, use the `using-cmux` skill (new-split, send, read-screen).
+- For pane / workspace operations, use `cmux new-split` / `cmux send` / `cmux read-screen` (run `cmux --help` for details).
 - To show files to the user in an editor, use the `fresh` skill — it can open files in an existing fresh session, or spawn a new cmux pane and launch fresh there.
 - Before any pane operation, run `cmux identify` and `cmux list-panes` to see the current layout.
 EOF
