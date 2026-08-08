@@ -24,4 +24,4 @@
 - 対話的 CLI/TUI は別ペインで起動して `send` で操作
 - Claude TUI に長文を送って submit が効かないときは `load-buffer` → `paste-buffer` → `C-m`（`Enter` は改行扱い）
 
-具体コマンドは `using-cmux` skill 参照。
+具体コマンドは `cmux --help` / `tmux` の標準コマンドを参照。
