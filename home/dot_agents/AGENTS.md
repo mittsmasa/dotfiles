@@ -126,3 +126,13 @@ git worktree add <repo>/.claude/worktrees/<name> -b worktree-<name>
 - 「慎重に進めて」「都度確認して」: default に戻る
 
 （Claude Code では、フルフローと判定したタスクの実装着手には人間承認が別途必須。詳細は Claude Code 側の workflow ルールを参照。）
+
+## git commit 時に GPG(secretive) 署名で失敗する場合
+
+`git commit` が secretive 経由の GPG 署名で失敗する(agent が対話シェルでなく `.zshrc` が読み込まれていない等)ときは、まず `.zshrc` を読み込んでから commit し直す。リポジトリ固有の問題ではなく、シェル環境依存のため毎回この対処でよい。
+
+```sh
+source ~/.zshrc && git commit -m "..."
+```
+
+これで解決しない場合のみユーザーに報告する。
