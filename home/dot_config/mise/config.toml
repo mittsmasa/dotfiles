@@ -15,7 +15,7 @@ uv = "0.12.1"
 age = "latest"
 "github:jdx/fnox" = "1.32.0"
 ffmpeg = "8.1.2"
-"github:yusukebe/ax" = { version = "0.1.23", exe = "ax" }
+"github:yusukebe/ax" = { version = "0.1.24", exe = "ax" }
 
 [settings]
 idiomatic_version_file_enable_tools = ["node"]
