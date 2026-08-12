@@ -15,3 +15,15 @@ cmux 上で「diff を見せて」「差分を見せて」と言われたら `cm
 ## skill のインストール
 
 GitHub リポジトリから agent skill を導入するときは `gh skill install <owner>/<repo> --agent claude-code --scope user` を使う（npm の `skills` パッケージは使わない）。
+
+## fnox の secrets が要るコマンド
+
+Bash ツールのシェルは `~/.claude/shell-snapshots/` の snapshot から初期化される。snapshot に入るのは**関数定義と PATH だけ**で、`.zshrc` で export した環境変数は引き継がれない（`GITHUB_TOKEN` / `FNOX_SHELL` も届かない）。`fnox activate` が登録する `_fnox_hook` は precmd/chpwd フック経由なので、非対話シェルでは発火しない。
+
+そのため fnox の secrets が要るコマンドは `fnox exec --` を前置する。
+
+```bash
+fnox exec -- pnpm install
+```
+
+例: private registry から取得する `pnpm install`（`NODE_AUTH_TOKEN` が要る）。`~/.npmrc` の `${NODE_AUTH_TOKEN}` が空のまま送られて 401 になる。`pnpm lint` / `pnpm test` など取得を伴わないコマンドは前置不要。
