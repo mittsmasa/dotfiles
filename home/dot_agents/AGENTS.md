@@ -136,3 +136,26 @@ source ~/.zshrc && git commit -m "..."
 ```
 
 これで解決しない場合のみユーザーに報告する。
+
+## pnpm install が 401 で落ちる場合（fnox の secrets）
+
+`pnpm install` が private registry で `ERR_PNPM_FETCH_401` になる、または
+`WARN Issue while reading "~/.npmrc". Failed to replace env in config: ${NODE_AUTH_TOKEN}` が出るときは、
+**fnox の global に `NODE_AUTH_TOKEN` がある**（keychain 保存の GitHub Packages read-only PAT）。
+`~/.npmrc` の `${NODE_AUTH_TOKEN}` がこれを参照している。
+
+`fnox exec --` を前置すれば通る。
+
+```sh
+fnox exec -- pnpm install
+```
+
+登録済みの secrets は `fnox list` で確認できる。`pnpm lint` / `pnpm test` など取得を伴わないコマンドは前置不要。
+
+### なぜ届かないのか
+
+agent の実行するシェルは対話シェルではないため、`fnox activate` が登録する `_fnox_hook`（precmd / chpwd フック経由）が
+発火せず、secrets がロードされない。Claude Code の場合はさらに、Bash ツールが `~/.claude/shell-snapshots/` の
+snapshot から初期化される。**snapshot に入るのは関数定義と PATH だけ**で、`.zshrc` で export した環境変数は
+一切引き継がれない（`GITHUB_TOKEN` / `FNOX_SHELL` も同様に届かない）。
+つまり `.zshrc` をどう書き換えても解決しないので、コマンド側で `fnox exec --` を前置する。
