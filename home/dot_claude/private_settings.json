@@ -211,10 +211,6 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ~/.claude/scripts/workflow-meta-hook.sh"
-          },
-          {
-            "type": "command",
             "command": "bash ~/.claude/scripts/plan-review-hook.sh",
             "timeout": 1800
           },
