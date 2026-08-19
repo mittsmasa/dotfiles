@@ -167,6 +167,9 @@ clear_env() {
   unset MOCK_APPLIER_ACTION
   unset MOCK_PLAN_FILE
   unset MAX_REVIEW_ROUNDS
+  # 既存ケースは中間生成物 (peers.md 等) を assert するため掃除を無効化する。
+  # 掃除そのものの検証は Case 7 で行う。
+  export PLAN_REVIEW_KEEP_ARTIFACTS=1
 }
 
 # ---------------------------------------------------------------------------
@@ -304,6 +307,29 @@ run_hook "$WS"
 
 assert_match     "$WS/.workflow/plan.md" '^- Review Status: pending$'        "Status untouched (still pending)"
 assert_file_absent "$WS/.workflow/review-round-1.md"                    "no review run"
+rm -rf "$WS" "$MOCK_DIR"
+
+# ---------------------------------------------------------------------------
+# Case 7: Cleanup removes intermediate artifacts but keeps the round report
+# ---------------------------------------------------------------------------
+echo "Case 7: cleanup on verdict=pass"
+clear_env
+unset PLAN_REVIEW_KEEP_ARTIFACTS
+WS=$(mk_workspace)
+MOCK_DIR=$(mktemp -d)
+export PLAN_REVIEW_REVIEWER_CMD="$MOCKS_DIR/mock-reviewer.sh"
+export PLAN_REVIEW_APPLIER_CMD="$MOCKS_DIR/mock-applier.sh"
+export MOCK_REVIEWER_DIR="$MOCK_DIR"
+export MOCK_APPLIER_ACTION="noop"
+export MOCK_PLAN_FILE="$WS/.workflow/plan.md"
+run_hook "$WS"
+
+assert_match       "$WS/.workflow/plan.md" '^- Review Status: pass$'   "Status=pass"
+assert_file_exists "$WS/.workflow/review-round-1.md"                   "round report kept"
+assert_file_absent "$WS/.workflow/review-round-1-simplicity.raw"       "raw cleaned"
+assert_file_absent "$WS/.workflow/review-round-1-simplicity.exit"      "exit marker cleaned"
+assert_file_absent "$WS/.workflow/review-round-1-simplicity.json"      "extracted json cleaned"
+assert_file_absent "$WS/.workflow/review-round-1-peers.md"             "peers cleaned"
 rm -rf "$WS" "$MOCK_DIR"
 
 # ---------------------------------------------------------------------------

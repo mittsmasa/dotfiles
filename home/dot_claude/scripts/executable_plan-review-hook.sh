@@ -504,3 +504,22 @@ fi
 
 echo "[plan-review] Loop ended: verdict=$FINAL_VERDICT, last_round=$LAST_ROUND, reason=${LOOP_BREAK_REASON:-unknown} (skipped=[$SKIPPED_STR], failed=[$FAILED_STR])" >&2
 echo "[plan-review] Final report: $WORKFLOW_DIR/review-round-${LAST_ROUND}.md" >&2
+
+# --- 中間生成物の掃除 (ループ終了後 1 回) ---
+# レビューの生出力・exit マーカー・peers・applier バックアップは verdict 確定後に用済み。
+# 集約レポート (review-round-N.md) は読む価値があるため残す。
+#
+#   - verdict=error のときは残す (原因調査に必要)
+#   - PLAN_REVIEW_KEEP_ARTIFACTS が非空なら掃除しない
+#     (test.sh が review-round-N-peers.md 等の中身を assert しているため)
+#   - $WORKFLOW_DIR 直下のみ (-maxdepth 1)。サブディレクトリには触れない
+if [[ "$FINAL_VERDICT" != "error" && -z "${PLAN_REVIEW_KEEP_ARTIFACTS:-}" ]]; then
+  find "$WORKFLOW_DIR" -maxdepth 1 \( \
+    -name 'review-round-*-*.raw' -o \
+    -name 'review-round-*-*.json' -o \
+    -name 'review-round-*-*.exit' -o \
+    -name 'review-round-*-peers.md' -o \
+    -name 'plan.md.bak' \
+    \) -delete 2>/dev/null || true
+  echo "[plan-review] Cleaned intermediate artifacts (kept review-round-*.md)" >&2
+fi

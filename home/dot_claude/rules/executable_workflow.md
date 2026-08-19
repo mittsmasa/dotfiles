@@ -4,9 +4,7 @@
 
 ## Session Scoping
 
-- 1 セッション 1 ゴール（調査/実装を混ぜない）
-- 多フェーズは TaskCreate / サブエージェントで分離
-- セッションまたぎは TaskCreate で追跡
+1 セッション 1 ゴール（調査/実装を混ぜない）。多フェーズは TaskCreate / サブエージェントで分離し、セッションまたぎは TaskCreate で追跡する。
 
 ## ペイン戦略
 
@@ -14,26 +12,17 @@ tmux があれば main.0=Claude / main.1=dev server / main.2=動作確認。詳�
 
 ## CRITICAL: Phase 0 — Consult
 
-**タスク受領時、ツール呼び出し・調査・エージェント起動より前に必ず以下を出力。自明でも省略禁止。**
+**タスク受領時、ツール呼び出し・調査・エージェント起動より前にモードを 1 行で宣言する。自明でも省略禁止。**
 
-> **規模判定**
-> - 推定ステップ数 / 影響ファイル数 / 設計判断有無 / 探索+実装混在
-> - → モード: 直接実行 (1-2step, 1-2file) / 簡易フロー (3-5step, 方針明確) / フルフロー (3+step, 設計判断あり)
+> **規模判定** → モード: 直接実行（1-2 step・1-2 file）/ 簡易フロー（3-5 step・方針明確）/ フルフロー（3+ step・設計判断あり）— 理由を一言添える
 
 ## Phase 1: Research
 
-### タスク中央集約（全モード共通、Phase 0 直後）
+### task dir（全モード共通、Phase 0 直後）
 
-dashboard の In Progress に出すため、モード問わず以下を実行:
+`task-id` を `{YYYY-MM-DD}-{slug}`（kebab-case）で決め、`mkdir -p ~/.claude/workflow/{task-id}/`。
 
-**適用除外**: リポジトリのファイルを変更しない依頼（質問への回答、既存コード・ドキュメントの説明、翻訳・要約、チャット内で完結する相談）は task dir を作らない。dashboard に出すべき「作業」ではないため、儀式が成果を上回る。判断に迷うなら作る側に倒す。
-
-1. `task-id` 決定: `{YYYY-MM-DD}-{slug}`（kebab-case）
-2. 中央 task dir 作成: `mkdir -p ~/.claude/workflow/{task-id}/`
-3. `meta.json` 最小作成: `{"title":"<一行要約>","cwd":"<実作業 dir>"}`。`createdAt` / `branch` は hook が自動補完
-4. `.workflow` symlink は任意（リポジトリ内で短縮パスが欲しい場合のみ `ln -s`）。既に実 dir として存在するなら移行しない
-5. **dependsOn 判定**: `cwd` が git リポジトリで HEAD が `main`/`master` 以外から派生している場合、`~/.claude/workflow/*/meta.json` を grep して同じ派生元 `branch` を持つ task-id を探し、その PR が未マージなら `dependsOn: ["<task-id>", ...]` を meta.json に書く。該当なし or main 直系なら書かない
-6. **cwd 分離判定**: dependsOn を 1 つ以上書いた場合、その派生元タスクと同じ作業ディレクトリを共有しない。`git worktree add .claude/worktrees/{slug} {branch}` で専用 worktree を切り、`meta.cwd` をその worktree パスにする。理由: dashboard は 1 ディレクトリにつき現在チェックアウト中の 1 ブランチしか観測できず、cwd を共有するとブランチ切替で先行タスクの PR 検出が壊れ、PR Open → PR Pending に誤降格する
+**適用除外**: リポジトリのファイルを変更しない依頼（質問への回答、既存コード・ドキュメントの説明、翻訳・要約、チャット内で完結する相談）は task dir を作らない。記録すべき「作業」ではなく、儀式が成果を上回るため。判断に迷うなら作る側に倒す。
 
 モード別追加:
 - **直接実行**: 上記のみ。Phase 6 で `verify-results.md` 簡略版、Phase 7 で `- Status: done` 追記
@@ -52,7 +41,7 @@ dashboard の In Progress に出すため、モード問わず以下を実行:
 `$WORKFLOW_DIR/plan.md` 必須セクション: 目的 / 方針 / 実装ステップ（チェックリスト）/ 変更対象ファイル / リスクと対策 / 動作確認項目 / Review Status / Approval。
 
 - 動作確認項目は実行可能・検証可能に（具体コマンド + 期待結果。手動はその旨明記）
-- ヘッダ（行頭 `- ` 付きの canonical 書式で書く。hook の sed と dashboard の `derivePhase` がこの形を前提）: `- Review Status: pending` / `- Plan Status: draft` / `- Approval Status: pending`（hash/round は hook が末尾 `<!-- auto-review: ... -->` に記録、手動記載不要）
+- ヘッダ（行頭 `- ` 付きの canonical 書式で書く。hook の sed がこの形を前提）: `- Review Status: pending` / `- Plan Status: draft` / `- Approval Status: pending`（hash/round は hook が末尾 `<!-- auto-review: ... -->` に記録、手動記載不要）
 
 ### UI / フロントエンド実装を含む場合（必須）
 
@@ -69,30 +58,17 @@ plan に UI / フロントエンド（web コンポーネント / ページ / �
 - needs_revision → applier が plan.md 編集 → 再レビュー（最大 3 ラウンド）
 - error（全 skipped）→ ユーザー報告
 
+verdict 確定後、中間生成物（`.raw` / `.exit` / 抽出 json / `*-peers.md` / `plan.md.bak`）は自動削除される。集約レポート `review-round-N.md` は残る。verdict=error のときは原因調査のため削除しない。
+
+**レビュアの指摘はユーザーの明示的な決定に優先しない。** applier がユーザーの決定事項を削った場合は復活させ、その旨を plan.md に明記してユーザーに報告する。
+
 main session の介入は `Approval Status: needs_human_review` 時のみ。詳細は hook スクリプト冒頭参照。
 
 ## Phase 4: Approval
 
-**承認は人間のみ。自己承認禁止。承認前の実装着手禁止。** 承認後 `- Approval Status: approved` に書き換えて Phase 5 へ。
+**承認は人間のみ。自己承認禁止。承認前の実装着手禁止。**
 
-### 承認監視ループ（dashboard 連携）
-
-Phase 3 完了後（`Plan Status: complete`, `Approval Status: pending`）、ユーザーが dashboard で操作できるよう ScheduleWakeup でポーリングを開始する。
-
-**起動条件**: Phase 3 の auto-review が pass した直後。
-
-**ポーリング動作**（60-270 秒間隔）:
-
-1. plan.md を読み、`Approval Status` を確認
-2. 状態に応じて分岐:
-   - **`approved`**: ループ終了。「承認を検知しました」と報告し Phase 5 へ進む
-   - **`needs_human_review`**: ループ終了。`comments.json` を読みレビューコメントを表示。plan.md を修正 → auto-review 通過後、再度ループを開始
-   - **`pending`（変化なし）**: 次の ScheduleWakeup をスケジュール
-3. フォールバック: 30 分経過で「まだ承認待ちです」と報告しループ継続
-
-**差し戻しサイクル**: dashboard の change-request は `Plan Status: draft` + `Approval Status: needs_human_review` に書き換える。Claude が修正 → auto-review pass → `Plan Status: complete` 復帰 → 再度ループ開始、のサイクルで回る。
-
-**セッション内での手動承認も引き続き有効。** ユーザーがチャットで「承認」と伝えた場合はループを待たず即座に Phase 5 へ進む。
+チャットでユーザーが承認したら `- Approval Status: approved` に書き換えて Phase 5 へ。`needs_human_review` に遷移した場合は、その場でユーザーに提示して判断を仰ぐ。
 
 ## Phase 5: Implement
 
@@ -118,74 +94,21 @@ Phase 3 完了後（`Plan Status: complete`, `Approval Status: pending`）、ユ
 
 ## Phase 7: Completion
 
-**前提**（`Status: done` 前に満たす）:
-- `meta.cwd` の worktree に未コミット差分ゼロ（`git status --porcelain` が空）
-- いずれか: PR 作成 + URL 確認済み / `meta.json` に `"noPr": true`
+`Status: done` の前に満たす前提と仕上げ:
 
-未充足なら dashboard は `pr-pending` に降格。
-
-### dashboard 列対応
-
-| plan/verify 状態 | PR / dirty | 列 |
-|---|---|---|
-| 無し or `Approval: approved` | - | In Progress |
-| `Plan Status: complete`（承認待ち） | - | Review |
-| `Status: done` | dirty=true、または PR 無し + `noPr` 未宣言 | PR Pending |
-| `Status: done` | dirty=false かつ `noPr=true` | Done |
-| PR 紐付き | open | PR Open |
-| PR 紐付き | merged | Done |
-
-判定実装は `server.ts` の `derivePhase`。挙動変更時は表と関数を両方更新。
-
-仕上げ:
-- `verify-results.md` 末尾に `- Status: done`（全モード必須、dashboard 遷移シグナル）
-- plan.md がある場合は `- Plan Status: done` に更新
-
-### `noPr` 宣言
-
-PR を作らないタスク（ローカル設定、調査のみ、chezmoi 経由で自動 push される `~/.claude/` 配下編集等）は `meta.json` に明示:
-
-```json
-{ "title": "...", "cwd": "...", "noPr": true }
-```
-
-宣言忘れは `pr-pending` 降格。手動で `meta.json` を直せば回復。
-
-ただし `cwd` が `~/.claude/` 配下のタスクは `workflow-meta-hook.sh` が新規 `meta.json` 生成時に `noPr: true` を自動補完（既存には触らない）。
-
-サマリー報告（変更概要 / 確認結果 / SKIP 手動依頼 / フォローアップ）。
+- 作業ディレクトリに未コミット差分ゼロ（`git status --porcelain` が空）。PR が必要なタスクなら PR 作成 + URL 確認済み
+- `verify-results.md` 末尾に `- Status: done`（全モード必須）。plan.md がある場合は `- Plan Status: done` に更新
+- サマリー報告（変更概要 / 確認結果 / SKIP 手動依頼 / フォローアップ）
 
 ---
 
 ## 並列実行: dynamic workflow（Scope Guard 連動オプトイン）
 
-Claude の Workflow ツール（`agent()` / `parallel()` / `pipeline()` をスクリプトで回す multi-agent orchestration）を、特定フェーズの実行エンジンとして任意発動で使う。常用しない。
+Claude の Workflow ツール（`agent()` / `parallel()` / `pipeline()` によるマルチエージェント実行）を、特定フェーズの実行エンジンとして任意発動で使う。常用しない。
 
-### 発動条件（すべて満たす）
+**発動条件（すべて満たす）**: ① Phase 1 の Scope Guard が警告（2 つ以上該当）を出した ② 対象が Research の多面探索 / Verify の多項目並列 / 設計案の judge panel のいずれか ③ Claude が「ここは並列が効く」と提案し、ユーザーが承認した（`~/.agents/AGENTS.md` の Autonomy Rules「止まるべき場面 > 3. 設計判断」に従う。自動起動はしない）。この節に発動条件を明記することをもって Workflow ツールの explicit opt-in 要件を満たす standing opt-in とし、発動はフェーズ単位の都度承認制とする。
 
-1. Phase 1 の Scope Guard が警告（2 つ以上該当）を出した
-2. 対象が次のいずれか: Research の多面探索 / Verify の多項目並列 / 設計案の judge panel
-3. Claude が「ここは並列が効く」と提案し、ユーザーが承認した（`~/.agents/AGENTS.md` の Autonomy Rules「止まるべき場面 > 3. 設計判断」に従う。自動起動はしない）
-
-この workflow.md に発動条件を明記することをもって、Workflow ツールの explicit opt-in 要件を満たす standing opt-in とする。発動はフェーズ単位の都度承認制。
-
-### 適用してよいフェーズ
-
-| フェーズ | 使い方 |
-|---|---|
-| Research | サブシステムごとに並列読み込み → research.md に集約 |
-| Verify | plan.md の動作確認項目ごとに並列検証 |
-| 設計探索 | 複数方針を独立生成 → 評価・統合（judge panel） |
-
-### 不可侵
-
-- Phase 3 Plan Review Loop には使わない。hook（`plan-review-hook.sh`）が既に並列レビューを担う。二重化しない。
-- Phase 4 Approval は人間のみ。dynamic workflow に承認を委ねない。
-- コスト節度（過剰実装回避）を優先。Scope Guard 非警告のタスクには使わない。
-
-## Implementation Guard
-
-Approval=approved, Review=pass, hash 一致を満たさない限り `$WORKFLOW_DIR` 外へのソース書き込みと実装系 Bash をブロック。research.md / plan.md 編集は常に許可。
+**不可侵**: Phase 3 Plan Review Loop には使わない（hook が既に並列レビューを担う。二重化しない）。Phase 4 Approval は人間のみ、dynamic workflow に委ねない。Scope Guard 非警告のタスクには使わない（過剰実装回避を優先）。
 
 ## Task Completion Protocol
 
@@ -193,4 +116,5 @@ Approval=approved, Review=pass, hash 一致を満たさない限り `$WORKFLOW_D
 
 ## 環境変数
 
-`WORKFLOW_DIR`: 成果物出力先。真のソースは `~/.claude/workflow/{task-id}/`、`.workflow` symlink は任意の短縮パス。hook は未設定時 `tool_input.file_path` の親 dir を `pwd -P` で実体解決、symlink 経由でも中央 dir に到達。dashboard も中央 dir を直接走査。env 経由オーバーライドはテスト用途のみ。
+- `WORKFLOW_DIR`: 成果物出力先。真のソースは `~/.claude/workflow/{task-id}/`。hook は未設定時 `tool_input.file_path` の親 dir を `pwd -P` で実体解決する。env 経由オーバーライドはテスト用途のみ
+- `PLAN_REVIEW_KEEP_ARTIFACTS`: 非空なら Phase 3 の中間生成物を掃除しない（テスト用途）
