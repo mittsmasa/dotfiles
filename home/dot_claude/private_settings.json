@@ -168,6 +168,7 @@
     ],
     "defaultMode": "auto"
   },
+  "model": "claude-sonnet",
   "hooks": {
     "SessionStart": [
       {
@@ -247,7 +248,7 @@
   },
   "enabledPlugins": {
     "document-skills@anthropic-agent-skills": false,
-    "context7@claude-plugins-official": false,
+    "context7@claude-plugins-official": true,
     "cowork-plugin-management@inline": false
   },
   "extraKnownMarketplaces": {},
