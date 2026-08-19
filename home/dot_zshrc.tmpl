@@ -92,3 +92,8 @@ export PATH="$PATH:{{ .chezmoi.homeDir }}/.turso"
 
 # Cortex CLI completion (disable via /settings in cortex)
 [[ -s ~/.zsh/completions/cortex.zsh ]] && source ~/.zsh/completions/cortex.zsh
+
+# fnox: 保存したトークンを自動で読み込む設定（hook-env のみ追記。fnox activate は既存設定を利用）
+if command -v fnox &> /dev/null; then
+  eval "$(fnox hook-env -s zsh)" 2>/dev/null
+fi
