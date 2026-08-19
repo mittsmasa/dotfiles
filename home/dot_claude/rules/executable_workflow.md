@@ -26,6 +26,8 @@ tmux/cmux があれば main.0=Claude / main.1=dev server / main.2=動作確認�
 
 dashboard の In Progress に出すため、モード問わず以下を実行:
 
+**適用除外**: リポジトリのファイルを変更しない依頼（質問への回答、既存コード・ドキュメントの説明、翻訳・要約、チャット内で完結する相談）は task dir を作らない。dashboard に出すべき「作業」ではないため、儀式が成果を上回る。判断に迷うなら作る側に倒す。
+
 1. `task-id` 決定: `{YYYY-MM-DD}-{slug}`（kebab-case）
 2. 中央 task dir 作成: `mkdir -p ~/.claude/workflow/{task-id}/`
 3. `meta.json` 最小作成: `{"title":"<一行要約>","cwd":"<実作業 dir>"}`。`createdAt` / `branch` は hook が自動補完
@@ -108,6 +110,12 @@ Phase 3 完了後（`Plan Status: complete`, `Approval Status: pending`）、ユ
 - **簡易/フル**: plan.md の動作確認項目を全実行、PASS/FAIL/SKIP(手動) 記録。FAIL → 修正 → **全項目**再実行（最大 5 リトライ）
 - **直接実行**: 簡易ログのみ（手動確認結果でも可）
 
+### テストを削除・リファクタしたとき
+
+- **エラー分岐のカバレッジを落とさない。** vi.mock の整理、toast アサーションの削除などでアサーションを消すときは、削除ではなく置き換える
+- カバレッジの増減は `verify-results.md` と PR description の両方に書く。「変化なし」なら変化なしと書く
+- テストリファクタ後は CI を再実行し、実行回数と結果を報告してからレビューを依頼する
+
 ## Phase 7: Completion
 
 **前提**（`Status: done` 前に満たす）:
@@ -157,7 +165,7 @@ Claude の Workflow ツール（`agent()` / `parallel()` / `pipeline()` をス�
 
 1. Phase 1 の Scope Guard が警告（2 つ以上該当）を出した
 2. 対象が次のいずれか: Research の多面探索 / Verify の多項目並列 / 設計案の judge panel
-3. Claude が「ここは並列が効く」と提案し、ユーザーが承認した（autonomy.md の設計判断ゲートに従う。自動起動はしない）
+3. Claude が「ここは並列が効く」と提案し、ユーザーが承認した（`~/.agents/AGENTS.md` の Autonomy Rules「止まるべき場面 > 3. 設計判断」に従う。自動起動はしない）
 
 この workflow.md に発動条件を明記することをもって、Workflow ツールの explicit opt-in 要件を満たす standing opt-in とする。発動はフェーズ単位の都度承認制。
 

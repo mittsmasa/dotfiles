@@ -1,7 +1,7 @@
 ---
 name: ui-verify
 description: "Visual verification skill for UI/frontend work. Use proactively after any UI implementation, style change, or component edit — accessibility snapshots cannot judge CSS, layout, color, or 'does it look right'. Drives playwright-cli in two stages: (1) self-check via screenshot + snapshot diff to settle what the AI can judge alone, (2) when human judgment is needed (design fidelity, ambiguous selection, animation feel), open the Playwright Dashboard in annotation mode so the user can drag a region and leave a comment. Triggers: any task that ends with rendered UI changes; workflow.md Phase 6 verification items involving the browser; explicit requests like 「見た目を確認して」「UI レビュー」「動作確認」."
-allowed-tools: Bash(playwright-cli:*) Bash(npx:*)
+allowed-tools: Bash(playwright-cli:*) Bash(lsof:*)
 ---
 
 # UI Verification
@@ -12,10 +12,14 @@ Workflow for verifying UI work in a real browser. Owns the *flow* (when to look,
 
 Settle what can be judged from pixels alone before spending the user's attention.
 
-1. Ensure the dev server is running (start one if needed — see `~/.claude/rules/pane-strategy.md` for pane placement).
+1. Confirm the dev server and **which port belongs to THIS worktree** before opening anything. Never assume 3000 / 3001 / 5173 — several worktrees run concurrently.
+   ```bash
+   lsof -i -P | grep LISTEN          # または Vite / Next の起動ログを読む
+   ```
+   Start one if needed — see `~/.agents/AGENTS.md`「ペイン・ツール使い分け」for pane placement. Kill only a PID you started yourself.
 2. Open the page and capture screenshots scoped to the change:
    ```bash
-   playwright-cli open http://localhost:3000/<path>
+   playwright-cli open http://localhost:<確認したポート>/<path>
    playwright-cli screenshot --filename=.workflow/ui-after.png
    playwright-cli screenshot --full-page --filename=.workflow/ui-full.png
    playwright-cli screenshot e5 --filename=.workflow/ui-component.png
@@ -65,6 +69,9 @@ For "does this match the design?", "which element did you mean?", "is this inter
 - Reporting a UI task done after only `snapshot` (accessibility tree, not pixels)
 - Calling `show --annotate` without trying Stage 1 first
 - Leaving the browser or dashboard open after the cycle (run `close` / `close-all` / `highlight --hide`)
+- Screenshotting a port you did not confirm belongs to this worktree
+- Opening the page with `open <url>` — it spawns a fresh browser and loses the logged-in session. Use `playwright-cli` (or the Browser MCP) so the session persists
+- Broad process kills (`pkill -f "next dev"`, `killall node`) — they take down dev servers the user is running independently
 
 ## Handoff to workflow.md Phase 6
 

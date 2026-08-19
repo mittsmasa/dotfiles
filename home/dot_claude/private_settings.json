@@ -112,8 +112,6 @@
       "Bash(dig:*)",
       "Bash(ps:*)",
       "Bash(kill:*)",
-      "Bash(killall:*)",
-      "Bash(pkill:*)",
       "Bash(lsof:*)",
       "Bash(netstat:*)",
       "Bash(perf:*)",
@@ -164,7 +162,9 @@
       "SlashCommand(/generate-stories:*)"
     ],
     "deny": [
-      "Bash(npx:*)"
+      "Bash(killall:*)",
+      "Bash(npx:*)",
+      "Bash(pkill:*)"
     ],
     "defaultMode": "auto"
   },
