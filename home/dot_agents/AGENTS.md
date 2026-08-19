@@ -2,7 +2,7 @@
 
 このファイルは複数のコーディングエージェントで共有する。エージェント固有の実行機構（hook、スラッシュコマンド等）への言及がある箇所は、そのエージェント上でのみ有効。他のエージェントは該当箇所を読み飛ばして構わない。
 
-正本はこのファイル（`~/.agents/AGENTS.md`）。各エージェントからはすべて symlink で参照する（`~/.claude/AGENTS.md`, `~/.codex/AGENTS.md`, `~/.copilot/instructions/AGENTS-shared.instructions.md`）。**編集は必ずこの実体ファイルに対して行う。**
+正本はこのファイル（`~/.agents/AGENTS.md`）。ホーム直下の `~/AGENTS.md` が symlink として張ってあり、cwd から上に辿って `AGENTS.md` を探すタイプのエージェント（Codex CLI 等）はここで拾う。Claude Code は `~/.claude/CLAUDE.md` の `@~/AGENTS.md` 経由で読む。`~/.codex/` `~/.copilot/` は現在未作成 — それらを導入したら同じ実体への symlink を張る。**編集は必ずこの実体ファイルに対して行う。**
 
 ## ワークフロー必須（Claude Code）
 
