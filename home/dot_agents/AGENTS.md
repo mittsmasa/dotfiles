@@ -2,13 +2,19 @@
 
 このファイルは複数のコーディングエージェントで共有する。エージェント固有の実行機構（hook、スラッシュコマンド等）への言及がある箇所は、そのエージェント上でのみ有効。他のエージェントは該当箇所を読み飛ばして構わない。
 
-正本はこのファイル（`~/.agents/AGENTS.md`）。各エージェントからはすべて symlink で参照する（`~/.claude/rules/AGENTS.md`, `~/.codex/AGENTS.md`, `~/.copilot/instructions/AGENTS-shared.instructions.md`）。**編集は必ずこの実体ファイルに対して行う。**
+正本はこのファイル（`~/.agents/AGENTS.md`）。各エージェントからはすべて symlink で参照する（`~/.claude/AGENTS.md`, `~/.codex/AGENTS.md`, `~/.copilot/instructions/AGENTS-shared.instructions.md`）。**編集は必ずこの実体ファイルに対して行う。**
+
+## ワークフロー必須（Claude Code）
+
+タスクを受け取ったら、何よりも先に `~/.claude/rules/workflow.md` の Phase 0（規模判定）を実行する。調査・ツール呼び出し・エージェント起動はその後。
 
 ## skills の編集について
 
 このファイル配下と `skills/` の実体はすべて `~/.agents/` 以下にある。各エージェントの `skills/` ディレクトリ（`~/.claude/skills/`, `~/.codex/skills/` 等）はそこへのシンボリックリンク。
 
 **skill を編集するときは、必ず実体パス（`~/.agents/skills/<name>/...`）を直接開いて編集する。** シンボリックリンク経由のパス（例: `~/.claude/skills/<name>/...`）で編集すると、dotfiles 管理ツール（chezmoi）が変更を検知できず、同期が静かに漏れることがある。
+
+**GitHub リポジトリから skill を導入するときは `gh skill install <owner>/<repo> --agent claude-code --scope user` を使う。** npm の `skills` パッケージは使わない。
 
 ## Worktree 運用ルール
 
@@ -20,7 +26,7 @@
 git worktree add <repo>/.claude/worktrees/<name> -b worktree-<name>
 ```
 
-その後、tmux / cmux なら別ペインで対話エージェントを起動して並走させる。bare 環境ならターミナルを別途立ち上げる。
+その後、tmux なら別ペインで対話エージェントを起動して並走させる。bare 環境ならターミナルを別途立ち上げる。
 
 （Claude Code では SessionStart hook `~/.claude/scripts/detect-multiplexer.sh` が新しい worktree 配下に `.serena/` と `.env.local` 系をメインリポジトリから自動コピーする。他エージェントにこの自動コピー機構はないため、必要なら手動でコピーする。）
 
@@ -44,23 +50,23 @@ git worktree add <repo>/.claude/worktrees/<name> -b worktree-<name>
 
 ### 判断軸
 
-**エージェント消費・バックグラウンドで動かす処理は cmux/tmux ペインに逃がす。**
+**エージェント消費・バックグラウンドで動かす処理は tmux ペインに逃がす。**
 
 ### 使い分け表
 
 | 場面 | ツール |
 |---|---|
-| 自動レビュー・サブエージェント | cmux/tmux ペイン |
+| 自動レビュー・サブエージェント | tmux ペイン |
 | dev server / watch 常駐 | tmux ペイン |
 | テスト・ビルド + 結果回収 | tmux ペイン |
 
 ### 別ペイン操作の原則
 
 - `send` には必ず Enter/`\n` を含める(送るだけでは実行されない)
-- 起動が重いプロセス(claude/codex/node/docker)は `capture-pane` / `read-screen` でプロンプト確認後に次を送る
+- 起動が重いプロセス(claude/codex/node/docker)は `capture-pane` でプロンプト確認後に次を送る
 - 対話的 CLI/TUI は別ペインで起動して `send` で操作
 
-具体コマンドは `cmux --help` / `tmux` のマニュアルを参照。
+具体コマンドは `tmux` のマニュアルを参照。
 
 ## chezmoi ルール
 
@@ -105,7 +111,7 @@ git worktree add <repo>/.claude/worktrees/<name> -b worktree-<name>
 
 ## ローカル検証の前提
 
-UI の見た目の確認フローは `ui-verify` skill が持つ。ここはその手前の環境の話。
+UI の見た目を確認するフローは `ui-verify` skill が持つ。**UI / フロントエンドの動作確認は必ず `ui-verify` を経由する。** `ui-verify` が判断フロー（self-check → 必要なら annotate）を持ち、内部で `playwright-cli`（`@playwright/cli`、mise 管理）を呼ぶ。`playwright-cli` を直接叩くのは、`ui-verify` からコマンド詳細を引きたいときだけ。以下はその手前の環境の話。
 
 - **ポートを決めつけない。** 複数 worktree が同時に走るため、3000 / 3001 / 5173 は別プロジェクトのものかもしれない。`lsof -i -P | grep LISTEN` か dev server の起動ログで、cwd と突き合わせて確認する
 - **広範囲のプロセス kill をしない。** `pkill` / `killall` は settings.json で deny 済み。自分が起動した PID を `kill <pid>` で落とす
