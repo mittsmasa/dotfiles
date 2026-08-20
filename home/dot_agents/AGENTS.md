@@ -109,6 +109,11 @@ git worktree add <repo>/.claude/worktrees/<name> -b worktree-<name>
 - **レビュー / QA の工数を必ず含める**。実装工数だけの見積もりは出さない
 - 仕様書（Notion / issue）と実装のずれをコード上で見つけたら、見積もりに埋もれさせず独立した項目として指摘する
 
+## 実装前の自問
+
+- 実装前に「なぜこの変更が必要か」「なぜこの範囲か」を一文で言えるか自問し、言えないなら書かない
+- 言えても、その一文をコードやコミットメッセージに書き足す必要はない。判断の根拠であって説明義務ではない
+
 ## ローカル検証の前提
 
 UI の見た目を確認するフローは `ui-verify` skill が持つ。**UI / フロントエンドの動作確認は必ず `ui-verify` を経由する。** `ui-verify` が判断フロー（self-check → 必要なら annotate）を持ち、内部で `playwright-cli`（`@playwright/cli`、mise 管理）を呼ぶ。`playwright-cli` を直接叩くのは、`ui-verify` からコマンド詳細を引きたいときだけ。以下はその手前の環境の話。
