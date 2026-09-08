@@ -97,6 +97,7 @@ main session の介入は `Approval Status: needs_human_review` 時のみ。詳�
 `Status: done` の前に満たす前提と仕上げ:
 
 - 作業ディレクトリに未コミット差分ゼロ（`git status --porcelain` が空）。PR が必要なタスクなら PR 作成 + URL 確認済み
+- PR に UI 変更が含まれるなら、`ui-verify` のスクリーンショットを `gh pr create --attach` で貼る（`~/.agents/AGENTS.md`「PR / Issue にメディアを貼る」参照）
 - `verify-results.md` 末尾に `- Status: done`（全モード必須）。plan.md がある場合は `- Plan Status: done` に更新
 - サマリー報告（変更概要 / 確認結果 / SKIP 手動依頼 / フォローアップ）
 
