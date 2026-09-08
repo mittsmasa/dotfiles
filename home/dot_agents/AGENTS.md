@@ -123,6 +123,27 @@ UI の見た目を確認するフローは `ui-verify` skill が持つ。**UI / 
 - **`open <url>` でブラウザを開かない。** 新しいブラウザが立ち上がってログインセッションを失う。`playwright-cli` かブラウザ MCP を使う
 - **スキーマに触れる機能を検証する前に、ローカル DB に未適用のマイグレーションを流す**
 
+## PR / Issue にメディアを貼る（`gh --attach`）
+
+gh 2.99 以降、`gh pr create` / `gh pr edit` / `gh pr comment` / `gh issue create` / `gh issue edit` / `gh issue comment` に `--attach <file>[#alt text]` がある。画像・動画をアップロードして body に埋め込める（1 コマンド最大 50 ファイル）。`gh <cmd> --help` の説明が一次情報。
+
+### PR 作成時のデフォルト動作
+
+- **UI / フロントエンドの変更を含む PR では、`ui-verify` で撮ったスクリーンショット（`.workflow/ui-*.png` 等）を聞かれなくても `--attach` で貼る。** before / after があれば両方
+- body の中で `![alt](./path.png)` と参照しておくと、その参照がアップロード先 URL に書き換わる。「変更前 / 変更後」を並べて見せたいときはこちら。body で参照していない添付は末尾に追記される
+- alt text は `--attach './after.png#変更後のログイン画面'` の形でファイルパスの後ろに `#` で付ける。動画はプレイヤー表示になり alt text は付けられない
+- 貼る素材が無いなら無理に撮らない。API / CLI / リファクタなど見た目の変わらない変更は対象外
+- 一部の添付だけ失敗しても PR / Issue 自体は作られ、URL は stdout に出る。ただし exit code は非 0。これを「PR 作成失敗」と誤読して二重に作らない
+- PR 作成は外部影響のある操作なので承認を取る（Autonomy Rules 参照）。その承認要請の中に **添付予定ファイルの一覧** も含め、スクリーンショットに秘密情報（トークン、個人情報、社内 URL 等）が映っていないかをその時点で確かめる
+
+```sh
+gh pr create --title "..." --body-file pr-body.md \
+  --attach '.workflow/ui-before.png#変更前' \
+  --attach '.workflow/ui-after.png#変更後'
+```
+
+作成後に素材が増えたら `gh pr edit <num> --attach ...`、レビュー返信に画像が要るなら `gh pr comment <num> --attach ...` を使う。
+
 ## Autonomy Rules
 
 ### 基本方針
