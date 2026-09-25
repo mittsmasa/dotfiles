@@ -120,5 +120,5 @@ Claude の Workflow ツール（`agent()` / `parallel()` / `pipeline()` によ�
 
 ## 環境変数
 
-- `WORKFLOW_DIR`: 成果物出力先。真のソースは `~/.claude/workflow/{task-id}/`。hook は未設定時 `tool_input.file_path` の親 dir を `pwd -P` で実体解決する。env 経由オーバーライドはテスト用途のみ
+- `WORKFLOW_DIR`: 成果物出力先。真のソースは Phase 1 で作った task dir（リポジトリ内なら `.workflow/{task-id}/`、外なら `~/.claude/workflow/{task-id}/`）。hook は未設定時 `tool_input.file_path` の親 dir を `pwd -P` で実体解決する。env 経由オーバーライドはテスト用途のみ
 - `PLAN_REVIEW_KEEP_ARTIFACTS`: 非空なら Phase 3 の中間生成物を掃除しない（テスト用途）
