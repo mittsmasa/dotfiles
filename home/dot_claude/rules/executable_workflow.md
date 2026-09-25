@@ -20,7 +20,10 @@ tmux があれば main.0=Claude / main.1=dev server / main.2=動作確認。詳�
 
 ### task dir（全モード共通、Phase 0 直後）
 
-`task-id` を `{YYYY-MM-DD}-{slug}`（kebab-case）で決め、`mkdir -p ~/.claude/workflow/{task-id}/`。
+`task-id` を `{YYYY-MM-DD}-{slug}`（kebab-case）で決め、task dir を作る。
+
+- **git リポジトリ内**: `mkdir -p "$(git rev-parse --show-toplevel)/.workflow/{task-id}/"`。デスクトップアプリのファイルプレビューはセッションのディレクトリ外を開けず、symlink も辿らないため、実体をワークツリー内に置く。`.workflow` はグローバル gitignore 済み。ワークツリー削除とともに消えてよい
+- **git リポジトリ外**: `mkdir -p ~/.claude/workflow/{task-id}/`
 
 **適用除外**: リポジトリのファイルを変更しない依頼（質問への回答、既存コード・ドキュメントの説明、翻訳・要約、チャット内で完結する相談）は task dir を作らない。記録すべき「作業」ではなく、儀式が成果を上回るため。判断に迷うなら作る側に倒す。
 
