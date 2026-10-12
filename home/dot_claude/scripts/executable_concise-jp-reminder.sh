@@ -1,6 +1,7 @@
 #!/bin/bash
 # PreToolUse hook: 他人が読む日本語ドキュメントを書こうとしたら
 # concise-japanese-writing skill のロードを促すリマインダを additionalContext で返す。
+# 対象: gh pr|issue の --body と、ドキュメント（.md 等）や学習教材・UI の本文（.tsx/.jsx/.html）の Write/Edit。
 # セッション中の最初の一回だけ発火する（フラグファイルで抑止）。
 set -uo pipefail
 
