@@ -14,8 +14,9 @@ FLAG="/tmp/claude-concise-jp-${SESSION_ID}"
 [ -f "$FLAG" ] && exit 0
 
 # 日本語文字（ひらがな・カタカナ・CJK 漢字）を含むか
+# macOS の /usr/bin/grep（BSD）は -P を持たないため perl で判定する
 has_japanese() {
-  printf '%s' "$1" | grep -qP '[\x{3040}-\x{30ff}\x{4e00}-\x{9fff}]'
+  printf '%s' "$1" | perl -CS -0777 -ne 'exit(/[\x{3040}-\x{30ff}\x{4e00}-\x{9fff}]/ ? 0 : 1)'
 }
 
 emit_reminder() {
