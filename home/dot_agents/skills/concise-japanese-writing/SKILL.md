@@ -1,6 +1,6 @@
 ---
 name: concise-japanese-writing
-description: "第三者が読む日本語ドキュメント（PR description / PR コメント / レビューコメント / 提案書 / 企画書 / 設計書 / 要件定義書 / ADR / Issue 本文 / リリースノート / Slack や Notion など）を書くときに従う作法。冗長表現や抽象語を削り、一文一義・結論先出しで書く。チャット応答そのものやコード内コメントには適用しない。通常は PreToolUse hook（~/.claude/scripts/concise-jp-reminder.sh）から自動でロードを促されるため、手動起動は不要。"
+description: "第三者が読む日本語ドキュメント（PR description / PR コメント / レビューコメント / 提案書 / 企画書 / 設計書 / 要件定義書 / ADR / Issue 本文 / リリースノート / Slack や Notion / 学習教材 / ドキュメントサイト / UI の説明文など）を書くときに従う作法。冗長表現や抽象語を削り、一文一義・結論先出しで書く。チャット応答そのものやコード内コメントには適用しない。通常は PreToolUse hook（~/.claude/scripts/concise-jp-reminder.sh）から自動でロードを促されるため、手動起動は不要。"
 ---
 
 # concise-japanese-writing
