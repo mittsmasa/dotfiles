@@ -42,7 +42,7 @@ case "$TOOL_NAME" in
   Write|Edit|NotebookEdit)
     FILE_PATH=$(printf '%s' "$INPUT" | jq -r '.tool_input.file_path // ""')
     case "$FILE_PATH" in
-      *.md|*.mdx|*.txt|*.rst) ;;
+      *.md|*.mdx|*.txt|*.rst|*.tsx|*.jsx|*.html) ;;
       *) exit 0 ;;
     esac
     case "$TOOL_NAME" in
