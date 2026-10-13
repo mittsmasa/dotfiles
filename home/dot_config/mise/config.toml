@@ -13,7 +13,7 @@ just = "1.58.0"
 "npm:vercel" = "62.0.0"
 uv = "0.12.23"
 age = "latest"
-"github:jdx/fnox" = "1.38.1"
+"github:jdx/fnox" = "1.39.0"
 ffmpeg = "8.1.2"
 "github:yusukebe/ax" = { version = "0.1.25", exe = "ax" }
 
