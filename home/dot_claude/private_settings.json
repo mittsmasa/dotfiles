@@ -169,7 +169,7 @@
     ],
     "defaultMode": "auto"
   },
-  "model": "claude-sonnet",
+  "model": "claude-opus",
   "hooks": {
     "SessionStart": [
       {
