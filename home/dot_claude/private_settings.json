@@ -238,7 +238,8 @@
           },
           {
             "type": "command",
-            "command": "bash ~/.claude/scripts/chezmoi-sync-hook.sh"
+            "command": "bash ~/.claude/scripts/chezmoi-sync-hook.sh",
+            "async": true
           }
         ]
       },
