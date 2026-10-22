@@ -19,6 +19,28 @@ if ! chezmoi source-path "$FILE_PATH" &>/dev/null; then
   exit 0
 fi
 
+# async で動くため、連続編集で同期が並走すると git の index.lock が衝突する。
+# mkdir の原子性でロックを取り、前の同期が終わるまで待つ（macOS に flock はない）。
+LOCK_DIR="${TMPDIR:-/tmp}/chezmoi-sync-hook.lock"
+for _ in $(seq 1 120); do
+  if mkdir "$LOCK_DIR" 2>/dev/null; then
+    echo $$ > "$LOCK_DIR/pid"
+    trap 'rm -rf "$LOCK_DIR"' EXIT
+    break
+  fi
+  # 保持者が死んでいれば stale lock として回収する
+  HOLDER=$(cat "$LOCK_DIR/pid" 2>/dev/null || echo "")
+  if [[ -n "$HOLDER" ]] && ! kill -0 "$HOLDER" 2>/dev/null; then
+    rm -rf "$LOCK_DIR"
+    continue
+  fi
+  sleep 1
+done
+if [[ ! -f "$LOCK_DIR/pid" ]] || [[ "$(cat "$LOCK_DIR/pid")" != "$$" ]]; then
+  echo "[chezmoi-sync] ERROR: timed out waiting for lock: $LOCK_DIR" >&2
+  exit 1
+fi
+
 # --- 同期実行 ---
 
 echo "[chezmoi-sync] Detected change in managed file: $FILE_PATH" >&2
