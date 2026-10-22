@@ -10,7 +10,8 @@ INPUT=$(cat)
 
 # スラッシュコマンド（skill 起動）は skill 側が出力形式を決めるため注入しない
 PROMPT=$(printf '%s' "$INPUT" | jq -r '.prompt // ""')
-[[ "$PROMPT" =~ ^[[:space:]]*/ ]] && exit 0
+# /Users/... のようなパス始まりの発言は除外しない（コマンド名は 2 個目の / を含まない）
+[[ "$PROMPT" =~ ^[[:space:]]*/[^/[:space:]]+([[:space:]]|$) ]] && exit 0
 
 jq -n '{
   hookSpecificOutput: {
