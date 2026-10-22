@@ -169,8 +169,28 @@
     ],
     "defaultMode": "auto"
   },
-  "model": "claude-opus",
+  "model": "claude-sonnet",
   "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/scripts/concise-response-reminder.sh"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/scripts/response-length-logger.sh"
+          }
+        ]
+      }
+    ],
     "SessionStart": [
       {
         "hooks": [
