@@ -6,8 +6,11 @@
 # 文面内の条件としてモデルに委ねる。
 set -uo pipefail
 
-# stdin（hook 入力 JSON）は使わないが、読み捨てて SIGPIPE を避ける
-cat > /dev/null
+INPUT=$(cat)
+
+# スラッシュコマンド（skill 起動）は skill 側が出力形式を決めるため注入しない
+PROMPT=$(printf '%s' "$INPUT" | jq -r '.prompt // ""')
+[[ "$PROMPT" =~ ^[[:space:]]*/ ]] && exit 0
 
 jq -n '{
   hookSpecificOutput: {
