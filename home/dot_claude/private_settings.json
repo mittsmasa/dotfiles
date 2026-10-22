@@ -274,10 +274,6 @@
     "cowork-plugin-management@inline": false
   },
   "extraKnownMarketplaces": {},
-  "skillOverrides": {
-    "ci-autofix": "off",
-    "web-design-guidelines": "off"
-  },
   "outputStyle": "maaya",
   "language": "日本語",
   "effortLevel": "high",
