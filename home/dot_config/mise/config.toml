@@ -24,6 +24,7 @@ pin = true
 disable_backends = ["asdf", "cargo", "conda", "dotnet", "forgejo", "gem", "gitlab", "go", "pipx", "spm", "http", "s3", "ubi", "vfox"]
 
 # GitHub API の rate limit 回避。gh の token は keyring にあり hosts.yml を読む gh_cli_tokens では拾えないため、
-# 必要時だけ gh から取得する（GITHUB_TOKEN を環境変数に常駐させない）
+# 必要時だけ gh から取得する（GITHUB_TOKEN を環境変数に常駐させない）。
+# credential_command は shims を PATH に入れずに実行されるため、mise 管理の gh を shim の絶対パスで呼ぶ
 [settings.github]
-credential_command = 'gh auth token --hostname "$MISE_CREDENTIAL_HOST"'
+credential_command = '"$HOME/.local/share/mise/shims/gh" auth token --hostname "$MISE_CREDENTIAL_HOST"'
