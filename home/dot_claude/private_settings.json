@@ -192,7 +192,7 @@
     "autoAllowBashIfSandboxed": false,
     "excludedCommands": ["gh *", "git fetch *", "git pull *", "git push *", "git ls-remote *"],
     "filesystem": {
-      "allowWrite": ["~/.local/state/mise"],
+      "allowWrite": ["~/.local/state/mise", "~/.local/share/chezmoi", "~/.config/chezmoi"],
       "denyRead": ["~/.zsh_history", "~/.zsh_sessions"]
     },
     "network": {
