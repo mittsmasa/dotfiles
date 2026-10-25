@@ -165,9 +165,51 @@
     "deny": [
       "Bash(killall:*)",
       "Bash(npx:*)",
-      "Bash(pkill:*)"
+      "Bash(pkill:*)",
+      "Read(//**/.env)",
+      "Read(//**/.env.local)",
+      "Read(//**/.env.*.local)",
+      "Read(~/Library/Keychains/**)",
+      "Read(~/Library/Cookies/**)",
+      "Bash(gh auth token *)",
+      "Bash(gh auth status *--show-token*)",
+      "Bash(security find-generic-password *)",
+      "Bash(security find-internet-password *)",
+      "Bash(security dump-keychain *)",
+      "Bash(fnox get *)",
+      "Bash(fnox export *)",
+      "Bash(fnox ex *)",
+      "Bash(fnox env *)"
+    ],
+    "ask": [
+      "Bash(dangerouslyDisableSandbox:true)"
     ],
     "defaultMode": "auto"
+  },
+  "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "autoAllowBashIfSandboxed": false,
+    "excludedCommands": ["gh *"],
+    "filesystem": {
+      "allowWrite": ["~/.local/state/mise"],
+      "denyRead": ["~/.zsh_history", "~/.zsh_sessions"]
+    },
+    "network": {
+      "allowedDomains": ["github.com", "registry.npmjs.org", "npm.pkg.github.com"],
+      "strictAllowlist": true,
+      "allowLocalBinding": true
+    },
+    "credentials": {
+      "envVars": [
+        { "name": "GITHUB_TOKEN", "mode": "deny" },
+        { "name": "GH_TOKEN", "mode": "deny" },
+        { "name": "NODE_AUTH_TOKEN", "mode": "deny" }
+      ],
+      "files": [
+        { "path": "~/.ssh", "mode": "deny" }
+      ]
+    }
   },
   "model": "claude-sonnet",
   "hooks": {
