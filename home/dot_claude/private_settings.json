@@ -196,7 +196,7 @@
       "denyRead": ["~/.zsh_history", "~/.zsh_sessions"]
     },
     "network": {
-      "allowedDomains": ["github.com", "registry.npmjs.org", "npm.pkg.github.com"],
+      "allowedDomains": ["github.com", "api.github.com", "registry.npmjs.org", "npm.pkg.github.com"],
       "strictAllowlist": true,
       "allowLocalBinding": true
     },
