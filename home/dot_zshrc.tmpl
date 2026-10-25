@@ -45,10 +45,8 @@ if command -v mise &> /dev/null; then
   export PATH="$HOME/.local/share/mise/shims:$PATH"
 fi
 
-# mise が GitHub API を未認証で叩くと rate limit に引っかかるため、gh の token を渡す（gh は mise 管理なので shims 追加後に置く）
-if command -v gh &> /dev/null; then
-  export GITHUB_TOKEN="$(gh auth token 2> /dev/null)"
-fi
+# mise の GitHub API rate limit 回避用トークンは mise の github.credential_command で gh から取得する。
+# gh の token を GITHUB_TOKEN に export すると全プロセスに repo/workflow 権限が漏れるため置かない
 
 # fnox (fnox.toml のあるディレクトリに cd すると env=true の secrets を自動ロード)
 if command -v fnox &> /dev/null; then

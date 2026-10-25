@@ -22,3 +22,8 @@ minimum_release_age = "7d"
 # mise use を常に exact version で config に書く（--pin のデフォルト化）
 pin = true
 disable_backends = ["asdf", "cargo", "conda", "dotnet", "forgejo", "gem", "gitlab", "go", "pipx", "spm", "http", "s3", "ubi", "vfox"]
+
+# GitHub API の rate limit 回避。gh の token は keyring にあり hosts.yml を読む gh_cli_tokens では拾えないため、
+# 必要時だけ gh から取得する（GITHUB_TOKEN を環境変数に常駐させない）
+[settings.github]
+credential_command = 'gh auth token --hostname "$MISE_CREDENTIAL_HOST"'
