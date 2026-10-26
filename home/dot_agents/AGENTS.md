@@ -123,11 +123,23 @@ UI の見た目を確認するフローは `ui-verify` skill が持つ。**UI / 
 - **`open <url>` でブラウザを開かない。** 新しいブラウザが立ち上がってログインセッションを失う。`playwright-cli` かブラウザ MCP を使う
 - **スキーマに触れる機能を検証する前に、ローカル DB に未適用のマイグレーションを流す**
 
-## gh / git リモート操作は単独コマンドで叩く（Claude Code sandbox）
+## sandbox 外実行のコマンドは単独で叩く（Claude Code sandbox）
 
-`gh *` / `git fetch|pull|push|ls-remote *` は `sandbox.excludedCommands` で sandbox 外実行にしてある。ただし **1 回の Bash 呼び出しに含まれる全コマンドが excludedCommands に一致しないと sandbox 内で走る**。`cd`・リダイレクト・`$(...)`・`git -C` を含む呼び出しも sandbox 内に留まる（公式: https://code.claude.com/docs/en/sandboxing ）。sandbox 内の gh は TLS 検証（`x509: OSStatus -26276`）で落ち、sandbox 解除の再実行 = 承認待ちになる。
+sandbox 内では動かないコマンドを `sandbox.excludedCommands` で sandbox 外実行にしてある。一覧の正本は `~/.claude/settings.json`。主なものと、sandbox 内で落ちる理由:
 
-- 呼び出しを gh / git リモート操作 1 本だけにする。`;` `&&` `|` で他のコマンドと繋がない
+- `gh *` / `git fetch|pull|push|ls-remote *`: TLS 検証（`x509: OSStatus -26276`）で落ちる
+- `git commit *`: lefthook が pty を開けず、pre-commit が `operation not permitted` になる
+- `mise install`: mise のインストール先に書き込めない
+- `fnox exec -- pnpm install *`: keychain が読めず `NODE_AUTH_TOKEN` が取れない
+- `pnpm exec vitest *`: browser テストの Chromium が Mach サービスを登録できない
+
+ただし **1 回の Bash 呼び出しに含まれる全コマンドが excludedCommands に一致しないと sandbox 内で走る**。`cd`・リダイレクト（`2>&1` も含む）・`$(...)`・`git -C` を含む呼び出しも sandbox 内に留まる（公式: https://code.claude.com/docs/en/sandboxing ）。sandbox 内で落ちると、sandbox 解除の再実行 = 承認待ちになる。
+
+- 呼び出しを対象コマンド 1 本だけにする。`;` `&&` `|` で他のコマンドと繋がない。`| tail` `| grep` で出力を絞らない（長い出力は Bash ツールが自動でファイルに逃がす）
+- 出力を加工したいなら、単独で実行した後に別の呼び出しで処理する
+
+gh 固有:
+
 - 整形は `| jq` ではなく `--jq` / `--template`。件数絞りは `| head` ではなく `--limit`
 - 別リポジトリは `cd && gh` ではなく `gh -R owner/repo`
 - body はファイル渡し（`--body-file`）。`$(cat ...)` や heredoc を使わない
