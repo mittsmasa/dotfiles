@@ -123,6 +123,16 @@ UI の見た目を確認するフローは `ui-verify` skill が持つ。**UI / 
 - **`open <url>` でブラウザを開かない。** 新しいブラウザが立ち上がってログインセッションを失う。`playwright-cli` かブラウザ MCP を使う
 - **スキーマに触れる機能を検証する前に、ローカル DB に未適用のマイグレーションを流す**
 
+## gh / git リモート操作は単独コマンドで叩く（Claude Code sandbox）
+
+`gh *` / `git fetch|pull|push|ls-remote *` は `sandbox.excludedCommands` で sandbox 外実行にしてある。ただし **1 回の Bash 呼び出しに含まれる全コマンドが excludedCommands に一致しないと sandbox 内で走る**。`cd`・リダイレクト・`$(...)`・`git -C` を含む呼び出しも sandbox 内に留まる（公式: https://code.claude.com/docs/en/sandboxing ）。sandbox 内の gh は TLS 検証（`x509: OSStatus -26276`）で落ち、sandbox 解除の再実行 = 承認待ちになる。
+
+- 呼び出しを gh / git リモート操作 1 本だけにする。`;` `&&` `|` で他のコマンドと繋がない
+- 整形は `| jq` ではなく `--jq` / `--template`。件数絞りは `| head` ではなく `--limit`
+- 別リポジトリは `cd && gh` ではなく `gh -R owner/repo`
+- body はファイル渡し（`--body-file`）。`$(cat ...)` や heredoc を使わない
+- 出力をファイルに残したいなら、gh を単独で実行した後に別の呼び出しで処理する
+
 ## PR / Issue にメディアを貼る（`gh --attach`）
 
 gh 2.99 以降、`gh pr create` / `gh pr edit` / `gh pr comment` / `gh issue create` / `gh issue edit` / `gh issue comment` に `--attach <file>[#alt text]` がある。画像・動画をアップロードして body に埋め込める（1 コマンド最大 50 ファイル）。`gh <cmd> --help` の説明が一次情報。
