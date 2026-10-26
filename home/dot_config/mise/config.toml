@@ -12,7 +12,7 @@ just = "1.59.0"
 "npm:vercel" = "64.5.0"
 uv = "0.13.4"
 age = "latest"
-"github:jdx/fnox" = "1.40.0"
+"github:jdx/fnox" = "1.41.0"
 "github:yusukebe/ax" = { version = "0.1.25", exe = "ax" }
 
 [settings]
