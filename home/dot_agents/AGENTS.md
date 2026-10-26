@@ -143,7 +143,6 @@ gh 固有:
 - 整形は `| jq` ではなく `--jq` / `--template`。件数絞りは `| head` ではなく `--limit`
 - 別リポジトリは `cd && gh` ではなく `gh -R owner/repo`
 - body はファイル渡し（`--body-file`）。`$(cat ...)` や heredoc を使わない
-- 出力をファイルに残したいなら、gh を単独で実行した後に別の呼び出しで処理する
 
 ## PR / Issue にメディアを貼る（`gh --attach`）
 
