@@ -182,10 +182,10 @@
       "Bash(fnox ex *)",
       "Bash(fnox env *)"
     ],
-    "ask": [
-      "Bash(dangerouslyDisableSandbox:true)"
-    ],
     "defaultMode": "auto"
+  },
+  "autoMode": {
+    "classifyAllShell": true
   },
   "sandbox": {
     "enabled": true,
