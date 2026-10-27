@@ -123,7 +123,7 @@ UI の見た目を確認するフローは `ui-verify` skill が持つ。**UI / 
 - **`open <url>` でブラウザを開かない。** 新しいブラウザが立ち上がってログインセッションを失う。`playwright-cli` かブラウザ MCP を使う
 - **スキーマに触れる機能を検証する前に、ローカル DB に未適用のマイグレーションを流す**
 
-## sandbox 外実行のコマンドは単独で叩く（Claude Code sandbox）
+## sandbox 外実行のコマンド（Claude Code sandbox）
 
 sandbox 内では動かないコマンドを `sandbox.excludedCommands` で sandbox 外実行にしてある。一覧の正本は `~/.claude/settings.json`。主なものと、sandbox 内で落ちる理由:
 
