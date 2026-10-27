@@ -191,9 +191,9 @@
     "enabled": true,
     "failIfUnavailable": true,
     "autoAllowBashIfSandboxed": false,
-    "excludedCommands": ["gh *", "git fetch *", "git pull *", "git push *", "git ls-remote *", "mise install", "mise install *", "fnox exec -- pnpm install", "fnox exec -- pnpm install *", "git commit *", "pnpm exec vitest *"],
+    "excludedCommands": ["gh *", "git fetch *", "git pull *", "git push *", "git ls-remote *", "mise install", "mise install *", "fnox exec -- pnpm install", "fnox exec -- pnpm install *", "git commit *", "pnpm exec vitest *", "pnpm vrt", "pnpm vrt *"],
     "filesystem": {
-      "allowWrite": ["~/.local/state/mise", "~/.local/share/chezmoi", "~/.config/chezmoi"],
+      "allowWrite": ["~/.local/state/mise", "~/.local/share/chezmoi", "~/.config/chezmoi", "~/.npm"],
       "denyRead": ["~/.zsh_history", "~/.zsh_sessions"]
     },
     "network": {
