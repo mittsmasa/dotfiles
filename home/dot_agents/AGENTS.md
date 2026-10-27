@@ -131,14 +131,19 @@ sandbox 内では動かないコマンドを `sandbox.excludedCommands` で sand
 - `git commit *`: lefthook が pty を開けず、pre-commit が `operation not permitted` になる
 - `mise install`: mise のインストール先に書き込めない
 - `fnox exec -- pnpm install *`: keychain が読めず `NODE_AUTH_TOKEN` が取れない
-- `pnpm exec vitest *`: browser テストの Chromium が Mach サービスを登録できない
+- `pnpm exec vitest *` / `pnpm vrt *`: browser テストの Chromium が Mach サービスを登録できない
 
-ただし **1 回の Bash 呼び出しに含まれる全コマンドが excludedCommands に一致しないと sandbox 内で走る**。`cd`・リダイレクト（`2>&1` も含む）・`$(...)`・`git -C` を含む呼び出しも sandbox 内に留まる（公式: https://code.claude.com/docs/en/sandboxing ）。sandbox 内で落ちると、sandbox 解除の再実行 = 承認待ちになる。
+`npm` のキャッシュ（`~/.npm`）は `sandbox.filesystem.allowWrite` で書き込みを許可してある。
 
-- 呼び出しを対象コマンド 1 本だけにする。`;` `&&` `|` で他のコマンドと繋がない。`| tail` `| grep` で出力を絞らない（長い出力は Bash ツールが自動でファイルに逃がす）
-- 出力を加工したいなら、単独で実行した後に別の呼び出しで処理する
+**1 回の Bash 呼び出しに含まれる全コマンドが excludedCommands に一致しないと、sandbox 内で走る。** `cd`・ファイルへのリダイレクト・`$(...)`・`for` / `if`・`xargs`・`git -C` を含む呼び出しも sandbox 内に留まる（公式: https://code.claude.com/docs/en/settings-reference#sandbox-excludedcommands ）。
 
-gh 固有:
+sandbox 内で落ちたら `dangerouslyDisableSandbox` で再実行してよい。auto モードでは、その再実行を人ではなく classifier が判定する。`autoMode.classifyAllShell: true` にしてあるので、allow ルールが再実行を素通りさせることはない。ループやパイプを含む呼び出しも書いてよい。
+
+- 単独で呼ぶのは、1 回目の失敗を避けるための最適化として続ける。excludedCommands のコマンドは、なるべく 1 本で呼ぶ
+- sandbox 内と sandbox 外では `$TMPDIR` が別のパスになる。両者でファイルを受け渡すときは、`$TMPDIR` ではなく作業ディレクトリ配下（`.workflow/{task-id}/` など）に置く
+- classifier に 3 回連続でブロックされると、プロンプトに戻る。ブロックされた理由を読んで、呼び出しを分けるか、ユーザーに確認する
+
+gh 固有（単独で呼べば 1 回で通る書き方）:
 
 - 整形は `| jq` ではなく `--jq` / `--template`。件数絞りは `| head` ではなく `--limit`
 - 別リポジトリは `cd && gh` ではなく `gh -R owner/repo`
