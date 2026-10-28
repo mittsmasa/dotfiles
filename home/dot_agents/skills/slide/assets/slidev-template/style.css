@@ -1,0 +1,129 @@
+/* モノトーン + macOS ウィンドウバー風デザイン。紙面は 1280x720(canvasWidth: 1280) */
+
+/* ---- 骨格 ---- */
+.slidev-layout.mono {
+  width: 100%; height: 100%; padding: 0;
+  background: #fff; color: #333;
+  font-family: 'Noto Sans JP', sans-serif;
+  display: flex; flex-direction: column;
+}
+.window-bar {
+  background: #1a1a1a; height: 40px; flex-shrink: 0;
+  display: flex; align-items: center; padding-left: 20px;
+}
+.window-bar .dot { width: 12px; height: 12px; border-radius: 50%; margin-right: 8px; }
+.dot-red { background: #FF5F56; }
+.dot-yellow { background: #FFBD2E; }
+.dot-green { background: #27C93F; }
+.mono .content {
+  flex: 1; min-height: 0;
+  display: flex; flex-direction: column;
+  padding: 40px 60px 18px;
+}
+.mono .content.cover { justify-content: center; align-items: center; text-align: center; }
+
+/* ---- 見出し ---- */
+.mono h1 { font-size: 54px; font-weight: 700; color: #1A1A1A; line-height: 1.3; margin-bottom: 24px; }
+.mono h2 {
+  font-size: 38px; font-weight: 700; color: #1A1A1A; line-height: 1.4;
+  border-bottom: 4px solid #1A1A1A; padding-bottom: 10px; margin-bottom: 10px;
+}
+.mono h2 + :not(h3) { margin-top: 24px; }
+.mono h3 {
+  font-size: 20px; font-weight: 400; color: #555; line-height: 1.5;
+  border-left: 4px solid #1A1A1A; padding-left: 15px; margin-bottom: 30px;
+}
+.mono strong { font-weight: 700; color: #1A1A1A; }
+.mono p { line-height: 1.5; }
+
+/* ---- 本文: 箇条書き(基本 28px。サブ項目 22px) ---- */
+.mono ul { list-style: none; margin: 0; padding: 0; }
+.mono ul li {
+  font-size: 28px; color: #333; line-height: 1.45;
+  margin-bottom: 12px; padding-left: 32px; position: relative;
+}
+.mono ul li::before {
+  content: ''; position: absolute; left: 0; top: 15px;
+  width: 11px; height: 11px; background: #1A1A1A; border-radius: 50%;
+}
+.mono ul ul { margin-top: 12px; }
+.mono ul ul li { font-size: 22px; color: #555; }
+.mono ul ul li::before { width: 7px; height: 7px; background: #999; top: 13px; }
+
+/* ---- Key Message(専用 32px。最下部・全幅・太字・中央寄せ。1 スライド 1 個まで) ---- */
+.mono .km {
+  margin-top: auto; flex-shrink: 0; min-height: 76px;
+  background: #F9F9F9; border: 1px solid #E0E0E0; border-radius: 8px;
+  padding: 16px 24px; font-size: 32px; font-weight: 700; color: #1A1A1A;
+  display: flex; align-items: center; justify-content: center; text-align: center;
+}
+.mono .km.spacer { visibility: hidden; }
+
+/* ---- 図(残り領域を使う) ---- */
+.mono .fig { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; }
+.mono .fig-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+
+/* 図の要素(黒背景はここだけ) */
+.mono .stage {
+  background: #1A1A1A; color: #fff; border-radius: 8px;
+  padding: 14px 36px; font-size: 22px; font-weight: 700; text-align: center;
+}
+.mono .arr { font-size: 24px; color: #999; }
+
+/* 吹き出し(台詞用)。.dim は前スライドの残像 */
+.mono .bubble {
+  background: #fff; border: 1.5px solid #999; border-radius: 14px;
+  padding: 12px 16px; font-size: 19px; line-height: 1.5; color: #333;
+  width: 280px; position: relative; box-shadow: 3px 3px 0 #EEE;
+}
+.mono .bubble::after {
+  content: ''; position: absolute; bottom: -8px; left: 32px; width: 14px; height: 14px;
+  background: #fff; border-right: 1.5px solid #999; border-bottom: 1.5px solid #999;
+  transform: rotate(45deg);
+}
+.mono .bubble.dim { color: #BBB; border-color: #DDD; box-shadow: none; }
+.mono .bubble.dim::after { border-color: #DDD; }
+
+/* 区画(破線) + チップ(黒 = 図のノード) */
+.mono .room {
+  width: 250px; height: 150px; background: #fff;
+  border: 2px dashed #AAA; border-radius: 10px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
+}
+.mono .room .name { font-size: 17px; font-weight: 700; color: #777; }
+.mono .chip {
+  background: #1A1A1A; color: #fff; border-radius: 8px;
+  padding: 10px 16px; font-size: 16px; font-weight: 700; text-align: center; line-height: 1.4;
+}
+
+/* ツールアイコン(ロゴ画像は使わず頭文字タイル + 名前) */
+.mono .tool { display: inline-flex; align-items: center; gap: 8px; font-size: 16px; color: #555; }
+.mono .tool .tile {
+  width: 28px; height: 28px; border-radius: 6px; border: 1.5px solid #1A1A1A;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 700; color: #1A1A1A;
+}
+
+/* ---- テーブル(21px。ヘッダのみ黒) ---- */
+.mono table { border-collapse: collapse; width: 100%; font-size: 21px; }
+.mono th { background: #1A1A1A; color: #fff; padding: 13px 20px; text-align: left; font-weight: 700; }
+.mono td { padding: 13px 20px; border-bottom: 1px solid #E8E8E8; color: #333; }
+
+/* ---- 目次(中扉): 済み = .done、現在地 = .now、未来 = 無印 ---- */
+.mono ol.agenda { list-style: none; margin: 0; padding: 0; }
+.mono ol.agenda li { font-size: 32px; line-height: 1.5; margin-bottom: 16px; color: #BBB; }
+.mono ol.agenda li.done { color: #999; }
+.mono ol.agenda li.now { color: #1A1A1A; font-weight: 700; }
+
+/* ---- 2 カラム(48% ずつ。本文は 24px) ---- */
+.mono .cols { display: flex; justify-content: space-between; }
+.mono .cols > div { width: 48%; }
+.mono .cols ul li { font-size: 24px; }
+.mono .cols ul li::before { top: 12px; }
+
+/* ---- プレースホルダー(未確定の画像・図) ---- */
+.mono .placeholder {
+  background: #F0F0F0; border: 2px dashed #CCC; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  color: #999; font-weight: 700; width: 100%; height: 120px;
+}

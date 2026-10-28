@@ -1,0 +1,14 @@
+{
+  "name": "slide-deck",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "slidev --open false",
+    "pdf": "slidev export --output deck.pdf",
+    "png": "slidev export --format png --output png"
+  },
+  "devDependencies": {
+    "@slidev/cli": "53.0.0",
+    "playwright-chromium": "1.64.1"
+  }
+}
