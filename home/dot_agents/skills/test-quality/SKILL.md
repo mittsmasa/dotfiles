@@ -1,6 +1,6 @@
 ---
 name: test-quality
-description: "テストコードを書く・追加する・直す・レビューするときに当てる「良いテスト」の観点。実装の写しや書き過ぎを抑え、振る舞いに敏感で構造に鈍感なテストにする。フロントエンド・バックエンド共通の観点と、それぞれ固有の観点を持つ。Use when writing, adding, fixing, refactoring, or reviewing tests (unit / integration / component / E2E), deciding what to test or what NOT to test, dealing with flaky or brittle tests, mocks, snapshots, or test doubles. 「テスト書いて」「テスト追加」「このテストレビューして」「テストが壊れやすい」「モックどうする」などでトリガー。"
+description: "テストコードを書く・追加する・直す・レビューするときに当てる「良いテスト」の観点。実装の写しや書き過ぎを抑え、振る舞いに敏感で構造に鈍感なテストにする。フロントエンド・バックエンド共通の観点と、それぞれ固有の観点を持つ。Use when writing, adding, fixing, refactoring, or reviewing tests (unit / integration / component / E2E), deciding what to test or what NOT to test, dealing with flaky or brittle tests, mocks, snapshots, or test doubles. 「テスト書いて」「テスト追加」「このテストレビューして」「テストが壊れやすい」「モックどうする」などでトリガー。ユーザーに頼まれていなくても、機能実装やバグ修正の途中で自発的にテストを書くときも書く前にロードする（*.test.* / *.spec.* / __tests__/ などを Write・Edit する前）。Load proactively before creating or editing any test file, even when the user did not ask for tests."
 ---
 
 # test-quality
