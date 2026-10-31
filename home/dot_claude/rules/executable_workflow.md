@@ -4,7 +4,7 @@
 
 ## Session Scoping
 
-1 セッション 1 ゴール（調査/実装を混ぜない）。多フェーズは TaskCreate / サブエージェントで分離し、セッションまたぎは TaskCreate で追跡する。
+1 セッション 1 ゴール（調査/実装を混ぜない）。多フェーズはタスクリスト / サブエージェントで分離し、セッションまたぎはタスクリストで追跡する。タスクリストは、デスクトップアプリでは update_plan、CLI では TaskCreate を使う。
 
 ## ペイン戦略
 
@@ -57,9 +57,23 @@ plan に UI / フロントエンド（web コンポーネント / ページ / �
 
 `plan.md` 書き込みを `~/.claude/scripts/plan-review-hook.sh` が検知し **simplicity（veto 権）/ correctness / verifiability / security** の 4 レビュアを並列実行。security は設計レベル（秘密情報・認可・信頼境界・権限・外部送信・依存）のみ見て、該当しない plan では pass を返す。
 
-- pass → `- Plan Status: complete` → ユーザー承認へ
-- needs_revision → applier が plan.md 編集 → 再レビュー（最大 3 ラウンド）
-- error（全 skipped）→ ユーザー報告
+needs_revision なら applier が plan.md を直して再レビューする（最大 3 ラウンド。最終ラウンドでは applier を回さない）。結果は hook が `additionalContext` で main session に返す。中身は verdict、終了理由、レポートのパス、次にすることの 4 つ。
+
+| 終了理由 | verdict | main session がすること |
+|---|---|---|
+| pass | pass | `Plan Status: complete` になる。ユーザーに承認を依頼する |
+| escalate | needs_revision | applier が `Approval Status: needs_human_review` にした。レポートの指摘を示して判断を仰ぐ |
+| max_rounds | needs_revision | 最終ラウンドの指摘は plan に未反映。ユーザーに示し、手で直すか、このまま承認するかを決めてもらう |
+| applier_failed | needs_revision | plan.md は applier 実行前に戻っている。指摘をユーザーに示す |
+| error | error | 全 reviewer が失敗した。raw 出力を調べてユーザーに報告する |
+
+applier が plan.md を編集したラウンドは、`review-round-N.md` 末尾の `## Applier diff` に差分が残る。ユーザーの決定が削られていないかは、ここで確かめる。
+
+hook がレビューする条件:
+
+- 対象は `.workflow/` 配下と `~/.claude/workflow/{task-id}/` の `plan.md` だけ
+- `Approval Status` が approved / needs_human_review の間と、`Plan Status: done` の後はレビューしない。承認後のチェック更新で再レビューは走らない
+- 再開するには、escalate なら `Approval Status` を pending に戻して保存し直す。round 上限に達していたら、plan.md 末尾の `<!-- auto-review: ... -->` マーカー行も消す
 
 verdict 確定後、中間生成物（`.raw` / `.exit` / 抽出 json / `*-peers.md` / `plan.md.bak`）は自動削除される。集約レポート `review-round-N.md` は残る。verdict=error のときは原因調査のため削除しない。
 
