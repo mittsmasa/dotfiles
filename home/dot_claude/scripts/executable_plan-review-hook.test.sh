@@ -244,7 +244,12 @@ assert_context   "$WS" 'review-round-1\.md'                             "context
 run_hook "$WS"
 assert_file_absent "$WS/.workflow/review-round-2.md"                    "unchanged re-save skipped"
 assert_stdout_empty "$WS"                                               "unchanged re-save prints nothing"
-assert_count     "$WS/.workflow/plan.md" '^$' 2                         "blank lines not accumulated"
+assert_count     "$WS/.workflow/plan.md" '^$' 3                         "blank lines after first write-back"
+# 本文を変えて再保存 → 2 回目の書き戻しでも空行が増えない
+perl -pi -e 's/^test plan body$/test plan body v2/' "$WS/.workflow/plan.md"
+run_hook "$WS"
+assert_file_exists "$WS/.workflow/review-round-2.md"                    "changed re-save reviewed"
+assert_count     "$WS/.workflow/plan.md" '^$' 3                         "blank lines not accumulated"
 rm -rf "$WS" "$MOCK_DIR"
 
 # ---------------------------------------------------------------------------
