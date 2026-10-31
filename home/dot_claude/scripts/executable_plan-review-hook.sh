@@ -297,6 +297,7 @@ $(cat "$prompt_file")"
   if run_with_timeout "$REVIEWER_TIMEOUT" \
      "$REVIEWER_BIN" --print \
        --model "$REVIEW_MODEL" \
+       --tools Read,Grep,Glob \
        --add-dir "$WORKFLOW_DIR" \
        --system-prompt "$sys_prompt" \
        "$user_prompt" \
@@ -392,6 +393,7 @@ run_applier() {
       run_with_timeout "$APPLIER_TIMEOUT" \
       "$APPLIER_BIN" --print \
       --model "$REVIEW_MODEL" \
+      --tools Read,Edit \
       --allowedTools Edit,Read \
       --system-prompt "$(cat "$PROMPTS_DIR/applier.md")" \
       "$user_prompt" >&2
