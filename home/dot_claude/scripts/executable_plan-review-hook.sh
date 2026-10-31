@@ -115,7 +115,7 @@ PLAN_FILE="$WORKFLOW_DIR/plan.md"
 RESEARCH_FILE="$WORKFLOW_DIR/research.md"
 MVP_STANCE_FILE="$PROMPTS_DIR/_mvp-stance.md"
 
-REVIEWERS=(simplicity correctness verifiability)
+REVIEWERS=(simplicity correctness verifiability security)
 
 # レビュア状態を保持する擬似連想配列:
 #   STATUS_<reviewer>  = ok | skipped
@@ -124,7 +124,7 @@ REVIEWERS=(simplicity correctness verifiability)
 # macOS デフォルトの bash 3.2 では `declare -A` が使えない。Homebrew bash 4+ を
 # 前提にすると環境差で hook が落ちるため、ここでは reviewer 名を変数名の一部に
 # 埋め込み、indirect expansion (`${!var}`) で読み出す形で代替している。
-# 名前は固定 3 種（simplicity / correctness / verifiability）で識別子として
+# 名前は REVIEWERS の固定値（simplicity / correctness / verifiability / security）で識別子として
 # そのまま使えることが前提。動的にユーザー入力から作るときは要注意。
 get_status()  { local v="STATUS_$1";  echo "${!v:-}"; }
 set_status()  { eval "STATUS_$1=\"\$2\""; }
@@ -406,7 +406,7 @@ while :; do
   } > "$PEERS_FILE"
 
   # --- run reviewers (parallel) ---
-  echo "[plan-review] Starting review round $NEXT_ROUND (3 reviewers in parallel)..." >&2
+  echo "[plan-review] Starting review round $NEXT_ROUND (${#REVIEWERS[@]} reviewers in parallel)..." >&2
   pids=()
   for r in "${REVIEWERS[@]}"; do
     run_reviewer "$r" "$NEXT_ROUND" &
