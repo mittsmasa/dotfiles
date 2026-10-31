@@ -238,6 +238,13 @@ assert_match     "$WS/.workflow/plan.md" '^- Plan Status: complete$'    "Plan St
 assert_match     "$WS/.workflow/plan.md" 'verdict=pass'                 "marker verdict=pass"
 assert_file_exists "$WS/.workflow/review-round-1.md"                    "round 1 report exists"
 assert_file_absent "$WS/.workflow/review-round-2.md"                    "round 2 report absent"
+assert_context   "$WS" 'verdict=pass'                                   "context reports verdict=pass"
+assert_context   "$WS" 'review-round-1\.md'                             "context has report path"
+# 内容を変えずに再保存 → hash 一致でスキップ（書き戻し前後で hash がずれない）
+run_hook "$WS"
+assert_file_absent "$WS/.workflow/review-round-2.md"                    "unchanged re-save skipped"
+assert_stdout_empty "$WS"                                               "unchanged re-save prints nothing"
+assert_count     "$WS/.workflow/plan.md" '^$' 2                         "blank lines not accumulated"
 rm -rf "$WS" "$MOCK_DIR"
 
 # ---------------------------------------------------------------------------
@@ -265,6 +272,9 @@ assert_file_exists "$WS/.workflow/review-round-2.md"                    "round 2
 assert_file_absent "$WS/.workflow/review-round-3.md"                    "round 3 absent"
 # round 2 peers.md should reference round 1 simplicity verdict
 assert_match     "$WS/.workflow/review-round-2-peers.md" 'verdict: needs_revision' "peers.md carries r1 verdict"
+assert_match     "$WS/.workflow/review-round-1.md" '^## Applier diff$'   "round 1 report has applier diff"
+assert_match     "$WS/.workflow/review-round-1.md" '^\+// applier edit pid=' "applier diff shows added line"
+assert_context   "$WS" 'Applier diff'                                   "context points to applier diff"
 rm -rf "$WS" "$MOCK_DIR"
 
 # ---------------------------------------------------------------------------
@@ -335,6 +345,14 @@ assert_match     "$WS/.workflow/plan.md" 'round=2'                           "ma
 assert_file_exists "$WS/.workflow/review-round-1.md"                          "round 1 report exists"
 assert_file_exists "$WS/.workflow/review-round-2.md"                          "round 2 report exists"
 assert_file_absent "$WS/.workflow/review-round-3.md"                          "round 3 absent"
+assert_count     "$WS/.workflow/plan.md" '// applier edit pid=' 1             "applier skipped on final round"
+assert_context   "$WS" 'reason=max_rounds'                                    "context reports max_rounds"
+# 上限到達後の保存 → レビューせず、再開手順を返す
+echo "manual edit" >> "$WS/.workflow/plan.md"
+run_hook "$WS"
+assert_file_absent "$WS/.workflow/review-round-3.md"                          "no review after max rounds"
+assert_context   "$WS" 'max_rounds'                                           "skip context mentions max_rounds"
+assert_context   "$WS" 'auto-review'                                          "skip context has resume hint"
 rm -rf "$WS" "$MOCK_DIR"
 
 # ---------------------------------------------------------------------------
@@ -353,6 +371,7 @@ run_hook "$WS"
 
 assert_match     "$WS/.workflow/plan.md" '^- Review Status: pending$'        "Status untouched (still pending)"
 assert_file_absent "$WS/.workflow/review-round-1.md"                    "no review run"
+assert_stdout_empty "$WS"                                               "re-entrant prints nothing"
 rm -rf "$WS" "$MOCK_DIR"
 
 # ---------------------------------------------------------------------------
@@ -399,6 +418,82 @@ assert_match     "$WS/.workflow/plan.md" '// applier edit pid='              "ap
 assert_match     "$WS/.workflow/plan.md" '^- Review Status: pass$'           "Status=pass after round 2"
 assert_match     "$WS/.workflow/plan.md" 'round=2'                           "marker round=2"
 rm -rf "$WS" "$MOCK_DIR"
+
+# ---------------------------------------------------------------------------
+# Case 9: 承認後 / 人間判断待ちはレビューしない
+# ---------------------------------------------------------------------------
+echo "Case 9: skip after approval"
+for fixture in "approved draft" "needs_human_review draft" "pending done"; do
+  # shellcheck disable=SC2086
+  set -- $fixture
+  clear_env
+  WS=$(mk_workspace "$1" "$2")
+  export PLAN_REVIEW_REVIEWER_CMD="$MOCKS_DIR/mock-reviewer.sh"
+  export PLAN_REVIEW_APPLIER_CMD="$MOCKS_DIR/mock-applier.sh"
+  export MOCK_PLAN_FILE="$WS/.workflow/plan.md"
+  run_hook "$WS"
+  assert_file_absent "$WS/.workflow/review-round-1.md"                  "no review ($fixture)"
+  if [[ "$1" == "needs_human_review" ]]; then
+    assert_context "$WS" 'needs_human_review'                           "context explains skip ($fixture)"
+  else
+    assert_stdout_empty "$WS"                                           "prints nothing ($fixture)"
+  fi
+  rm -rf "$WS"
+done
+
+# 本文に同じ文字列があっても、行頭の canonical 行が pending ならレビューする
+clear_env
+WS=$(mk_workspace pending draft "本文: Approval Status: approved / Plan Status: done という文字列")
+export PLAN_REVIEW_REVIEWER_CMD="$MOCKS_DIR/mock-reviewer.sh"
+export PLAN_REVIEW_APPLIER_CMD="$MOCKS_DIR/mock-applier.sh"
+export MOCK_PLAN_FILE="$WS/.workflow/plan.md"
+run_hook "$WS"
+assert_file_exists "$WS/.workflow/review-round-1.md"                    "body text does not trigger skip"
+rm -rf "$WS"
+
+# ---------------------------------------------------------------------------
+# Case 10: workflow の task dir 以外の plan.md では発火しない
+# ---------------------------------------------------------------------------
+echo "Case 10: path filter"
+clear_env
+WS=$(mk_workspace)
+export PLAN_REVIEW_REVIEWER_CMD="$MOCKS_DIR/mock-reviewer.sh"
+export PLAN_REVIEW_APPLIER_CMD="$MOCKS_DIR/mock-applier.sh"
+mkdir -p "$WS/docs"
+cp "$WS/.workflow/plan.md" "$WS/docs/plan.md"
+cp "$WS/.workflow/research.md" "$WS/docs/research.md"
+run_hook "$WS" "$WS/docs/plan.md"
+assert_file_absent "$WS/docs/review-round-1.md"                         "docs/plan.md ignored"
+assert_stdout_empty "$WS"                                               "docs/plan.md prints nothing"
+cp "$WS/.workflow/plan.md" "$WS/.workflow/myplan.md"
+run_hook "$WS" "$WS/.workflow/myplan.md"
+assert_file_absent "$WS/.workflow/review-round-1.md"                    "myplan.md ignored"
+rm -rf "$WS"
+
+# task-id 階層付き (.workflow/<task-id>/plan.md) では発火する
+clear_env
+WS=$(mk_workspace)
+export PLAN_REVIEW_REVIEWER_CMD="$MOCKS_DIR/mock-reviewer.sh"
+export PLAN_REVIEW_APPLIER_CMD="$MOCKS_DIR/mock-applier.sh"
+mkdir -p "$WS/.workflow/2026-01-01-task"
+mv "$WS/.workflow/plan.md" "$WS/.workflow/research.md" "$WS/.workflow/2026-01-01-task/"
+run_hook "$WS" "$WS/.workflow/2026-01-01-task/plan.md"
+assert_file_exists "$WS/.workflow/2026-01-01-task/review-round-1.md"    ".workflow/<task-id>/plan.md reviewed"
+rm -rf "$WS"
+
+# ---------------------------------------------------------------------------
+# Case 11: hash= / round= はマーカー行からだけ読む
+# ---------------------------------------------------------------------------
+echo "Case 11: marker-only parsing"
+clear_env
+WS=$(mk_workspace pending draft "本文に hash=deadbeef round=9 という文字列がある")
+export PLAN_REVIEW_REVIEWER_CMD="$MOCKS_DIR/mock-reviewer.sh"
+export PLAN_REVIEW_APPLIER_CMD="$MOCKS_DIR/mock-applier.sh"
+export MOCK_PLAN_FILE="$WS/.workflow/plan.md"
+run_hook "$WS"
+assert_file_exists "$WS/.workflow/review-round-1.md"                    "review runs despite body round=9"
+assert_match     "$WS/.workflow/plan.md" 'auto-review: .*round=1;'      "marker round=1"
+rm -rf "$WS"
 
 # ---------------------------------------------------------------------------
 # Summary
