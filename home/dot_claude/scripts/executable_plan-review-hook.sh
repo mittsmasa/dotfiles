@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # plan-review-hook.sh
-# plan.md への書き込みを検知して 3 本のレビュアを並列実行する
+# plan.md への書き込みを検知して 4 本のレビュアを並列実行する
 #
 # 前提: bash 3.2 互換（macOS デフォルトの /bin/bash 3.2 でも動く）。
 #       連想配列は使えないので、動的変数名 + indirect expansion (${!var}) で代替している。
@@ -9,6 +9,7 @@
 #   - simplicity     (veto 権あり: fail なら他がどうあれ needs_revision)
 #   - correctness
 #   - verifiability
+#   - security
 #
 # 各レビュアの結果が壊れている / claude --print が失敗した場合、
 # そのレビュアは「skipped」として扱い、残りの結果で判定する。
@@ -35,7 +36,7 @@
 #   3. ラウンド数確認（MAX_REVIEW_ROUNDS 超過なら手動レビューを促してスキップ）
 #   4. 内部ループ開始 (1 round = reviewers 並列 → aggregator → 必要なら applier):
 #      a. 前ラウンドの他 reviewer 出力を peers.md に集約 (1 ラウンド遅延)
-#      b. 3 本のレビュアを `$REVIEWER_BIN --print` で並列起動 → wait
+#      b. 4 本のレビュアを `$REVIEWER_BIN --print` で並列起動 → wait
 #      c. 各 raw 出力から JSON 抽出 (コードフェンス / 素 JSON / 抽出フォールバック)
 #      d. aggregate_verdict で round の verdict を決定
 #      e. report (review-round-N.md) を生成
