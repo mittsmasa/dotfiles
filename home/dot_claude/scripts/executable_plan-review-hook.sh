@@ -32,21 +32,28 @@
 #
 # 全体フロー:
 #   1. plan.md の書き込みを検知（PostToolUse hook）
-#   2. plan.md と前回 hash を比較 → 同一ならスキップ
-#   3. ラウンド数確認（MAX_REVIEW_ROUNDS 超過なら手動レビューを促してスキップ）
-#   4. 内部ループ開始 (1 round = reviewers 並列 → aggregator → 必要なら applier):
+#      対象は `*/.workflow/plan.md` / `*/.workflow/*/plan.md` / `*/.claude/workflow/*/plan.md` のみ
+#   2. 承認後はスキップ: 行頭の `Approval Status:` が approved / needs_human_review、
+#      または `Plan Status: done`。needs_human_review のときだけ再開手順を additionalContext で返す
+#   3. マーカー行の hash と現在の hash を比較 → 同一ならスキップ
+#   4. ラウンド数確認（MAX_REVIEW_ROUNDS 超過なら再開手順を additionalContext で返してスキップ）
+#   5. 内部ループ開始 (1 round = reviewers 並列 → aggregator → 必要なら applier):
 #      a. 前ラウンドの他 reviewer 出力を peers.md に集約 (1 ラウンド遅延)
 #      b. 4 本のレビュアを `$REVIEWER_BIN --print` で並列起動 → wait
 #      c. 各 raw 出力から JSON 抽出 (コードフェンス / 素 JSON / 抽出フォールバック)
 #      d. aggregate_verdict で round の verdict を決定
 #      e. report (review-round-N.md) を生成
 #      f. verdict が pass / error なら break
-#      g. run_applier で plan.md を直接編集
-#      h. applier が exit 非ゼロ → plan.md.bak から復元して break
-#      i. applier 完了後、plan.md が `Approval Status: needs_human_review` に
+#      g. このラウンドが MAX_ROUNDS なら applier を回さず break (applier の編集が未レビューで残るのを防ぐ)
+#      h. run_applier で plan.md を直接編集し、差分を review-round-N.md に `## Applier diff` として追記
+#      i. applier が exit 非ゼロ → plan.md.bak から復元して break
+#      j. applier 完了後、plan.md が `Approval Status: needs_human_review` に
 #         遷移していたら break (escalate)
-#      j. NEXT_ROUND を 1 進めて MAX_ROUNDS を超えたら break、超えなければ次イテレーションへ
-#   5. ループ終了後、最終 verdict / hash を plan.md に書き戻す (1 回だけ)
+#      k. NEXT_ROUND を 1 進めて次イテレーションへ
+#   6. ループ終了後、最終 verdict / hash を plan.md に書き戻す (1 回だけ)
+#   7. verdict / 終了理由 / レポートパス / main session が次にすることを
+#      stdout に hookSpecificOutput.additionalContext の JSON で返す
+#      (PostToolUse の stderr は exit 0 だと Claude に渡らないため)。stdout にはこの JSON 以外を出さない
 #
 # Aggregator (各ラウンド内):
 #   - 全レビュア skipped → verdict=error
