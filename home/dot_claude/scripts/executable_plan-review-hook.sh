@@ -26,7 +26,7 @@
 #   PLAN_REVIEW_APPLIER_CMD   - applier コマンド差し替え (テスト用, default: claude)
 #   PLAN_REVIEW_REVIEWER_TIMEOUT - reviewer 1 回あたりの秒数上限 (default: 300)
 #   PLAN_REVIEW_APPLIER_TIMEOUT  - applier 1 回あたりの秒数上限 (default: 300)
-#   PLAN_REVIEW_MODEL         - reviewer / applier に渡すモデル (default: claude-sonnet-5)
+#   PLAN_REVIEW_MODEL         - reviewer / applier に渡すモデル (default: claude-opus-5-5)
 #                               settings.json のデフォルトモデル (claude-sonnet[1m] 等) が
 #                               非対話環境で使えないことがあるため常に明示する
 #
@@ -106,7 +106,7 @@ MAX_ROUNDS="${MAX_REVIEW_ROUNDS:-3}"
 PROMPTS_DIR="${PLAN_REVIEW_PROMPTS:-$HOME/.claude/scripts/plan-review-prompts}"
 REVIEWER_BIN="${PLAN_REVIEW_REVIEWER_CMD:-claude}"
 APPLIER_BIN="${PLAN_REVIEW_APPLIER_CMD:-claude}"
-REVIEW_MODEL="${PLAN_REVIEW_MODEL:-claude-sonnet-5}"
+REVIEW_MODEL="${PLAN_REVIEW_MODEL:-claude-opus-5-5}"
 # 1 呼び出しあたりの上限（秒）。claude --print が混雑等で長時間化しても
 # .exit を確実に書いて後始末できるようにするための保険。
 REVIEWER_TIMEOUT="${PLAN_REVIEW_REVIEWER_TIMEOUT:-300}"
