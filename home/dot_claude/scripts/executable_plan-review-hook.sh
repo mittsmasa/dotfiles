@@ -404,6 +404,17 @@ run_applier() {
     cp "$WORKFLOW_DIR/plan.md.bak" "$PLAN_FILE"
     return 1
   fi
+  APPLIER_RAN=1
+
+  # plan.md.bak は掃除で消えるので、ユーザーの決定が削られていないかを後から確かめられるよう差分を残す
+  {
+    echo ""
+    echo "## Applier diff"
+    echo ""
+    echo '```diff'
+    diff -u "$WORKFLOW_DIR/plan.md.bak" "$PLAN_FILE" || true
+    echo '```'
+  } >> "$report"
 
   if grep -qE '^[[:space:]]*([-*][[:space:]]+)?Approval Status:[[:space:]]*needs_human_review' "$PLAN_FILE"; then
     echo "[applier] escalated (Approval Status: needs_human_review). Breaking loop." >&2
@@ -417,6 +428,7 @@ run_applier() {
 # pass / error / escalate / applier 失敗 / max rounds のいずれかで break。
 
 LOOP_BREAK_REASON=""
+APPLIER_RAN=0
 LAST_ROUND="$CURRENT_ROUND"
 FINAL_VERDICT=""
 SKIPPED_STR="none"
@@ -504,6 +516,13 @@ while :; do
     break
   fi
 
+  # 最終ラウンドの applier 編集は誰にもレビューされないまま残るので、回さずに止める
+  if [[ "$NEXT_ROUND" -ge "$MAX_ROUNDS" ]]; then
+    echo "[plan-review] Max rounds ($MAX_ROUNDS) reached. Stopping without applier." >&2
+    LOOP_BREAK_REASON="max_rounds"
+    break
+  fi
+
   # --- run applier (needs_revision のときのみ) ---
   if run_applier "$NEXT_ROUND"; then
     :
@@ -518,17 +537,9 @@ while :; do
   fi
 
   NEXT_ROUND=$((NEXT_ROUND + 1))
-  if [[ "$NEXT_ROUND" -gt "$MAX_ROUNDS" ]]; then
-    echo "[plan-review] Max rounds ($MAX_ROUNDS) reached during loop. Stopping." >&2
-    LOOP_BREAK_REASON="max_rounds"
-    break
-  fi
 done
 
 # --- plan.md への書き戻し (ループ終了後 1 回) ---
-
-FINAL_HASH=$(hash_cmd "$PLAN_FILE")
-MARKER="<!-- auto-review: verdict=$FINAL_VERDICT; hash=$FINAL_HASH; round=$LAST_ROUND; skipped=[$SKIPPED_STR]; failed=[$FAILED_STR] -->"
 
 sedi() {
   if sed --version >/dev/null 2>&1; then
@@ -538,19 +549,23 @@ sedi() {
   fi
 }
 
-# マーカー行は「既存行を削除 → 末尾に追記」で更新する。
-# sed 置換だと marker に `\` `&` `|` 等が含まれた場合に壊れるため、行ベースで扱う。
-TMP_PLAN=$(mktemp "${TMPDIR:-/tmp}/plan-marker.XXXXXX")
-grep -v '<!-- auto-review:' "$PLAN_FILE" > "$TMP_PLAN" || true
-# 末尾に改行が無い場合の連結事故を防ぐため、先頭に改行を 1 つ挟んでから追記
-printf '\n%s\n' "$MARKER" >> "$TMP_PLAN"
-mv "$TMP_PLAN" "$PLAN_FILE"
-
+# Status 行を先に書き換え、その後の本文で hash を取る。順序が逆だと書き戻し後のファイルと一致しない。
 sedi -E "s/^[[:space:]]*([-*][[:space:]]+)?Review Status:[[:space:]]*.*/- Review Status: $FINAL_VERDICT/" "$PLAN_FILE"
 
 if [[ "$FINAL_VERDICT" == "pass" ]]; then
   sedi -E "s/^[[:space:]]*([-*][[:space:]]+)?Plan Status:[[:space:]]*.*/- Plan Status: complete/" "$PLAN_FILE"
 fi
+
+FINAL_HASH=$(plan_hash "$PLAN_FILE")
+MARKER="<!-- auto-review: verdict=$FINAL_VERDICT; hash=$FINAL_HASH; round=$LAST_ROUND; skipped=[$SKIPPED_STR]; failed=[$FAILED_STR] -->"
+
+# マーカー行は「既存行を削除 → 末尾に追記」で更新する。
+# sed 置換だと marker に `\` `&` `|` 等が含まれた場合に壊れるため、行ベースで扱う。
+# 末尾の空行は plan_body で詰めるので、書き戻しのたびに空行が増えることはない。
+TMP_PLAN=$(mktemp "${TMPDIR:-/tmp}/plan-marker.XXXXXX")
+plan_body "$PLAN_FILE" > "$TMP_PLAN"
+printf '\n%s\n' "$MARKER" >> "$TMP_PLAN"
+mv "$TMP_PLAN" "$PLAN_FILE"
 
 echo "[plan-review] Loop ended: verdict=$FINAL_VERDICT, last_round=$LAST_ROUND, reason=${LOOP_BREAK_REASON:-unknown} (skipped=[$SKIPPED_STR], failed=[$FAILED_STR])" >&2
 echo "[plan-review] Final report: $WORKFLOW_DIR/review-round-${LAST_ROUND}.md" >&2
@@ -573,3 +588,23 @@ if [[ "$FINAL_VERDICT" != "error" && -z "${PLAN_REVIEW_KEEP_ARTIFACTS:-}" ]]; th
     \) -delete 2>/dev/null || true
   echo "[plan-review] Cleaned intermediate artifacts (kept review-round-*.md)" >&2
 fi
+
+# --- main session への報告 ---
+
+case "$LOOP_BREAK_REASON" in
+  pass)
+    NEXT_ACTION="Plan Status: complete になりました。plan をユーザーに示して承認を依頼してください。" ;;
+  escalate)
+    NEXT_ACTION="applier が Approval Status を needs_human_review に変えました。レポートの指摘をユーザーに示して判断を仰いでください。" ;;
+  max_rounds)
+    NEXT_ACTION="round 上限（$MAX_ROUNDS）で needs_revision のまま止まりました。最終ラウンドの指摘は plan に反映されていません。残りの指摘をユーザーに示し、手で直すか今のまま承認するかを判断してもらってください。${RESUME_HINT}。" ;;
+  applier_failed)
+    NEXT_ACTION="applier が失敗したため、plan.md は applier 実行前の内容に戻しました。指摘をユーザーに示してください。" ;;
+  *)
+    NEXT_ACTION="全 reviewer が失敗しました（raw 出力を $WORKFLOW_DIR に残しています）。原因を調べてユーザーに報告してください。" ;;
+esac
+if [[ "$APPLIER_RAN" -eq 1 ]]; then
+  NEXT_ACTION="$NEXT_ACTION applier が plan.md を編集しています。各 review-round-N.md 末尾の「## Applier diff」を見て、ユーザーの決定が削られていないか確かめてください。"
+fi
+
+emit_context "[plan-review] verdict=$FINAL_VERDICT（reason=${LOOP_BREAK_REASON:-unknown}, round=$LAST_ROUND, skipped=[$SKIPPED_STR], failed=[$FAILED_STR]）。レポート: $WORKFLOW_DIR/review-round-${LAST_ROUND}.md。$NEXT_ACTION"
