@@ -79,7 +79,7 @@ verdict 確定後、中間生成物（`.raw` / `.exit` / 抽出 json / `*-peers.
 
 **レビュアの指摘はユーザーの明示的な決定に優先しない。** applier がユーザーの決定事項を削った場合は復活させ、その旨を plan.md に明記してユーザーに報告する。
 
-main session の介入は `Approval Status: needs_human_review` 時のみ。詳細は hook スクリプト冒頭参照。
+main session の介入は上の表のとおり。詳細は hook スクリプト冒頭参照。
 
 ## Phase 4: Approval
 
