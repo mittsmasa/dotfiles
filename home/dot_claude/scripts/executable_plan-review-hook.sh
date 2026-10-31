@@ -182,13 +182,22 @@ done
 # --- ハッシュチェック ---
 
 if command -v sha256sum >/dev/null 2>&1; then
-  hash_cmd() { sha256sum "$1" | cut -d' ' -f1; }
+  hash_stdin() { sha256sum | cut -d' ' -f1; }
 else
-  hash_cmd() { shasum -a 256 "$1" | cut -d' ' -f1; }
+  hash_stdin() { shasum -a 256 | cut -d' ' -f1; }
 fi
 
-CURRENT_HASH=$(hash_cmd "$PLAN_FILE")
-EXISTING_HASH=$(sed -n 's/.*hash=\([a-f0-9]*\).*/\1/p' "$PLAN_FILE" 2>/dev/null | head -1)
+# マーカー行を除き、末尾の空行を詰めた本文を出す。
+# 書き戻しはこの出力 + "\n<marker>" なので、書き戻し前後で plan_hash が一致する。
+plan_body() {
+  { grep -v '<!-- auto-review:' "$1" || true; } |
+    awk '{l[NR]=$0} END {n=NR; while (n>0 && l[n]=="") n--; for (i=1;i<=n;i++) print l[i]}'
+}
+plan_hash() { plan_body "$1" | hash_stdin; }
+
+MARKER_LINE=$({ grep '<!-- auto-review:' "$PLAN_FILE" || true; } | tail -1)
+CURRENT_HASH=$(plan_hash "$PLAN_FILE")
+EXISTING_HASH=$(sed -n 's/.*hash=\([a-f0-9]*\).*/\1/p' <<<"$MARKER_LINE")
 
 if [[ "$CURRENT_HASH" == "$EXISTING_HASH" ]]; then
   echo "[plan-review] No changes since last review. Skipping." >&2
@@ -197,12 +206,13 @@ fi
 
 # --- ラウンド数チェック (前回ループ終了時の round が MAX_ROUNDS なら manual に委ねる) ---
 
-CURRENT_ROUND=$(sed -n 's/.*round=\([0-9]*\).*/\1/p' "$PLAN_FILE" 2>/dev/null | head -1)
+CURRENT_ROUND=$(sed -n 's/.*round=\([0-9]*\).*/\1/p' <<<"$MARKER_LINE")
 CURRENT_ROUND="${CURRENT_ROUND:-0}"
 NEXT_ROUND=$((CURRENT_ROUND + 1))
 
 if [[ "$NEXT_ROUND" -gt "$MAX_ROUNDS" ]]; then
   echo "[plan-review] Max rounds ($MAX_ROUNDS) reached. Manual review required." >&2
+  emit_context "[plan-review] 自動レビューは round 上限（$MAX_ROUNDS）に達しているため、今回の変更（max_rounds）はレビューしていません。必要ならユーザーに確認のうえ、${RESUME_HINT}。"
   exit 0
 fi
 
