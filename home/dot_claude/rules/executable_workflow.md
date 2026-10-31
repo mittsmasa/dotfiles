@@ -55,7 +55,7 @@ plan に UI / フロントエンド（web コンポーネント / ページ / �
 
 ## Phase 3: Plan Review Loop（hook 自動）
 
-`plan.md` 書き込みを `~/.claude/scripts/plan-review-hook.sh` が検知し **simplicity（veto 権）/ correctness / verifiability** の 3 レビュアを並列実行。
+`plan.md` 書き込みを `~/.claude/scripts/plan-review-hook.sh` が検知し **simplicity（veto 権）/ correctness / verifiability / security** の 4 レビュアを並列実行。security は設計レベル（秘密情報・認可・信頼境界・権限・外部送信・依存）のみ見て、該当しない plan では pass を返す。
 
 - pass → `- Plan Status: complete` → ユーザー承認へ
 - needs_revision → applier が plan.md 編集 → 再レビュー（最大 3 ラウンド）
