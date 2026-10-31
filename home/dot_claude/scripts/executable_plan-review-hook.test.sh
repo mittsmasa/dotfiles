@@ -72,6 +72,48 @@ assert_file_absent() {
   fi
 }
 
+assert_stdout_empty() {
+  local ws="$1" desc="$2"
+  if [[ ! -s "$ws/.hook-stdout" ]]; then
+    PASS=$((PASS+1))
+    echo "    ok: $desc"
+  else
+    FAIL=$((FAIL+1))
+    FAIL_MSGS+=("$desc — stdout not empty: $(cat "$ws/.hook-stdout")")
+    echo "    FAIL: $desc"
+  fi
+}
+
+# stdout 全体が PostToolUse の hookSpecificOutput JSON で、additionalContext が pattern にマッチする
+assert_context() {
+  local ws="$1" pattern="$2" desc="$3"
+  local out="$ws/.hook-stdout" ctx
+  if jq -e '.hookSpecificOutput.hookEventName == "PostToolUse"' "$out" >/dev/null 2>&1 &&
+     ctx=$(jq -r '.hookSpecificOutput.additionalContext' "$out") &&
+     grep -Eq "$pattern" <<<"$ctx"; then
+    PASS=$((PASS+1))
+    echo "    ok: $desc"
+  else
+    FAIL=$((FAIL+1))
+    FAIL_MSGS+=("$desc — context pattern '$pattern' not in stdout: $(cat "$out" 2>/dev/null)")
+    echo "    FAIL: $desc"
+  fi
+}
+
+assert_count() {
+  local file="$1" pattern="$2" expected="$3" desc="$4"
+  local actual
+  actual=$(grep -Ec "$pattern" "$file" 2>/dev/null || true)
+  if [[ "$actual" == "$expected" ]]; then
+    PASS=$((PASS+1))
+    echo "    ok: $desc"
+  else
+    FAIL=$((FAIL+1))
+    FAIL_MSGS+=("$desc — expected $expected matches of '$pattern' in $file, got $actual")
+    echo "    FAIL: $desc (got $actual)"
+  fi
+}
+
 # --- mock binaries ---
 
 MOCKS_DIR=$(mktemp -d)
@@ -130,7 +172,9 @@ chmod +x "$MOCKS_DIR/mock-applier.sh"
 
 # --- helpers ---
 
+# mk_workspace [approval_status] [plan_status] [extra_body_line]
 mk_workspace() {
+  local approval="${1:-pending}" plan_status="${2:-draft}" extra="${3:-}"
   local dir
   dir=$(mktemp -d)
   mkdir -p "$dir/.workflow"
@@ -142,20 +186,22 @@ EOF
 # Plan
 ## 目的
 test plan body
+$extra
 
 - Review Status: pending
-- Plan Status: draft
-- Approval Status: pending
+- Plan Status: $plan_status
+- Approval Status: $approval
 EOF
   echo "$dir"
 }
 
+# run_hook <ws> [plan_path]。hook の stdout は $ws/.hook-stdout に残す。
 run_hook() {
   local ws="$1"
-  local plan_path="$ws/.workflow/plan.md"
+  local plan_path="${2:-$ws/.workflow/plan.md}"
   local input
   input=$(printf '{"tool_input":{"file_path":"%s"}}' "$plan_path")
-  ( cd "$ws" && echo "$input" | bash "$HOOK" ) >/dev/null 2>&1 || true
+  ( cd "$ws" && echo "$input" | bash "$HOOK" ) >"$ws/.hook-stdout" 2>/dev/null || true
 }
 
 # Each test exports the env vars before run_hook. unset between tests.
