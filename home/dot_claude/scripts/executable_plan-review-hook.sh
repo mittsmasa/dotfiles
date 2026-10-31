@@ -63,26 +63,27 @@
 #
 # Applier フェーズ (verdict=needs_revision のときのみ実行):
 #   - plan.md.bak を作成 (失敗時 rollback 用)
-#   - `$APPLIER_BIN --print --allowedTools Edit,Read` で起動、system prompt は
+#   - `$APPLIER_BIN --print --tools Read,Edit` で起動、system prompt は
 #     `$PROMPTS_DIR/applier.md`
 #   - 編集スコープ・escalate 条件 (`Approval Status: needs_human_review` への
 #     遷移など) は applier.md プロンプト側で制約する
 #   - applier 失敗時は plan.md.bak から自動 rollback → ループを break
 #
 # Hash:
-#   - plan.md に書き戻す `hash=` はループ終了時点の plan.md ハッシュ
+#   - plan_hash = マーカー行を除き、末尾の空行を詰めた本文の sha256
+#   - 書き戻す `hash=` は Status 行の書き換え後に計算するので、書き戻し後のファイルと一致する
 #   - 同じ内容で再度 plan.md が書かれたら冒頭の hash 比較で skip
-#   - 内容が変われば次回 hook 発火で改めてレビューが走る
+#   - `hash=` / `round=` はマーカー行からだけ読む（本文の同じ文字列を拾わない）
 #
 # plan.md に書き戻す内容 (ループ終了後 1 回):
 #   - マーカー行: `<!-- auto-review: verdict=...; hash=...; round=...; skipped=[...]; failed=[...] -->`
 #     既存マーカー行があれば一度削除してから末尾に新規追記する（任意の文字を含めても安全）
-#   - `- Status: ...` 行を最終 verdict で更新
+#   - `- Review Status: ...` 行を最終 verdict で更新
 #   - verdict=pass のときのみ `- Plan Status: ...` を complete に更新
 #   - 旧 `- Round:` / `- Last Review Hash:` 行は書き戻し対象外（マーカーが真のソース）
 #
 # 出力ファイル (各ラウンドごとに分かれる):
-#   $WORKFLOW_DIR/review-round-N.md         - 集約レポート
+#   $WORKFLOW_DIR/review-round-N.md         - 集約レポート (applier が走ったら末尾に `## Applier diff`)
 #   $WORKFLOW_DIR/review-round-N-<r>.json   - 各レビュアの抽出済み JSON
 #   $WORKFLOW_DIR/review-round-N-<r>.raw    - 各レビュアの生出力
 #   $WORKFLOW_DIR/review-round-N-peers.md   - 前ラウンドの他者 verdict
