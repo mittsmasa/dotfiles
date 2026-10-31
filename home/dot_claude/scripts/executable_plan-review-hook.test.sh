@@ -333,6 +333,28 @@ assert_file_absent "$WS/.workflow/review-round-1-peers.md"             "peers cl
 rm -rf "$WS" "$MOCK_DIR"
 
 # ---------------------------------------------------------------------------
+# Case 8: security alone needs_revision → applier edit → round 2 pass
+# ---------------------------------------------------------------------------
+echo "Case 8: security needs_revision → applier edit → round 2 pass"
+clear_env
+WS=$(mk_workspace)
+MOCK_DIR=$(mktemp -d)
+echo '{"verdict":"needs_revision","summary":"token leaks into log"}' > "$MOCK_DIR/security-1.json"
+export PLAN_REVIEW_REVIEWER_CMD="$MOCKS_DIR/mock-reviewer.sh"
+export PLAN_REVIEW_APPLIER_CMD="$MOCKS_DIR/mock-applier.sh"
+export MOCK_REVIEWER_DIR="$MOCK_DIR"
+export MOCK_APPLIER_ACTION="edit"
+export MOCK_PLAN_FILE="$WS/.workflow/plan.md"
+run_hook "$WS"
+
+assert_match     "$WS/.workflow/review-round-1.md" '^- failed: \[security\]$'  "round 1 failed=[security]"
+assert_match     "$WS/.workflow/review-round-1.md" '^## security — needs_revision$' "round 1 report has security section"
+assert_match     "$WS/.workflow/plan.md" '// applier edit pid='              "applier ran on security finding"
+assert_match     "$WS/.workflow/plan.md" '^- Review Status: pass$'           "Status=pass after round 2"
+assert_match     "$WS/.workflow/plan.md" 'round=2'                           "marker round=2"
+rm -rf "$WS" "$MOCK_DIR"
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo ""
