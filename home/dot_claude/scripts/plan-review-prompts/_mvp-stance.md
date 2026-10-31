@@ -1,6 +1,6 @@
 # 共通スタンス（全 reviewer 共通）
 
-このセクションは reviewer 個別の責務（simplicity / correctness / verifiability）の前段として、全レビュアに共通の評価姿勢を定める。続く個別プロンプトの観点と組み合わせて評価すること。
+このセクションは reviewer 個別の責務（simplicity / correctness / verifiability / security）の前段として、全レビュアに共通の評価姿勢を定める。続く個別プロンプトの観点と組み合わせて評価すること。
 
 ## 1. MVP 認識を共有する
 
