@@ -251,7 +251,6 @@
       ]
     }
   },
-  "model": "claude-sonnet",
   "hooks": {
     "UserPromptSubmit": [
       {
