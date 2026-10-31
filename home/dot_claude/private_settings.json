@@ -191,24 +191,63 @@
     "enabled": true,
     "failIfUnavailable": true,
     "autoAllowBashIfSandboxed": false,
-    "excludedCommands": ["gh *", "git fetch *", "git pull *", "git push *", "git ls-remote *", "mise install", "mise install *", "fnox exec -- pnpm install", "fnox exec -- pnpm install *", "git commit *", "pnpm exec vitest *", "pnpm vrt", "pnpm vrt *"],
+    "excludedCommands": [
+      "gh *",
+      "git fetch *",
+      "git pull *",
+      "git push *",
+      "git ls-remote *",
+      "mise install",
+      "mise install *",
+      "fnox exec -- pnpm install",
+      "fnox exec -- pnpm install *",
+      "git commit *",
+      "pnpm exec vitest *",
+      "pnpm vrt",
+      "pnpm vrt *"
+    ],
     "filesystem": {
-      "allowWrite": ["~/.local/state/mise", "~/.local/share/chezmoi", "~/.config/chezmoi", "~/.npm"],
-      "denyRead": ["~/.zsh_history", "~/.zsh_sessions"]
+      "allowWrite": [
+        "~/.local/state/mise",
+        "~/.local/share/chezmoi",
+        "~/.config/chezmoi",
+        "~/.npm"
+      ],
+      "denyRead": [
+        "~/.zsh_history",
+        "~/.zsh_sessions"
+      ]
     },
     "network": {
-      "allowedDomains": ["github.com", "api.github.com", "registry.npmjs.org", "npm.pkg.github.com"],
+      "allowedDomains": [
+        "github.com",
+        "api.github.com",
+        "registry.npmjs.org",
+        "npm.pkg.github.com"
+      ],
       "strictAllowlist": true,
       "allowLocalBinding": true
     },
     "credentials": {
       "envVars": [
-        { "name": "GITHUB_TOKEN", "mode": "deny" },
-        { "name": "GH_TOKEN", "mode": "deny" },
-        { "name": "NODE_AUTH_TOKEN", "mode": "deny" }
+        {
+          "name": "GITHUB_TOKEN",
+          "mode": "deny"
+        },
+        {
+          "name": "GH_TOKEN",
+          "mode": "deny"
+        },
+        {
+          "name": "NODE_AUTH_TOKEN",
+          "mode": "deny"
+        }
       ],
       "files": [
-        { "path": "~/.ssh", "mode": "deny" }
+        {
+          "path": "~/.ssh",
+          "mode": "deny"
+        }
       ]
     }
   },
@@ -304,16 +343,6 @@
           }
         ]
       }
-    ],
-    "Notification": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ~/.claude/scripts/notify.sh"
-          }
-        ]
-      }
     ]
   },
   "statusLine": {
@@ -322,7 +351,6 @@
   },
   "enabledPlugins": {
     "document-skills@anthropic-agent-skills": false,
-    "context7@claude-plugins-official": true,
     "cowork-plugin-management@inline": false
   },
   "extraKnownMarketplaces": {},
