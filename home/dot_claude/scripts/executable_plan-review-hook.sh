@@ -103,9 +103,11 @@ fi
 INPUT=$(cat)
 FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty' 2>/dev/null || echo "")
 
-if [[ -z "$FILE_PATH" ]] || [[ "$FILE_PATH" != *"plan.md" ]]; then
-  exit 0
-fi
+# 任意リポジトリの docs/plan.md 等で Opus を 4 本走らせないよう、workflow の task dir に限る
+case "$FILE_PATH" in
+  */.workflow/plan.md|*/.workflow/*/plan.md|*/.claude/workflow/*/plan.md) ;;
+  *) exit 0 ;;
+esac
 
 if [[ -z "${WORKFLOW_DIR:-}" ]]; then
   WORKFLOW_DIR=$(cd "$(dirname "$FILE_PATH")" 2>/dev/null && pwd -P) || exit 0
@@ -139,9 +141,36 @@ set_status()  { eval "STATUS_$1=\"\$2\""; }
 get_verdict() { local v="VERDICT_$1"; echo "${!v:-}"; }
 set_verdict() { eval "VERDICT_$1=\"\$2\""; }
 
+# main session へ結果を返す。PostToolUse の stderr は exit 0 だと Claude に届かない。
+emit_context() {
+  jq -n --arg c "$1" '{hookSpecificOutput:{hookEventName:"PostToolUse",additionalContext:$c}}'
+}
+
+# 行頭の canonical 行 (`- Approval Status: xxx` 等) から値を読む。本文中の同じ文字列は拾わない。
+status_of() {
+  sed -nE "s/^[[:space:]]*([-*][[:space:]]+)?$1 Status:[[:space:]]*([^[:space:]]*).*/\\2/p" "$PLAN_FILE" | head -1
+}
+
+RESUME_HINT="再レビューするには、plan.md 末尾の <!-- auto-review: ... --> マーカー行を消してから plan.md を保存し直してください"
+
 # --- 前提チェック ---
 
 [[ -f "$PLAN_FILE" ]] || exit 0
+
+# --- 承認後スキップ ---
+# 承認後のチェック更新などで hash が変わっても、承認済み plan を applier に書き換えさせない。
+
+APPROVAL_STATUS=$(status_of Approval)
+PLAN_STATUS=$(status_of Plan)
+
+if [[ "$APPROVAL_STATUS" == "needs_human_review" ]]; then
+  echo "[plan-review] Approval Status: needs_human_review. Skipping." >&2
+  emit_context "[plan-review] Approval Status: needs_human_review のため自動レビューをスキップしました。review-round-*.md の指摘をユーザーに示して判断を仰いでください。判断後に再レビューするには Approval Status を pending に戻して保存し直してください（round 上限に達している場合は、さらに plan.md 末尾の <!-- auto-review: ... --> マーカー行も消してください）。"
+  exit 0
+fi
+if [[ "$APPROVAL_STATUS" == "approved" || "$PLAN_STATUS" == "done" ]]; then
+  exit 0
+fi
 
 for r in "${REVIEWERS[@]}"; do
   if [[ ! -f "$PROMPTS_DIR/$r.md" ]]; then
