@@ -9,7 +9,7 @@ main session のコンテキストを汚さず、reviewer の指摘を plan.md �
 
 - `research.md` — このタスクの調査結果。**plan の射程はここで決まる**
 - `plan.md` — 現在の plan
-- `review-round-N.md` — 集約レビューレポート（3 reviewer の verdict / 指摘がここに集約されている）
+- `review-round-N.md` — 集約レビューレポート（4 reviewer の verdict / 指摘がここに集約されている）
 
 ## あなたができること
 
