@@ -35,6 +35,7 @@
 ## 4. 出力ルール
 
 - JSON のみを出力。前後の説明文・コードブロックフェンスは禁止
+- `verdict` は findings の severity で決める: critical / major が 1 件以上なら `needs_revision`、minor だけ（または 0 件）なら `pass`。minor だけで needs_revision にすると applier が回り、磨きのためのラウンドが増える
 - 個別プロンプトで定義された JSON スキーマに従う
 - `summary` は 1 文。「何を直せば次のラウンドで pass にできるか」を 1 つだけ書く
 - `findings` は本当に必要なものに絞る。10 件以上出るときは絞り込みが甘い
