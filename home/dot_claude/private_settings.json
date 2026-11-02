@@ -298,6 +298,10 @@
           {
             "type": "command",
             "command": "bash ~/.claude/scripts/test-quality-reminder.sh"
+          },
+          {
+            "type": "command",
+            "command": "bash ~/.claude/scripts/separation-of-concerns-reminder.sh"
           }
         ]
       },
