@@ -323,7 +323,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ~/.claude/scripts/plan-review-hook.sh",
+            "command": "fnox exec -- bash ~/.claude/scripts/plan-review-hook.sh",
             "timeout": 1800
           },
           {
