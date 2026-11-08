@@ -1,5 +1,5 @@
 #!/bin/bash
-# PreToolUse hook: アプリケーションコードを書こうとしたとき、separation-of-concerns skill が未ロードなら
+# PreToolUse hook: アプリケーションコードを書こうとしたとき、testable-design skill が未ロードなら
 # そのロードを促すリマインダを additionalContext で返す（呼び出しは止めない）。
 # テストファイルは test-quality-reminder.sh が担うので対象外にする。
 # transcript にロードの痕跡があれば何もしない。セッション中一度だけ発火する（フラグファイルで抑止）。
@@ -42,7 +42,7 @@ is_test_file "$FILE_PATH" && exit 0
 
 # スラッシュコマンド起動か Skill ツール起動の痕跡があればロード済み
 if [ -n "$TRANSCRIPT" ] \
-   && grep -qE 'command-name>/?separation-of-concerns<|"skill": ?"separation-of-concerns"' "$TRANSCRIPT" 2>/dev/null; then
+   && grep -qE 'command-name>/?testable-design<|"skill": ?"testable-design"' "$TRANSCRIPT" 2>/dev/null; then
   exit 0
 fi
 
@@ -50,7 +50,7 @@ touch "$FLAG"
 jq -n '{
   hookSpecificOutput: {
     hookEventName: "PreToolUse",
-    additionalContext: "アプリケーションコードを書こうとしています。Skill ツールで separation-of-concerns をロードし、その観点（変わる理由が同じものは集め、違うものは離す / 共通部にフラグや分岐を足す前に、呼び出し元を分けるほうが自然でないか比べる / 分けすぎない）を当ててください。この呼び出しで書いた内容も、ロード後に同じ観点で見直してください。このリマインダはセッション中一度のみ表示されます。"
+    additionalContext: "アプリケーションコードを書こうとしています。Skill ツールで testable-design をロードし、その観点（変わる理由が同じものは集め、違うものは離す / 共通部にフラグや分岐を足す前に、呼び出し元を分けるほうが自然でないか比べる / 分けすぎない）を当ててください。この呼び出しで書いた内容も、ロード後に同じ観点で見直してください。このリマインダはセッション中一度のみ表示されます。"
   }
 }'
 exit 0

@@ -1,5 +1,5 @@
 #!/bin/bash
-# PreToolUse hook: テストファイルを書こうとしたとき、test-quality skill が未ロードなら
+# PreToolUse hook: テストファイルを書こうとしたとき、testable-design skill が未ロードなら
 # その呼び出しを deny し、skill をロードしてから書き直すよう促す。
 # additionalContext は呼び出しの後に届き、最初のファイルが skill 無しで書かれたまま通るため deny にしている。
 # transcript にロードの痕跡があれば何もしない。deny はセッション中一回まで（フラグファイルで抑止）。
@@ -33,10 +33,10 @@ is_test_file() {
 
 is_test_file "$FILE_PATH" || exit 0
 
-# スラッシュコマンド起動（<command-name>/test-quality</command-name>）か Skill ツール起動の痕跡があればロード済み
+# スラッシュコマンド起動（<command-name>/testable-design</command-name>）か Skill ツール起動の痕跡があればロード済み
 # transcript が読めないときは未ロード扱いにする
 if [ -n "$TRANSCRIPT" ] \
-   && grep -qE 'command-name>/?test-quality<|"skill": ?"test-quality"' "$TRANSCRIPT" 2>/dev/null; then
+   && grep -qE 'command-name>/?testable-design<|"skill": ?"testable-design"' "$TRANSCRIPT" 2>/dev/null; then
   exit 0
 fi
 
@@ -45,7 +45,7 @@ jq -n --arg p "$FILE_PATH" '{
   hookSpecificOutput: {
     hookEventName: "PreToolUse",
     permissionDecision: "deny",
-    permissionDecisionReason: ("テストファイル（" + $p + "）を書く前に、Skill ツールで test-quality をロードしてください。ロード後、その観点（書かない判断 / 実装でなく振る舞いを確かめる / モックは管理外の依存だけ）で中身を見直し、同じファイルを書き直してください。この確認はセッション中一度だけです。")
+    permissionDecisionReason: ("テストファイル（" + $p + "）を書く前に、Skill ツールで testable-design をロードし、references/test-quality.md も読んでください。ロード後、その観点（書かない判断 / 実装でなく振る舞いを確かめる / 一つの観点を一番安いレイヤーで一度だけ / モックは管理外の依存とネットワーク層だけ）で中身を見直し、同じファイルを書き直してください。この確認はセッション中一度だけです。")
   }
 }'
 exit 0
