@@ -100,6 +100,31 @@ React フロントエンドで、観点ごとにテストレイヤーを選び�
 - **Server Component / Server Action も薄く保つ**: ロジックは純粋関数に出して単体テストする。Server Component 自体の描画は結合テストや E2E に任せ、単体で render しようとしない
 - **モックが 3 つ以上要るなら分け方を疑う**: テストを書き進める前に、上の層分けに沿っているかを見直す
 
+## 後片付けと分離（実行順に依存しないために）
+
+片付けは手で書かず設定で自動にし、そもそもテスト間で共有する状態を持たない。
+
+### モック
+
+- `vi.spyOn` の差し替えは `restoreMocks: true` で各テスト前に自動で戻す。公式に対象と明記されているのは `vi.spyOn` だけなので、`vi.fn` の呼び出し履歴は `clearMocks` か `mockReset` で消す。非同期テストを並行実行していると、一つのテストの復元が実行中の別テストの spy まで戻すので、並行実行と組み合わせない
+- `vi.stubGlobal` / `vi.stubEnv` は `unstubGlobals: true` / `unstubEnvs: true` で自動的に戻す
+- fake timers を使ったら `afterEach` で `vi.useRealTimers()` に戻す。戻し忘れると、次のテストの `expect.element` の待ちや MSW の遅延応答が進まない
+- MSW は `afterEach` で `resetHandlers()` を呼び、テスト内で上書きしたハンドラを戻す。`onUnhandledRequest: 'error'` にして、ハンドラの漏れを失敗として扱う
+
+### Browser Mode
+
+- `vitest-browser-react` の `render` は、次のテストが始まる前に前のコンポーネントを片付ける（直後ではない）。最後のテストの描画は残る
+- 片付けの対象はコンポーネントだけ。同じファイル内のテスト間では、ブラウザの状態が残る前提で書く: localStorage / sessionStorage、cookie、URL と履歴、`document.body` のクラスやスタイル（モーダルの scroll lock など）、viewport のサイズ、フォーカス位置。変えたテストが自分で戻すか、`beforeEach` で初期化する
+
+### モジュールが持つ状態
+
+- モジュールのトップレベルで作って使い回す状態が、一番見落としやすい: 1 つだけ作った QueryClient（キャッシュが次のテストに残る）、zustand などのストア、モジュールレベルのキャッシュやシングルトン
+- QueryClient はテストごとに新しく作り、`retry: false` にする。ストアは初期化関数を用意して `beforeEach` で呼ぶ。片付けを書くより、毎回新しく作るほうが確実
+
+### 順序依存の検出
+
+- `sequence.shuffle: true` で実行順をランダムにし、順序に依存しているテストを見つける。CI で定期的に回す
+
 ## テスト資産の共通化
 
 - **fixture とハンドラを共通化する**: 同じ fixture・MSW ハンドラを Storybook、コンポーネントテスト、MSW 層の E2E で使い回す。可能なら OpenAPI などのスキーマから型付きで生成する
