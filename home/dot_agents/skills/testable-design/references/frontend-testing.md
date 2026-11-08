@@ -25,8 +25,7 @@ React フロントエンドで、観点ごとにテストレイヤーを選び�
 |---|---|
 | 計算・変換・バリデーション・日付や金額・状態遷移（reducer）・権限判定などの純粋なロジック、境界値の網羅 | 単体テスト（Vitest） |
 | カスタムフックのロジック・副作用の制御 | 単体テスト（`renderHook`）。UI と一体でないと意味がないものはコンポーネントテスト |
-| 操作に応じた表示の変化、条件付き表示、フォームのエラー表示、disabled、フォーカス移動、role とラベルで引けること（a11y） | コンポーネントテスト（Testing Library） |
-| レイアウトや実ブラウザ API（IntersectionObserver、ResizeObserver、スクロール、本物のフォーカス管理）に依存し、jsdom が信用できない振る舞い | コンポーネントテスト（Vitest Browser Mode） |
+| 操作に応じた表示の変化、条件付き表示、フォームのエラー表示、disabled、フォーカス移動、role とラベルで引けること（a11y）、レイアウトや実ブラウザ API（IntersectionObserver、ResizeObserver、スクロール）に依存する振る舞い | コンポーネントテスト（Vitest Browser Mode） |
 | 画面と API のやり取り: 送るリクエストの中身、ローディング / エラー / 空状態の出し分け、500・タイムアウト・ページング境界、キャッシュ無効化 | MSW を使った結合テスト / E2E |
 | 重要なユーザー導線が端から端までつながっていること | 実バックエンド E2E（Playwright） |
 | 見た目（余白・色・レイアウト・ダークモード・デザイントークン変更の影響） | VRT（撮影対象の Story が前提） |
@@ -36,6 +35,17 @@ React フロントエンドで、観点ごとにテストレイヤーを選び�
 迷ったら「この観点を検証できる一番安く速いレイヤーはどれか」で決める。
 
 ## レイヤーごとのルール
+
+### コンポーネントテスト（Vitest Browser Mode）
+
+- 既定の実行環境は Vitest Browser Mode（実ブラウザ）。jsdom は既存プロジェクトがすでに jsdom で揃っていて、まだ移行していない場合に限る。新しく書くテストは Browser Mode で書く
+- 描画は `vitest-browser-react` の `render`、要素の取得は `page` のロケーター（`getByRole` など。優先順位は Testing Library と同じ）を使う
+- 操作は `vitest/browser` の `userEvent` を使う。`fireEvent` 相当の合成イベントは使わない
+- アサーションは `expect.element(locator)` を使う。要素が現れるまで待つので、`waitFor` や固定時間の sleep を書かない。要素が無いことは `expect.element(locator).not.toBeInTheDocument()` で確かめる
+- jsdom のまま残っているテストでは、非同期は `findBy*` で待ち、要素が無いことは `queryBy*` で確かめる。`waitFor` の中にはアサーションを 1 つだけ入れ、操作や副作用を書かない。`userEvent.setup()` はテストごとに呼ぶ
+- a11y は role とラベルで引けることに加えて、axe による自動検査（Storybook の a11y アドオンなど）で違反を拾う
+- Error Boundary、Portal、Suspense、Context は本物を使って描画する。Provider はテスト用の `wrapper` にまとめ、各テストで組み立てない。Error Boundary のテストで出る想定内の `console.error` は、そのテストの中だけで抑える
+- 純粋関数や、DOM を使わないフックのロジックは Browser Mode に載せず、Node 環境の単体テストで確かめる。ブラウザを立ち上げる分だけ遅くなるため
 
 ### MSW を使った結合テスト / E2E
 
@@ -48,6 +58,7 @@ React フロントエンドで、観点ごとにテストレイヤーを選び�
 - 対象は重要な導線だけ（例: ログイン → 主要業務の完了）。目的は「つながっていること」の証明
 - 分岐やエラーケースは網羅しない。それは MSW 層の仕事
 - 新しい導線の E2E を足すときは、MSW 層では足りない理由を計画に書く
+- 何度流しても同じ結果になるようにする: テストごとに一意な ID でデータを作り、終わったら後始末する。並列実行で他のテストのデータとぶつからないようにする
 
 ### Storybook
 
