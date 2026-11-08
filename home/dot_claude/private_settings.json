@@ -354,9 +354,17 @@
   },
   "enabledPlugins": {
     "document-skills@anthropic-agent-skills": false,
-    "cowork-plugin-management@inline": false
+    "cowork-plugin-management@inline": false,
+    "pstack@cursor-plugins": true
   },
-  "extraKnownMarketplaces": {},
+  "extraKnownMarketplaces": {
+    "cursor-plugins": {
+      "source": {
+        "source": "github",
+        "repo": "cursor/plugins"
+      }
+    }
+  },
   "outputStyle": "maaya",
   "language": "日本語",
   "effortLevel": "high",
