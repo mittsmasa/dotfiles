@@ -1,14 +1,9 @@
----
-name: frontend-test-strategy
-description: "React フロントエンドで、検証したい観点をどのテストレイヤー（単体 / コンポーネント / MSW 結合 / 実バックエンド E2E / Storybook / VRT）に担わせるかを決める棲み分けと、テストしやすい実装の層分け（ロジック・API 呼び出し・副作用の切り出し）。テストの書き方の一般原則は test-quality、責務分離の一般原則は separation-of-concerns が持つので、ここではフロントエンドでのレイヤー選択と配置だけを扱う。Use when planning, writing, or reviewing React tests and deciding which layer a check belongs to, adding Stories for VRT, setting up MSW handlers / fixtures, or splitting components, hooks, and API clients for testability. 「テスト戦略」「どのテストで見る」「棲み分け」「VRT」「Storybook」「MSW」「E2E にすべき？」などでトリガー。"
----
-
-# frontend-test-strategy
+# フロントエンドのテスト戦略
 
 React フロントエンドで、観点ごとにテストレイヤーを選び、テストしやすい形に実装を分けるための指針。
 
-- テストの書き方（振る舞いを確かめる、書かない判断、クエリの優先順位など）は `test-quality` に従う
-- 責務分離の判定（変わる理由で分ける）は `separation-of-concerns` に従う
+- テストの書き方（振る舞いを確かめる、書かない判断、クエリの優先順位など）は `test-quality.md` に従う
+- 責務分離の判定（変わる理由で分ける）は `separation-of-concerns.md` に従う
 
 ## 原則
 
@@ -62,7 +57,8 @@ React フロントエンドで、観点ごとにテストレイヤーを選び�
 
 ### VRT
 
-- VRT は Story を撮影対象にする。見た目を守りたいコンポーネントに Story がなければ、まず Story を作る
+- VRT の対象はデザインシステムと重要画面に絞る（動的コンテンツは flaky になりやすい）
+- VRT は Story を撮影対象にする。対象にしたいコンポーネントに Story がなければ、まず Story を作る
 - 見た目に影響する変更をしたら、対応する Story を追加・更新する
 - 見た目の回帰は VRT に任せ、色・余白・クラス名をアサーションで確かめない
 - 撮影対象の Story は、状態のバリエーション（空・エラー・長い文字列・ダークモード）を網羅する
@@ -100,7 +96,7 @@ React フロントエンドで、観点ごとにテストレイヤーを選び�
 
 ## レビューの出し方
 
-`test-quality` のレビュー手順に加えて、次を確かめる。
+`test-quality.md` のレビュー手順に加えて、次を確かめる。
 
 1. より安いレイヤーで検証できる観点がないか（「これは単体テストに下げられる」「これは VRT で十分」）
 2. 同じ観点を複数のレイヤーで重ねて検証していないか

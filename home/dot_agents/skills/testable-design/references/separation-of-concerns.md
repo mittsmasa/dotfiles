@@ -1,11 +1,6 @@
----
-name: separation-of-concerns
-description: "コードを書く・直す・リファクタする・レビューするときに当てる責務分離の判定基準。「変わる理由が同じものは集め、違うものは離す」の 1 軸で、混ざりすぎ（1 か所に複数の人の要望が同居）と散らばりすぎ（1 つの要望の変更が複数箇所に波及）と分けすぎを見つける。行数やファイル数では判定しない。Use when writing, modifying, refactoring, or reviewing production code, designing module / component / function boundaries, extracting or merging shared code (DRY, common components, utils), adding flags or variants to an existing component, or reviewing a diff / PR for design quality. 「責務」「責務分離」「単一責任」「SRP」「関心の分離」「凝集」「結合」「共通化」「切り出す」「分割」「設計レビュー」などでトリガー。ユーザーに頼まれていなくても、機能追加やバグ修正でアプリケーションコードを書く前にロードする。テストコードの観点は test-quality が持つ。Load proactively before writing or editing application code, even when the user did not ask about design."
----
+# 責務分離
 
-# separation-of-concerns
-
-コードを書く前と、書かれたコードをレビューするときに当てる責務分離の観点。出典は `references/sources.md` にある。テストコードの観点は `test-quality` が持つので、ここでは扱わない。
+コードを書く前と、書かれたコードをレビューするときに当てる責務分離の観点の詳細。出典は `sources.md` の後半にある。テストコードの観点は `test-quality.md` が持つ。
 
 ## 判定の軸
 
