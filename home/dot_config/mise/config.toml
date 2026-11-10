@@ -10,7 +10,7 @@ gh = "2.103.3"
 "npm:@github/copilot" = "1.0.105"
 just = "1.59.0"
 "npm:vercel" = "65.9.0"
-uv = "0.13.6"
+uv = "0.13.7"
 age = "latest"
 "github:jdx/fnox" = "1.46.0"
 "github:yusukebe/ax" = { version = "0.1.25", exe = "ax" }
