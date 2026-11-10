@@ -2,10 +2,18 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["config:recommended"],
   "timezone": "Asia/Tokyo",
-  "enabledManagers": ["mise"],
+  "enabledManagers": ["mise", "npm"],
   "mise": {
     "managerFilePatterns": ["/^home/dot_config/mise/config\\.toml$/"]
   },
+  "packageRules": [
+    {
+      "description": "npm は testable-design skill の tools だけを対象にする。slide のテンプレートは対象外",
+      "matchManagers": ["npm"],
+      "matchFileNames": ["home/dot_agents/skills/slide/**"],
+      "enabled": false
+    }
+  ],
   "minimumReleaseAge": "7 days",
   "automerge": true,
   "automergeType": "pr",
