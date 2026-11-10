@@ -6,6 +6,8 @@ import {
   findPermalink,
   formatPrompt,
   messagesText,
+  oneLine,
+  parseParentText,
   parsePermalink,
   parseReplies,
   parseUserId,
@@ -25,7 +27,7 @@ const link = atom({ plugin: 'slack-thread-link', key: 'link' } as const, null as
 
 type $ = EngineInterface
 
-async function fetchReplies($: $, l: SlackLink): Promise<Reply[]> {
+async function fetchThread($: $, l: SlackLink): Promise<{ title?: string; replies: Reply[] }> {
   const result = await $.mcp.call(SLACK_SERVER, 'slack_read_thread', {
     channel_id: l.channel,
     message_ts: l.threadTs,
@@ -35,8 +37,9 @@ async function fetchReplies($: $, l: SlackLink): Promise<Reply[]> {
   })
   const text = messagesText(result.content as { type: string; text?: string }[])
   if (result.isError) throw new Error(text.slice(0, 200))
+  const parent = parseParentText(text)
 
-  return parseReplies(text)
+  return { title: parent === undefined ? undefined : oneLine(parent), replies: parseReplies(text) }
 }
 
 async function fetchOwnerId($: $): Promise<string> {
@@ -66,8 +69,12 @@ async function poll($: $): Promise<void> {
     const l = await read($, link)
     if (!l) return
     const ownerId = l.ownerId ?? (await fetchOwnerId($))
-    if (!l.ownerId) await update($, link, cur => (cur && cur.threadTs === l.threadTs ? { ...cur, ownerId } : cur))
-    const fresh = (await fetchReplies($, l)).filter(
+    const { title, replies } = await fetchThread($, l)
+    // 古い紐付けに足りない値はここで補う。
+    if (!l.ownerId || (title !== undefined && title !== l.title)) {
+      await update($, link, cur => (cur && cur.threadTs === l.threadTs ? { ...cur, ownerId, title: title ?? cur.title } : cur))
+    }
+    const fresh = replies.filter(
       r => tsAfter(r.ts, l.lastTs) && !l.selfTs.includes(r.ts),
     )
     const newest = fresh.at(-1)?.ts
@@ -97,8 +104,8 @@ async function linkThread($: $, url: string): Promise<string> {
   // 紐付けた時点までの返信は既読にする。
   const ownerId = await fetchOwnerId($)
   const draft: SlackLink = { url, ...ref, ownerId, lastTs: ref.threadTs, selfTs: [] }
-  const replies = await fetchReplies($, draft)
-  const next: SlackLink = { ...draft, lastTs: replies.at(-1)?.ts ?? ref.threadTs }
+  const { title, replies } = await fetchThread($, draft)
+  const next: SlackLink = { ...draft, title, lastTs: replies.at(-1)?.ts ?? ref.threadTs }
   await update($, link, () => next)
   showStatus($, next)
 
@@ -168,10 +175,18 @@ export const register: Register = on => {
     if (!l || e.props.hasSurvey) return next(e)
     const { Box, Link, Text } = $.ui.resolve(e)
 
+    // 冒頭は残りの幅に 1 行で収め、はみ出す分は末尾を省略する。リンクは右端に寄せる。
     return (
-      <Box flexDirection="row" gap={1}>
-        <Text dimColor>Slack 連携中 ·</Text>
-        <Link key="thread" href={l.url} label="スレッドを開く" />
+      <Box flexDirection="row" width="100%" gap={1}>
+        <Box flexShrink={0}>
+          <Text dimColor>Slack 連携中 ·</Text>
+        </Box>
+        <Box flexGrow={1} flexShrink={1} minWidth={0}>
+          <Text wrap="truncate-end">{l.title ?? ''}</Text>
+        </Box>
+        <Box flexShrink={0}>
+          <Link key="thread" href={l.url} label="スレッドを開く" />
+        </Box>
       </Box>
     )
   })
@@ -183,7 +198,7 @@ export const register: Register = on => {
       const l = await read($, link)
       const input = e as unknown as { channel_id?: string; thread_ts?: string }
       if (!l || input.channel_id !== l.channel || input.thread_ts !== l.threadTs) return ran
-      const own = (await fetchReplies($, l)).at(-1)?.ts
+      const own = (await fetchThread($, l)).replies.at(-1)?.ts
       if (own) {
         await update($, link, cur =>
           cur && cur.threadTs === l.threadTs
