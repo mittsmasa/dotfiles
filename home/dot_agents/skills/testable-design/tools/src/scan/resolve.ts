@@ -17,6 +17,8 @@ export interface TsconfigInfo {
   /** Root-relative directory of the tsconfig.json. */
   dir: string;
   paths: Record<string, string[]>;
+  /** Root-relative directory `compilerOptions.baseUrl` points at, null without one. */
+  baseUrl: string | null;
 }
 
 export interface Project {
@@ -119,13 +121,30 @@ function resolveByPaths(
     if (matched === null) continue;
     let result = UNRESOLVED;
     for (const substitution of substitutions) {
-      const path = posix.join(tsconfig.dir, substitution.replace('*', matched));
-      result = resolvePath(path, project);
+      // Like TypeScript: substitutions are relative to `baseUrl` when it is set.
+      const base = tsconfig.baseUrl ?? tsconfig.dir;
+      result = resolvePath(posix.join(base, substitution.replace('*', matched)), project);
       if (result.resolution !== 'unresolved') return result;
     }
     return result;
   }
   return null;
+}
+
+/**
+ * A bare specifier read as a path under the `baseUrl` of the nearest
+ * tsconfig.json. Only a file that exists counts, so that a package import
+ * (`pkg/style.css`) is left to the rules after this one.
+ */
+function resolveByBaseUrl(
+  specifier: string,
+  importer: string,
+  project: Project,
+): Resolution | null {
+  const tsconfig = ancestors(project.tsconfigs, importer)[0];
+  if (!tsconfig || tsconfig.baseUrl === null) return null;
+  const result = resolvePath(posix.join(tsconfig.baseUrl, specifier), project);
+  return result.target === null ? null : result;
 }
 
 function resolveByWorkspace(
@@ -156,10 +175,12 @@ export function packageName(specifier: string): string {
 /**
  * Resolves a module specifier written in `importer`.
  *
- * Handles relative paths, tsconfig `paths` of the nearest tsconfig.json,
+ * Handles relative paths, `paths` and `baseUrl` of the nearest tsconfig.json,
  * workspace packages through their `exports`, Node builtins, and packages
- * declared in a package.json above the importer. Anything else is
- * `unresolved`, so a missed resolution never hides among externals.
+ * declared in a package.json above the importer, in that order: like
+ * TypeScript, a file under `baseUrl` wins over a package of the same name.
+ * Anything else is `unresolved`, so a missed resolution never hides among
+ * externals.
  */
 export function resolveSpecifier(
   specifier: string,
@@ -172,6 +193,8 @@ export function resolveSpecifier(
   }
   const byPaths = resolveByPaths(path, importer, project);
   if (byPaths) return byPaths;
+  const byBaseUrl = resolveByBaseUrl(path, importer, project);
+  if (byBaseUrl) return byBaseUrl;
   const byWorkspace = resolveByWorkspace(path, project);
   if (byWorkspace) return byWorkspace;
   if (isBuiltin(path)) return { target: null, resolution: 'external' };
@@ -213,10 +236,20 @@ export function stripJsonComments(text: string): string {
   return output.replace(/,(\s*[}\]])/g, '$1');
 }
 
-/** Reads `compilerOptions.paths` from the text of a tsconfig.json. */
-export function readTsconfigPaths(text: string): Record<string, string[]> {
-  const config = JSON.parse(stripJsonComments(text));
-  return config?.compilerOptions?.paths ?? {};
+/**
+ * Reads `compilerOptions.paths` and `baseUrl` from the text of the
+ * tsconfig.json in `dir`. `extends` is not followed, and an absolute
+ * `baseUrl` is ignored.
+ */
+export function readTsconfig(text: string, dir: string): TsconfigInfo {
+  const options = JSON.parse(stripJsonComments(text))?.compilerOptions;
+  const baseUrl: unknown = options?.baseUrl;
+  const relative = typeof baseUrl === 'string' && !posix.isAbsolute(baseUrl);
+  return {
+    dir,
+    paths: options?.paths ?? {},
+    baseUrl: relative ? posix.join(dir, baseUrl).replace(/^\.$|\/$/, '') : null,
+  };
 }
 
 /** Picks the file of one `exports` entry: a string, or its `default` / `import` / `types` condition. */

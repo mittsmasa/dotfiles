@@ -12,7 +12,7 @@ import {
   type PackageInfo,
   type Project,
   readPackageInfo,
-  readTsconfigPaths,
+  readTsconfig,
   type TsconfigInfo,
 } from '../src/scan/resolve.ts';
 
@@ -114,7 +114,7 @@ function readProject(root: string, generatedDirectories: string[]): Project {
     const text = readFileSync(join(root, file), 'utf8');
     try {
       if (name === 'tsconfig.json') {
-        tsconfigs.push({ dir, paths: readTsconfigPaths(text) });
+        tsconfigs.push(readTsconfig(text, dir));
       } else {
         packages.push(readPackageInfo(text, dir));
       }

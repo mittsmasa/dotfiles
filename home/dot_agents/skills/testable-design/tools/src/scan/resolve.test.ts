@@ -3,7 +3,7 @@ import {
   packageName,
   type Project,
   readPackageInfo,
-  readTsconfigPaths,
+  readTsconfig,
   resolveSpecifier,
   stripJsonComments,
 } from './resolve.ts';
@@ -26,10 +26,11 @@ const project: Project = {
     'index.ts',
   ]),
   tsconfigs: [
-    { dir: 'apps/main', paths: { '@/*': ['./src/*'] } },
+    { dir: 'apps/main', paths: { '@/*': ['./src/*'] }, baseUrl: null },
     {
       dir: 'apps/console',
       paths: { '@/*': ['./src/*'], '@config/*': ['./config/*'] },
+      baseUrl: null,
     },
   ],
   packages: [
@@ -243,6 +244,109 @@ describe('resolveSpecifier', () => {
   });
 });
 
+describe('tsconfig baseUrl', () => {
+  const withBaseUrl: Project = {
+    files: new Set([
+      'app/pages/index.tsx',
+      'app/src/utils/recoil/atoms.ts',
+      'app/src/hooks/index.ts',
+      'app/src/styles/globals.css',
+      'app/src/lodash/index.ts',
+      'app/src/shared/date.ts',
+      'app/src/date.ts',
+      'app/src/empty/readme.md',
+      'legacy/main.ts',
+      'legacy/utils/format.ts',
+    ]),
+    tsconfigs: [
+      { dir: 'app', paths: { 'shared/*': ['./missing/*'], '~/*': ['./*'] }, baseUrl: 'app/src' },
+      { dir: 'legacy', paths: {}, baseUrl: null },
+    ],
+    packages: [
+      { dir: 'app', name: 'app', dependencies: ['lodash', 'swiper', 'react'], exports: {} },
+    ],
+    generatedDirectories: [],
+  };
+  const page = 'app/pages/index.tsx';
+
+  it('resolves a bare specifier against baseUrl, completing the extension', () => {
+    expect(resolveSpecifier('utils/recoil/atoms', page, withBaseUrl)).toEqual({
+      target: 'app/src/utils/recoil/atoms.ts',
+      resolution: 'internal',
+    });
+  });
+
+  it('completes index.ts for a directory under baseUrl', () => {
+    expect(resolveSpecifier('hooks', page, withBaseUrl)).toEqual({
+      target: 'app/src/hooks/index.ts',
+      resolution: 'internal',
+    });
+  });
+
+  it('classifies an existing stylesheet under baseUrl as an asset', () => {
+    expect(resolveSpecifier('styles/globals.css', page, withBaseUrl)).toEqual({
+      target: 'app/src/styles/globals.css',
+      resolution: 'asset',
+    });
+  });
+
+  it('prefers a file under baseUrl over a declared package of the same name', () => {
+    expect(resolveSpecifier('lodash', page, withBaseUrl)).toEqual({
+      target: 'app/src/lodash/index.ts',
+      resolution: 'internal',
+    });
+  });
+
+  it('stays external for a declared package with nothing under baseUrl', () => {
+    expect(resolveSpecifier('react', page, withBaseUrl)).toEqual({
+      target: null,
+      resolution: 'external',
+    });
+  });
+
+  it('leaves a missing non-code file of a declared package external', () => {
+    expect(resolveSpecifier('swiper/swiper.css', page, withBaseUrl)).toEqual({
+      target: null,
+      resolution: 'external',
+    });
+  });
+
+  it('is unresolved when nothing under baseUrl matches and no package declares it', () => {
+    expect(resolveSpecifier('utils/missing', page, withBaseUrl)).toEqual({
+      target: null,
+      resolution: 'unresolved',
+    });
+  });
+
+  it('is unresolved for a directory under baseUrl without an index', () => {
+    expect(resolveSpecifier('empty', page, withBaseUrl)).toEqual({
+      target: null,
+      resolution: 'unresolved',
+    });
+  });
+
+  it('resolves paths substitutions against baseUrl', () => {
+    expect(resolveSpecifier('~/date', page, withBaseUrl)).toEqual({
+      target: 'app/src/date.ts',
+      resolution: 'internal',
+    });
+  });
+
+  it('does not fall back to baseUrl once a paths pattern matched', () => {
+    expect(resolveSpecifier('shared/date', page, withBaseUrl)).toEqual({
+      target: null,
+      resolution: 'unresolved',
+    });
+  });
+
+  it('does not read a bare specifier as a path without baseUrl', () => {
+    expect(resolveSpecifier('utils/format', 'legacy/main.ts', withBaseUrl)).toEqual({
+      target: null,
+      resolution: 'unresolved',
+    });
+  });
+});
+
 describe('generated directories', () => {
   it('is generated when a paths match points into a generated directory with no file', () => {
     expect(resolveSpecifier('@/styled-system/css', from, project)).toEqual({
@@ -305,7 +409,7 @@ describe('stripJsonComments', () => {
   });
 });
 
-describe('readTsconfigPaths', () => {
+describe('readTsconfig', () => {
   it('reads paths from a tsconfig with a comment after an entry', () => {
     const text = `{
   "compilerOptions": {
@@ -315,14 +419,35 @@ describe('readTsconfigPaths', () => {
     },
   },
 }`;
-    expect(readTsconfigPaths(text)).toEqual({
-      '@/*': ['./src/*'],
-      '@public/*': ['./public/*'],
+    expect(readTsconfig(text, 'apps/main')).toEqual({
+      dir: 'apps/main',
+      paths: { '@/*': ['./src/*'], '@public/*': ['./public/*'] },
+      baseUrl: null,
     });
   });
 
-  it('returns no paths when compilerOptions has none', () => {
-    expect(readTsconfigPaths(`{ "compilerOptions": { "strict": true } }`)).toEqual({});
+  it('returns no paths and no baseUrl when compilerOptions has none', () => {
+    expect(readTsconfig(`{ "compilerOptions": { "strict": true } }`, '')).toEqual({
+      dir: '',
+      paths: {},
+      baseUrl: null,
+    });
+  });
+
+  it.each([
+    ['.', '', ''],
+    ['.', 'apps/main', 'apps/main'],
+    ['./src/', 'apps/main', 'apps/main/src'],
+    ['src', '', 'src'],
+    ['..', 'apps/main', 'apps'],
+  ])('makes baseUrl %j of the tsconfig in %j root-relative', (baseUrl, dir, expected) => {
+    const text = JSON.stringify({ compilerOptions: { baseUrl } });
+    expect(readTsconfig(text, dir).baseUrl).toBe(expected);
+  });
+
+  it('ignores an absolute baseUrl', () => {
+    const text = JSON.stringify({ compilerOptions: { baseUrl: '/srv/app' } });
+    expect(readTsconfig(text, '').baseUrl).toBeNull();
   });
 });
 

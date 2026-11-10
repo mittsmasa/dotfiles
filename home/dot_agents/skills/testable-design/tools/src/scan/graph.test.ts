@@ -55,6 +55,25 @@ function targetsOf(files: Record<string, FileFacts>, file: string): (string | nu
 }
 
 describe('buildIr', () => {
+  it('resolves a mocked specifier against baseUrl like an import', () => {
+    const { facts: map, project } = projectOf({
+      'utils/api/index.ts': facts({ imports: [reexports('./client', '*')] }),
+      'utils/api/client.ts': facts({ exports: [fn('get')] }),
+      'features/list.test.ts': facts({
+        kind: 'test',
+        imports: [imports('utils/api', [], { via: 'mock' })],
+      }),
+    });
+    project.tsconfigs = [{ dir: '', paths: {}, baseUrl: '' }];
+    const record = buildIr(map, project).files.find(
+      (entry) => entry.file === 'features/list.test.ts',
+    );
+    expect(record!.imports).toMatchObject([
+      { via: 'mock', resolution: 'internal', module: 'utils/api/index.ts' },
+    ]);
+    expect(record!.imports[0].target).not.toBeNull();
+  });
+
   it('points a named import through `export *` at the file that defines the name', () => {
     const files = {
       'hooks/index.ts': facts({ imports: [reexports('./use-a', '*'), reexports('./use-b', '*')] }),
