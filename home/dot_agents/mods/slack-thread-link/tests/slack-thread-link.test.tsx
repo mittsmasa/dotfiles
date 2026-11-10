@@ -9,6 +9,8 @@ const SERVER = 'a329a196-37db-4b84-96fa-57e31701b03d'
 const URL = 'https://x.slack.com/archives/C07QD6X30Q2/p1794214480861519?thread_ts=1793849534.425339'
 const OWNER = 'U04DPHUN275'
 const OTHER = 'U03A6KQJH8D'
+const PARENT = '<@U04DPHUN275|mitsuhashi>\nお疲れ様です。\n1点ご相談が  あります。'
+const TITLE = '@mitsuhashi お疲れ様です。 1点ご相談が あります。'
 
 const reply = (ts: string, userId: string, name: string, text: string) =>
   `--- Reply 1 of 1 ---\nFrom: ${name} <${name}@example.com> (${userId})\nTime: 2026-11-09 17:54:29 JST\nMessage TS: ${ts}\n${text}\n`
@@ -18,7 +20,7 @@ const textResult = (text: string) => ({ content: [{ type: 'text', text }], isErr
 const thread = (replies: readonly string[]) =>
   textResult(
     JSON.stringify({
-      messages: `=== THREAD PARENT MESSAGE ===\nFrom: a (${OTHER})\nMessage TS: 1793849534.425339\n親\n\n=== THREAD REPLIES (${replies.length} total) ===\n\n${replies.join('\n')}`,
+      messages: `=== THREAD PARENT MESSAGE ===\nFrom: a (${OTHER})\nMessage TS: 1793849534.425339\n${PARENT}\nReactions: eyes (1)\n\n=== THREAD REPLIES (${replies.length} total) ===\n\n${replies.join('\n')}`,
     }),
   )
 
