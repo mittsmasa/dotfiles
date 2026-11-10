@@ -18,6 +18,9 @@ function reports(facts: Partial<FileFacts>): { message: string }[] {
     importsReact: false,
     hookCalls: 0,
     plays: 0,
+    directives: [],
+    envReads: [],
+    matcherLiterals: [],
     ...facts,
   };
   return [{ message: JSON.stringify(complete) }];
@@ -92,11 +95,72 @@ ruleTester.run('facts', rule, {
       errors: reports({
         kind: 'test',
         imports: [
-          { source: '@/db/queries', names: [], typeOnly: false, via: 'mock' },
-          { source: './client', names: [], typeOnly: false, via: 'mock' },
-          { source: './auth', names: [], typeOnly: false, via: 'mock' },
+          { source: '@/db/queries', names: [], typeOnly: false, via: 'mock', factory: false, partial: false },
+          { source: './client', names: [], typeOnly: false, via: 'mock', factory: true, partial: false },
+          { source: './auth', names: [], typeOnly: false, via: 'mock', factory: false, partial: false },
         ],
       }),
+    },
+    {
+      name: 'a mock factory that calls its first parameter or vi.importActual keeps the real module',
+      filename: 'src/a.test.ts',
+      code: `
+        vi.mock('./a', async (original) => ({ ...(await original()), f: vi.fn() }));
+        vi.mock('./b', async () => {
+          const actual = await vi.importActual('./b');
+          return { ...actual, g: vi.fn() };
+        });
+        vi.mock('./c', (original) => ({ h: vi.fn() }));
+      `,
+      errors: reports({
+        kind: 'test',
+        imports: [
+          { source: './a', names: [], typeOnly: false, via: 'mock', factory: true, partial: true },
+          { source: './b', names: [], typeOnly: false, via: 'mock', factory: true, partial: true },
+          { source: './c', names: [], typeOnly: false, via: 'mock', factory: true, partial: false },
+        ],
+      }),
+    },
+    {
+      name: 'the directive prologue is recorded; a later string statement is not',
+      filename: 'src/actions.ts',
+      code: `'use server'; import { db } from './db'; 'use client';`,
+      errors: reports({
+        directives: ['use server'],
+        imports: [{ source: './db', names: ['db'], typeOnly: false, via: 'import' }],
+      }),
+    },
+    {
+      name: 'environment variables read by member access and destructuring are recorded once, writes are not',
+      filename: 'src/config.ts',
+      code: `
+        const url = process.env.API_URL;
+        const key = process.env['API_KEY'] ?? process.env.API_URL;
+        const { DB_HOST, DB_PORT: port } = process.env;
+        process.env.WRITTEN = '1';
+        const dynamic = process.env[name];
+      `,
+      errors: reports({ envReads: ['API_KEY', 'API_URL', 'DB_HOST', 'DB_PORT'] }),
+    },
+    {
+      name: 'long string literals in matcher arguments of a test are recorded, also inside asymmetric matchers',
+      filename: 'src/a.test.ts',
+      code: `
+        expect(format('the subject is not counted')).toBe('label: Save button');
+        expect(spy).not.toHaveBeenCalledWith(expect.stringContaining(\`path (outermost first)\`));
+        expect(x).toEqual({ id: 'short' });
+        const fixture = 'a long fixture string outside any matcher';
+      `,
+      errors: reports({
+        kind: 'test',
+        matcherLiterals: ['label: Save button', 'path (outermost first)'],
+      }),
+    },
+    {
+      name: 'matcher literals are not recorded outside test files',
+      filename: 'src/a.ts',
+      code: `expect(x).toBe('label: Save button');`,
+      errors: reports({}),
     },
     {
       name: 'exported declarations are classified as function, type or value',
