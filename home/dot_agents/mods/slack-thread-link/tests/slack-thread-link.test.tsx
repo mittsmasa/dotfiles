@@ -209,7 +209,7 @@ test('入力したメッセージにパーマリンクがあれば紐付け、�
 
   // 紐付いていなければ、貼ったスレッドに紐付く。返信の URL なら親スレッドに。
   await type(`このスレッド見て ${OTHER_URL} よろしく`)
-  expect((await run('')).text).toBe(`紐付け中: ${OTHER_URL}`)
+  expect((await run('')).text).toBe(`紐付け中: ${OTHER_URL}\n冒頭: ${TITLE}`)
   expect(world.toasts).toContain('このメッセージの Slack スレッドに紐付けました。')
 
   // 紐付け中は、別の URL を貼っても切り替えない。
