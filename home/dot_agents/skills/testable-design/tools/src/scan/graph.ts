@@ -64,8 +64,11 @@ function resolveImport(
   project: Project,
 ): ResolvedImport[] {
   const { target, resolution } = resolveSpecifier(record.source, importer, project);
-  if (resolution !== 'internal' || target === null || record.names.length === 0) {
+  if (resolution !== 'internal' || target === null) {
     return [{ ...record, target, resolution }];
+  }
+  if (record.names.length === 0) {
+    return [{ ...record, target, module: target, resolution }];
   }
   return record.names.map((name) => ({
     ...record,
@@ -74,6 +77,7 @@ function resolveImport(
     target: isTraceable(record, name)
       ? (findDefinition(target, name, facts, project, new Set()) ?? target)
       : target,
+    module: target,
   }));
 }
 
@@ -109,8 +113,19 @@ export function buildIr(
 export interface Graph {
   /** Files that use `file` directly, not counting type-only imports and mocks. */
   importersOf(file: string): string[];
-  /** Every file reachable from `starts` through imports, including the starts. */
-  reachableFrom(starts: Iterable<string>): Set<string>;
+  /**
+   * Every file reachable from `starts` through imports, including the starts.
+   * With `mocked`, an import whose `module` or `target` is in it is not
+   * followed: the real module behind a mock does not run.
+   */
+  reachableFrom(starts: Iterable<string>, mocked?: ReadonlySet<string>): Set<string>;
+  /**
+   * Like `reachableFrom` without mocks, but an import also reaches its
+   * `module` (a barrel), so that a mocked barrel can be found on the way.
+   */
+  modulesReachableFrom(starts: Iterable<string>): Set<string>;
+  /** `file` and the files it re-exports, transitively. */
+  reexportClosure(file: string): Set<string>;
 }
 
 /** A use of the target at run time: not a type-only import and not a mock. */
@@ -132,12 +147,19 @@ function isUse(record: ResolvedImport): record is ResolvedImport & { target: str
  */
 export function buildGraph(ir: Ir): Graph {
   const edges = new Map<string, Set<string>>();
+  const moduleEdges = new Map<string, Set<string>>();
+  const uses = new Map<string, { target: string; module: string }[]>();
   const reexports = new Map<string, Set<string>>();
   for (const { file, imports } of ir.files) {
     for (const record of imports) {
       if (!isUse(record)) continue;
+      const module = record.module ?? record.target;
       if (!edges.has(file)) edges.set(file, new Set());
       edges.get(file)!.add(record.target);
+      if (!moduleEdges.has(file)) moduleEdges.set(file, new Set());
+      moduleEdges.get(file)!.add(record.target).add(module);
+      if (!uses.has(file)) uses.set(file, []);
+      uses.get(file)!.push({ target: record.target, module });
       if (record.via === 'reexport') {
         if (!reexports.has(file)) reexports.set(file, new Set());
         reexports.get(file)!.add(record.target);
@@ -170,8 +192,29 @@ export function buildGraph(ir: Ir): Graph {
     }
   }
 
+  function reachableAvoiding(
+    starts: Iterable<string>,
+    mocked: ReadonlySet<string>,
+  ): Set<string> {
+    const seen = new Set<string>();
+    const queue = [...starts];
+    while (queue.length > 0) {
+      const file = queue.pop()!;
+      if (seen.has(file)) continue;
+      seen.add(file);
+      for (const { target, module } of uses.get(file) ?? []) {
+        if (mocked.has(target) || mocked.has(module)) continue;
+        queue.push(target);
+      }
+    }
+    return seen;
+  }
+
   return {
     importersOf: (file) => [...(importers.get(file) ?? [])].sort(),
-    reachableFrom: (starts) => closure(starts, edges),
+    reachableFrom: (starts, mocked) =>
+      mocked && mocked.size > 0 ? reachableAvoiding(starts, mocked) : closure(starts, edges),
+    modulesReachableFrom: (starts) => closure(starts, moduleEdges),
+    reexportClosure: (file) => closure([file], reexports),
   };
 }
