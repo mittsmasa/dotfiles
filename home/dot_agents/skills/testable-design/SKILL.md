@@ -14,6 +14,7 @@ description: "アプリケーションコードとテストコードを書く・
 | アプリケーションコードを書く・直す・レビューする | この SKILL.md、境界に迷ったら `references/separation-of-concerns.md` |
 | テストを書く・直す・レビューする | この SKILL.md と `references/test-quality.md` |
 | React フロントエンドのテスト（レイヤー選択、Storybook / VRT / MSW、実装の層分け） | 上に加えて `references/frontend-testing.md` |
+| JS / TS のプロジェクトで、ツールで先に候補を洗い出す | `references/mechanical-checks.md` |
 | 観点の出どころを確かめる | `references/sources.md` |
 
 ## プロジェクトの規約との関係
