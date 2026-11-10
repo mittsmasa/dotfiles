@@ -15,6 +15,11 @@ export function parsePermalink(url: string): ThreadRef | undefined {
   return { channel, threadTs: threadTs ?? `${secs}.${micros}` }
 }
 
+/** 文章の中から、最初に出てくる Slack のメッセージのパーマリンクを取り出す。 */
+export function findPermalink(text: string): string | undefined {
+  return text.match(/https:\/\/[\w.-]+\.slack\.com\/archives\/[A-Z0-9]+\/p\d{16}(?:\?[^\s<>()]*)?/)?.[0]
+}
+
 /** Slack の ts は倍精度に収まらないので、文字列のまま比べる。 */
 export function tsAfter(a: string, b: string): boolean {
   const [ai = '', af = ''] = a.split('.')
