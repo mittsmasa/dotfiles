@@ -12,6 +12,9 @@ function facts(partial: Partial<FileFacts> = {}): FileFacts {
     importsReact: false,
     hookCalls: 0,
     plays: 0,
+    directives: [],
+    envReads: [],
+    matcherLiterals: [],
     ...partial,
   };
 }
@@ -90,7 +93,7 @@ describe('buildIr', () => {
     expect(targetsOf(files, 'page.ts')).toEqual(['components/button.tsx']);
   });
 
-  it('splits several names into one record each, with their own targets', () => {
+  it('splits several names into one record each, with their own targets and the barrel as module', () => {
     const { facts: map, project } = projectOf({
       'hooks/index.ts': facts({ imports: [reexports('./use-a', '*'), reexports('./use-b', '*')] }),
       'hooks/use-a.ts': facts({ exports: [fn('useA')] }),
@@ -99,8 +102,8 @@ describe('buildIr', () => {
     });
     const page = buildIr(map, project).files.find((entry) => entry.file === 'page.ts');
     expect(page!.imports).toEqual([
-      { source: './hooks', names: ['useA'], typeOnly: false, via: 'import', target: 'hooks/use-a.ts', resolution: 'internal' },
-      { source: './hooks', names: ['useB'], typeOnly: false, via: 'import', target: 'hooks/use-b.ts', resolution: 'internal' },
+      { source: './hooks', names: ['useA'], typeOnly: false, via: 'import', target: 'hooks/use-a.ts', module: 'hooks/index.ts', resolution: 'internal' },
+      { source: './hooks', names: ['useB'], typeOnly: false, via: 'import', target: 'hooks/use-b.ts', module: 'hooks/index.ts', resolution: 'internal' },
     ]);
   });
 
