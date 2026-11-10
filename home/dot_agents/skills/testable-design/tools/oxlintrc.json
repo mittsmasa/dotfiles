@@ -1,0 +1,29 @@
+{
+  "plugins": [],
+  "jsPlugins": ["./src/index.ts"],
+  "categories": {
+    "correctness": "off",
+    "suspicious": "off",
+    "pedantic": "off",
+    "perf": "off",
+    "style": "off",
+    "restriction": "off",
+    "nursery": "off"
+  },
+  "ignorePatterns": [
+    "**/node_modules/**",
+    "**/styled-system/**",
+    "**/.next/**",
+    "**/dist/**",
+    "**/storybook-static/**",
+    "**/__generated__/**",
+    "**/generated/**"
+  ],
+  "rules": {
+    "testable/max-module-mocks": "warn",
+    "testable/no-internal-module-mock": "warn",
+    "testable/max-effects-in-component": ["warn", { "max": 3 }],
+    "testable/no-fetch-in-component": "warn",
+    "testable/no-ambient-nondeterminism": "warn"
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "plugins": [],
+  "jsPlugins": ["./src/index.ts"],
+  "categories": {
+    "correctness": "off",
+    "suspicious": "off",
+    "pedantic": "off",
+    "perf": "off",
+    "style": "off",
+    "restriction": "off",
+    "nursery": "off"
+  },
+  "ignorePatterns": [
+    "**/node_modules/**",
+    "**/styled-system/**",
+    "**/.next/**",
+    "**/dist/**",
+    "**/storybook-static/**",
+    "**/__generated__/**",
+    "**/generated/**"
+  ],
+  "rules": {
+    "testable/facts": "warn"
+  }
+}

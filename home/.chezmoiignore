@@ -25,3 +25,6 @@
 
 # workflow の md 成果物 - 実データなので同期しない
 .claude/workflow
+
+# skill 同梱ツールの依存 - テストと型チェック用。pnpm install で再現できる
+.agents/skills/testable-design/tools/node_modules
