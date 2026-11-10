@@ -4,6 +4,8 @@ export type SlackLink = {
   threadTs: string
   /** 紐付けた Slack アカウントの所有者。この人の発言でターンを始める。古い紐付けにはない。 */
   ownerId?: string
+  /** 親メッセージの本文を 1 行にしたもの。帯に冒頭を出す。古い紐付けにはない。 */
+  title?: string
   /** セッションに渡し終えた、いちばん新しい返信の ts。 */
   lastTs: string
   /** このセッション自身が投稿した返信の ts。ポーリングで拾わない。 */
