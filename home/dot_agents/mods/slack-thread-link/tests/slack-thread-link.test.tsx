@@ -162,6 +162,10 @@ test('紐付け中は入力欄の上の帯にスレッドへのリンクが出�
     const ui = await mountOn(surface)
     const thread = await ui.find({ type: 'Link' })
     expect(thread?.props?.href).toBe(URL)
+    // 親メッセージの冒頭を 1 行で、はみ出す分は末尾を省略して出す。
+    const title = await ui.find({ type: 'Text', text: /お疲れ様です/ })
+    expect(title?.text).toBe(TITLE)
+    expect(title?.props?.wrap).toBe('truncate-end')
     await ui.unmount()
   }
 
