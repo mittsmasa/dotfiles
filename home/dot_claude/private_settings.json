@@ -354,8 +354,7 @@
   },
   "enabledPlugins": {
     "document-skills@anthropic-agent-skills": false,
-    "cowork-plugin-management@inline": false,
-    "pstack@cursor-plugins": true
+    "cowork-plugin-management@inline": false
   },
   "extraKnownMarketplaces": {
     "cursor-plugins": {
