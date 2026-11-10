@@ -16,14 +16,17 @@ import {
   type TsconfigInfo,
 } from '../src/scan/resolve.ts';
 
-const USAGE = `Usage: testable-scan <root> [paths...] --out <dir> [--exclude <glob>]...
+const USAGE = `Usage: testable-scan <root> [paths...] --out <dir> [--exclude <glob>]... [--env-ignore <name>]...
 
   <root>            project directory; tsconfig.json and package.json are read from here
   [paths...]        what to scan, relative to <root> (default: all of <root>)
   --out <dir>       where ir.json and candidates.json are written
   --exclude <glob>  leave matching files out of the candidates; repeatable.
                     The glob is matched against paths relative to <root>.
-                    Excluded files stay in the import graph.`;
+                    Excluded files stay in the import graph.
+  --env-ignore <name>
+                    leave an environment variable out of C3 touches and C6;
+                    repeatable. NODE_ENV is always left out.`;
 const FACTS_CODE = 'testable(facts)';
 const SKIPPED_DIRECTORIES = new Set([
   'node_modules',
@@ -128,6 +131,7 @@ function main(): void {
     options: {
       out: { type: 'string' },
       exclude: { type: 'string', multiple: true },
+      'env-ignore': { type: 'string', multiple: true },
     },
   });
   if (positionals.length === 0 || !values.out) {
@@ -149,7 +153,7 @@ function main(): void {
   const ir = buildIr(facts, project, parseFailures);
   const globs = values.exclude ?? [];
   const { candidates, excluded } = excludeCandidates(
-    runChecks(ir, buildGraph(ir)),
+    runChecks(ir, buildGraph(ir), { envIgnore: values['env-ignore'] ?? [] }),
     globs,
   );
 
@@ -166,11 +170,11 @@ function main(): void {
     `imports: internal ${imports.internal}, generated ${imports.generated}, external ${imports.external}, asset ${imports.asset}, unresolved ${imports.unresolved}`,
   );
   console.log(
-    `candidates: c1 ${candidates.c1.length}, c2 ${candidates.c2.length}, c3 ${candidates.c3.length}, c4 ${candidates.c4.length}`,
+    `candidates: c1 ${candidates.c1.length}, c2 ${candidates.c2.length}, c3 ${candidates.c3.length}, c4 ${candidates.c4.length}, c5 ${candidates.c5.length}, c6 ${candidates.c6.length}`,
   );
   if (globs.length > 0) {
     console.log(
-      `excluded: c1 ${excluded.c1}, c2 ${excluded.c2}, c3 ${excluded.c3}, c4 ${excluded.c4}`,
+      `excluded: c1 ${excluded.c1}, c2 ${excluded.c2}, c3 ${excluded.c3}, c4 ${excluded.c4}, c5 ${excluded.c5}, c6 ${excluded.c6}`,
     );
   }
 }
