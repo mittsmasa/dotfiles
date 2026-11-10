@@ -119,6 +119,10 @@ export const register: Register = on => {
       description: 'Slack スレッドを紐付ける（<URL> / off / now / 引数なしで状態表示）',
     })
     showStatus($, await read($, link))
+    // 読み込み直後にも一度確かめ、冒頭などの表示をすぐ埋める。
+    $.clock.after(0, () => {
+      void poll($)
+    })
     $.clock.every(POLL_MS, () => {
       void poll($)
     })
@@ -147,7 +151,8 @@ export const register: Register = on => {
     try {
       if (arg === '') {
         const l = await read($, link)
-        return { text: l ? `紐付け中: ${l.url}` : '紐付けている Slack スレッドはありません。' }
+        if (!l) return { text: '紐付けている Slack スレッドはありません。' }
+        return { text: `紐付け中: ${l.url}\n冒頭: ${l.title ?? '（まだ取得していません）'}` }
       }
       if (arg === 'off') {
         await update($, link, () => null)
