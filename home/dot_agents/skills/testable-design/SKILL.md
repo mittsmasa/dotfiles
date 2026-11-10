@@ -33,16 +33,20 @@ JS / TS のプロジェクトでこの skill を呼び出したら、コード�
 out="$(git rev-parse --show-toplevel)/.workflow/testable-scan"
 args="<root> <paths...>"
 # 実行済みか: 結果があり、対象が同じで、それより新しいソースが無い
-if [ -f "$out/oxlint.json" ] && [ -f "$out/candidates.json" ] && [ "$(cat "$out/args" 2>/dev/null)" = "$args" ] \
+if ! command -v oxlint >/dev/null; then
+  echo "testable-scan: oxlint が無いので省く"
+elif [ -f "$out/oxlint.json" ] && [ -f "$out/candidates.json" ] && [ "$(cat "$out/args" 2>/dev/null)" = "$args" ] \
   && [ -z "$(cd <root> && find <paths...> -newer "$out/candidates.json" \( -name '*.ts' -o -name '*.tsx' -o -name '*.js' -o -name '*.jsx' \) -not -path '*/node_modules/*' -print -quit)" ]; then
   echo "testable-scan: 実行済み ($out)"
 else
-  mkdir -p "$out"
-  (cd <root> && oxlint -c ~/.agents/skills/testable-design/tools/oxlintrc.json -f json <paths...> > "$out/oxlint.json")
-  node ~/.agents/skills/testable-design/tools/bin/testable-scan.ts <root> <paths...> --out "$out" [--exclude ...]
-  echo "$args" > "$out/args"
+  rm -f "$out/args" && mkdir -p "$out" \
+    && (cd <root> && oxlint -c ~/.agents/skills/testable-design/tools/oxlintrc.json -f json <paths...> > "$out/oxlint.json") \
+    && node ~/.agents/skills/testable-design/tools/bin/testable-scan.ts <root> <paths...> --out "$out" [--exclude ...] \
+    && echo "$args" > "$out/args"
 fi
 ```
+
+`args` は二つとも成功したときだけ書く。途中で落ちたら `args` が残らないので、次の呼び出しで走らせ直す。
 
 前提（`oxlint` が `PATH` にある、Node が 22.20.0 / 24.8.0 以降）を満たさないときは走らせず、省いたことを報告に一文で書いて先へ進む。JS / TS でないプロジェクト、コードに触れない相談（観点の出どころを聞かれただけ、など）でも走らせない。
 
