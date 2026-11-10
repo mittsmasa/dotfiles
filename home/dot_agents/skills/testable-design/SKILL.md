@@ -17,6 +17,35 @@ description: "アプリケーションコードとテストコードを書く・
 | JS / TS のプロジェクトで、ツールで先に候補を洗い出す | `references/mechanical-checks.md` |
 | 観点の出どころを確かめる | `references/sources.md` |
 
+## 呼び出したら最初に: 機械チェックを走らせる
+
+JS / TS のプロジェクトでこの skill を呼び出したら、コードやテストを読む前に Oxlint のルールと `testable-scan` を走らせる（中身は末尾の「機械チェック（JS / TS）」）。実行済みなら走らせず、前回の結果を読む。
+
+1. **対象を決める**: `<root>` は対象を含む最も近い workspace のルート、`[paths...]` は今回の変更や依頼が触れるディレクトリ。決め方は `references/mechanical-checks.md` の L2
+2. **実行済みか確かめる**: 次のどちらかなら実行済み
+   - この会話で、同じ `<root>` と `[paths...]` に対して既に走らせ、その後に対象のファイルを変えていない
+   - 出力先に `oxlint.json` と `candidates.json` があり、`args` の中身が今回の `<root>` と `[paths...]` と一致し、それより新しいソースが対象に無い
+3. **未実行なら走らせる**: 二つを続けて実行し、出力先に残す
+
+出力先は、git リポジトリ内なら `$(git rev-parse --show-toplevel)/.workflow/testable-scan/`（`.workflow` はグローバル gitignore 済み）、外なら `$TMPDIR/testable-scan/`。
+
+```bash
+out="$(git rev-parse --show-toplevel)/.workflow/testable-scan"
+args="<root> <paths...>"
+# 実行済みか: 結果があり、対象が同じで、それより新しいソースが無い
+if [ -f "$out/oxlint.json" ] && [ -f "$out/candidates.json" ] && [ "$(cat "$out/args" 2>/dev/null)" = "$args" ] \
+  && [ -z "$(cd <root> && find <paths...> -newer "$out/candidates.json" \( -name '*.ts' -o -name '*.tsx' -o -name '*.js' -o -name '*.jsx' \) -not -path '*/node_modules/*' -print -quit)" ]; then
+  echo "testable-scan: 実行済み ($out)"
+else
+  mkdir -p "$out"
+  (cd <root> && oxlint -c ~/.agents/skills/testable-design/tools/oxlintrc.json -f json <paths...> > "$out/oxlint.json")
+  node ~/.agents/skills/testable-design/tools/bin/testable-scan.ts <root> <paths...> --out "$out" [--exclude ...]
+  echo "$args" > "$out/args"
+fi
+```
+
+前提（`oxlint` が `PATH` にある、Node が 22.20.0 / 24.8.0 以降）を満たさないときは走らせず、省いたことを報告に一文で書いて先へ進む。JS / TS でないプロジェクト、コードに触れない相談（観点の出どころを聞かれただけ、など）でも走らせない。
+
 ## プロジェクトの規約との関係
 
 この skill は汎用の既定値。リポジトリにテストの規約（skill、AGENTS.md / CLAUDE.md、レビュー基準）があれば、次はそちらを優先する。
