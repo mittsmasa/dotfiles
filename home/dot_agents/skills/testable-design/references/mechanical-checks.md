@@ -120,7 +120,7 @@ jq -r '.files[] | .file as $f | .imports[] | select(.via == "mock" and .resoluti
 - 解決するのは、相対パス、最も近い `tsconfig.json` の `paths`、workspace パッケージの `exports`。`package.json` の `imports`、tsconfig の `extends` と `baseUrl` は扱わない
 - Oxlint の JS plugin が読めるファイルだけが対象。`.mdx` や `.vue` からの import は見えない。MDX からだけ使われるコンポーネントは、C4 に出る
 - 生成物のディレクトリ名（`styled-system`、`__generated__`、`generated` など）は、`tools/facts.oxlintrc.json` の `ignorePatterns` で決めている。プロジェクトの生成物が別の名前なら、そのファイルも調べる対象に入る
-- Oxlint の JS plugin は alpha で、ツールは oxlint 1.89.0 で確かめている
+- Oxlint の JS plugin は alpha で、ツールは oxlint 1.89.0 と 1.90.0 で確かめている。oxlint の版が上がって結果がおかしいときは、`tools/` で `pnpm test` を流して確かめる
 
 ## ツールを直すとき
 
