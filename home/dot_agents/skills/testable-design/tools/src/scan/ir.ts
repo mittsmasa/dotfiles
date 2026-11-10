@@ -29,6 +29,18 @@ export interface RawImport {
   via: ImportVia;
   /** Only for `reexport` of a single name: the name it is exported under. */
   exportedAs?: string;
+  /**
+   * Only for `mock`: true when a factory is passed (`vi.mock('x', () => ...)`).
+   * Without one, Vitest automocks every export, which cuts the real module off
+   * just like a factory does.
+   */
+  factory?: boolean;
+  /**
+   * Only for `mock`: true when the factory takes the real module back, by
+   * calling its first parameter (`importOriginal`) or `vi.importActual`. Only
+   * the overridden exports are replaced, so the real module still runs.
+   */
+  partial?: boolean;
 }
 
 export interface ExportFact {
@@ -49,6 +61,15 @@ export interface FileFacts {
   hookCalls: number;
   /** Number of `play` functions in a story file. */
   plays: number;
+  /** Directive prologue of the file, such as `use client` or `use server`. */
+  directives: string[];
+  /** Names read from `process.env` (`process.env.X`, `process.env['X']`, destructuring), sorted. */
+  envReads: string[];
+  /**
+   * Test files only: string literals of 10 characters or more (after trimming)
+   * inside the arguments of a matcher (`expect(...).toXxx(...)`), sorted.
+   */
+  matcherLiterals: string[];
 }
 
 /**
@@ -70,6 +91,12 @@ export type ImportResolution =
 export interface ResolvedImport extends RawImport {
   /** Root-relative path of the file that defines the name, or null. */
   target: string | null;
+  /**
+   * Only for `internal`: the file the specifier resolves to, before following
+   * re-exports. Differs from `target` when the import goes through a barrel.
+   * A mock replaces this file, so it is what a mock is compared with.
+   */
+  module?: string;
   resolution: ImportResolution;
 }
 
@@ -87,13 +114,48 @@ export interface Ir {
   };
 }
 
+/**
+ * How a C1 candidate is reached.
+ * - `story`: a story reaches it (decided first)
+ * - `test`: a test reaches it without passing a module the test mocks
+ * - `test-mocked`: tests reach it only through a mocked module, so the real
+ *   code never runs. `mockedAt` lists the mocked modules on the way; `self` is
+ *   true when the candidate itself is mocked (also through a mocked barrel
+ *   that re-exports it)
+ * - `none`: neither reaches it
+ */
+export type C1Candidate =
+  | { file: string; reach: 'story' | 'test' | 'none' }
+  | { file: string; reach: 'test-mocked'; mockedAt: string[]; self: boolean };
+
+export interface C4Candidate {
+  file: string;
+  /** A story file next to the component, named after it, that does not render it. */
+  siblingStory?: string;
+  /** Names imported from a `use server` file. Such a component cannot be rendered in a story as is. */
+  serverActions?: string[];
+}
+
 export interface Candidates {
   /** Pure-logic modules that no test file imports directly. */
-  c1: { file: string; reach: 'story' | 'test' | 'none' }[];
+  c1: C1Candidate[];
   /** Components imported directly by a test and by a story that has `play`. */
   c2: { file: string; testFiles: string[]; storyFiles: string[] }[];
-  /** Internal modules that are mocked, with the test files that mock them. */
-  c3: { target: string; testFiles: string[] }[];
+  /**
+   * Internal modules that are mocked, with the test files that mock them.
+   * `touches` lists what the module (and the files a mocked barrel re-exports)
+   * touches directly: I/O builtins such as `fs`, and `process.env.X`.
+   * `partial` lists the test files whose mock keeps the real module.
+   */
+  c3: { target: string; testFiles: string[]; touches: string[]; partial: string[] }[];
   /** Components that no story reaches. */
-  c4: { file: string }[];
+  c4: C4Candidate[];
+  /**
+   * Pairs of test files where `direct` imports a module (`subjects`) that
+   * `indirect` reaches without mocking it, and both pass the same string
+   * literals (2 or more) to matchers. A hint, not a candidate list.
+   */
+  c5: { direct: string; indirect: string; subjects: string[]; literals: string[] }[];
+  /** Groups of 2 or more source files that read the same environment variables. */
+  c6: { env: string[]; files: string[] }[];
 }
