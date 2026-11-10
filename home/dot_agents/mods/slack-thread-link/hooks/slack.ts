@@ -69,6 +69,28 @@ export function parseReplies(text: string): Reply[] {
     })
 }
 
+/** detailed 形式の親メッセージの本文。見つからなければ undefined。 */
+export function parseParentText(text: string): string | undefined {
+  const block = text.split(/^=== THREAD PARENT MESSAGE ===$/m)[1]?.split(/^=== THREAD REPLIES/m)[0]
+  const ts = block?.match(/^Message TS: (\d+\.\d+)$/m)?.[1]
+  if (!block || !ts) return undefined
+
+  return block
+    .slice(block.indexOf(ts) + ts.length)
+    .replace(/^Reactions: .*$/m, '')
+    .trim()
+}
+
+/** Slack の記法（`<@U1|name>` や `<url|label>`）をほどき、改行と連続する空白を詰めて 1 行にする。 */
+export function oneLine(text: string): string {
+  return text
+    .replace(/<@[A-Z0-9]+\|([^>]+)>/g, '@$1')
+    .replace(/<[^|>]+\|([^>]+)>/g, '$1')
+    .replace(/<([^>]+)>/g, '$1')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 /** `slack_read_user_profile`（detailed）の出力から `User ID:` を取り出す。 */
 export function parseUserId(text: string): string | undefined {
   return text.match(/^User ID: (U[A-Z0-9]+)$/m)?.[1]
