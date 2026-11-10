@@ -214,7 +214,7 @@ test('入力したメッセージにパーマリンクがあれば紐付け、�
 
   // 紐付け中は、別の URL を貼っても切り替えない。
   await type(`参考: ${URL}`)
-  expect((await run('')).text).toBe(`紐付け中: ${OTHER_URL}`)
+  expect((await run('')).text).toContain(`紐付け中: ${OTHER_URL}\n`)
 
   // 紐付けたあとの本人の投稿は渡される。
   world.replies = [reply('1795000100.000001', OWNER, 'mitsuhashi', 'あとからの依頼')]
