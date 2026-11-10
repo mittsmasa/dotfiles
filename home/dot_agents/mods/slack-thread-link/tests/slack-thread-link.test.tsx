@@ -24,7 +24,11 @@ const thread = (replies: readonly string[]) =>
 
 /** Slack とエンジンの代わりを立て、紐付けまで済ませる。 */
 async function setUp($: Engine, on: On, initial: string[]) {
-  const world = { replies: initial, submitted: [] as string[], isSubmitFailing: false }
+  const world = { replies: initial, submitted: [] as string[], toasts: [] as string[], isSubmitFailing: false }
+  on('ui.toast', (_, e) => {
+    world.toasts.push(e.text)
+    return { value: undefined }
+  })
   on('command.register', () => ({ value: { command: 'slack-link' } }))
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('mcp.call', (_, e) => {
@@ -191,7 +195,7 @@ test('入力したメッセージにパーマリンクがあれば紐付け、�
   // 紐付いていなければ、貼ったスレッドに紐付く。返信の URL なら親スレッドに。
   await type(`このスレッド見て ${OTHER_URL} よろしく`)
   expect((await run('')).text).toBe(`紐付け中: ${OTHER_URL}`)
-  expect(toasts).toContain('このメッセージの Slack スレッドに紐付けました。')
+  expect(world.toasts).toContain('このメッセージの Slack スレッドに紐付けました。')
 
   // 紐付け中は、別の URL を貼っても切り替えない。
   await type(`参考: ${URL}`)
