@@ -149,7 +149,10 @@ jq -r --arg dir 'src/features/cart' '
 - 見逃しの数は測っていない。候補に出なかったことは、問題が無いことの根拠にならない
 - モックとして見えるのは、テストファイルの中の `vi.mock` / `vi.doMock` だけ。`vitest.config` の `setupFiles` で行うモック、`resolve.alias` でのモジュールの差し替え（Storybook の設定でのものも含む）、`sb.mock`、`vi.spyOn(module, 'fn')` は見えず、その先は `reach: test` のまま出る
 - `vi.doMock` はホイストされず、呼んだ後の動的 import にだけ効く。`vi.mock` と同じに扱うので、テストの途中まで本物が走る場合を見落とす
-- 解決するのは、相対パス、最も近い `tsconfig.json` の `paths`、workspace パッケージの `exports`。`package.json` の `imports`、tsconfig の `extends` と `baseUrl` は扱わない
+- 解決するのは、相対パス、最も近い `tsconfig.json` の `paths` と `baseUrl`、workspace パッケージの `exports`。試す順は TypeScript と同じで、`paths`、`baseUrl` 相対、パッケージの順。`paths` の置換先は、`baseUrl` があれば `baseUrl` から、無ければ tsconfig のディレクトリから引く
+- `baseUrl` 相対（`utils/format` を `<baseUrl>/utils/format` と読む）は、ファイルが実在するときだけ採用する。実在すれば、`package.json` に載っている同名のパッケージより優先する。実在しなければ、パッケージの判定に進む
+- `package.json` の `imports` は扱わない。tsconfig の `extends` は辿らないので、継承元にだけ書かれた `paths` と `baseUrl` は効かない。絶対パスの `baseUrl` は無視する。`tsconfig.json` 以外の名前（`tsconfig.app.json` など）は読まない
+- `paths` に複数のパターンが一致するとき、TypeScript は接頭辞の最も長いパターンを選ぶが、このツールは書かれた順で最初のパターンを選ぶ。`paths` のパターンに一致して置換先にファイルが無いと、`baseUrl` もパッケージも試さず `unresolved` にする
 - Oxlint の JS plugin が読めるファイルだけが対象。`.mdx` や `.vue` からの import は見えない。MDX からだけ使われるコンポーネントは、C4 に出る
 - 生成物のディレクトリ名（`styled-system`、`__generated__`、`generated` など）は、`tools/facts.oxlintrc.json` の `ignorePatterns` で決めている。プロジェクトの生成物が別の名前なら、そのファイルも調べる対象に入る
 - Oxlint の JS plugin は alpha で、ツールは oxlint 1.89.0 と 1.90.0 で確かめている。`tools/` のテストは `package.json` に固定した oxlint で走るので、`PATH` の oxlint の版が上がったことによる不具合は、テストでは見つからない
