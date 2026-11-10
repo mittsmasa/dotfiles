@@ -124,7 +124,7 @@ fi
 
 ## 機械チェック（JS / TS）
 
-構文から拾える症状と候補は、読む前にツールで洗い出せる。ツールはこの skill のディレクトリの `tools/` にある（実体は `~/.agents/skills/testable-design/tools/`。`~/.claude/skills/` からの symlink でも同じ）。使い方とコマンド例は `references/mechanical-checks.md` にあり、コマンド例は実体の絶対パスで書いてある。
+構文から拾える症状と候補は、読む前にツールで洗い出す。走らせるタイミングと出力先は「呼び出したら最初に: 機械チェックを走らせる」。ツールはこの skill のディレクトリの `tools/` にある（実体は `~/.agents/skills/testable-design/tools/`。`~/.claude/skills/` からの symlink でも同じ）。使い方とコマンド例は `references/mechanical-checks.md` にあり、コマンド例は実体の絶対パスで書いてある。
 
 - Oxlint のルール: モックの数と対象、コンポーネントの中の fetch・現在時刻・乱数・ストレージ、`useEffect` の数を報告する
 - `testable-scan`: テストから直接 import されていないロジック（テストからモック越しにしか届かないものを区別する）、テストと `play` の両方が import するコンポーネント、モックされているモジュール、story から届かないコンポーネント、層をまたいで同じ期待値を持つテストの組、同じ環境変数を読むファイルのグループを、候補として絞る
