@@ -181,3 +181,24 @@ test('紐付けを外したら、本人の新着があっても渡さない', as
   expect(world.submitted.length).toBe(0)
   expect((await run('')).text).toBe('紐付けている Slack スレッドはありません。')
 })
+
+test('入力したメッセージにパーマリンクがあれば紐付け、その後の本人の投稿を渡す', async ($, on) => {
+  const { world, clock, run } = await setUp($, on, [])
+  await run('off')
+  const OTHER_URL = 'https://x.slack.com/archives/C99/p1795000000000001?thread_ts=1794999999.000001&cid=C99'
+  const type = (text: string) => $.prompt.submit({ text, origin: { kind: 'composer' }, wait: false })
+
+  // 紐付いていなければ、貼ったスレッドに紐付く。返信の URL なら親スレッドに。
+  await type(`このスレッド見て ${OTHER_URL} よろしく`)
+  expect((await run('')).text).toBe(`紐付け中: ${OTHER_URL}`)
+  expect(toasts).toContain('このメッセージの Slack スレッドに紐付けました。')
+
+  // 紐付け中は、別の URL を貼っても切り替えない。
+  await type(`参考: ${URL}`)
+  expect((await run('')).text).toBe(`紐付け中: ${OTHER_URL}`)
+
+  // 紐付けたあとの本人の投稿は渡される。
+  world.replies = [reply('1795000100.000001', OWNER, 'mitsuhashi', 'あとからの依頼')]
+  await clock.advance(60_000)
+  expect(world.submitted.some(text => text.includes('あとからの依頼'))).toBe(true)
+})
