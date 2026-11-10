@@ -1,0 +1,183 @@
+import { expect, mock, test } from 'claude-code/testing'
+import type { Engine, TestBody } from 'claude-code/testing'
+
+type On = Parameters<TestBody>[1]
+
+import { parsePermalink, parseReplies, parseUserId, tsAfter } from '../hooks/slack'
+
+const SERVER = 'a329a196-37db-4b84-96fa-57e31701b03d'
+const URL = 'https://x.slack.com/archives/C07QD6X30Q2/p1794214480861519?thread_ts=1793849534.425339'
+const OWNER = 'U04DPHUN275'
+const OTHER = 'U03A6KQJH8D'
+
+const reply = (ts: string, userId: string, name: string, text: string) =>
+  `--- Reply 1 of 1 ---\nFrom: ${name} <${name}@example.com> (${userId})\nTime: 2026-11-09 17:54:29 JST\nMessage TS: ${ts}\n${text}\n`
+
+const textResult = (text: string) => ({ content: [{ type: 'text', text }], isError: false })
+
+const thread = (replies: readonly string[]) =>
+  textResult(
+    JSON.stringify({
+      messages: `=== THREAD PARENT MESSAGE ===\nFrom: a (${OTHER})\nMessage TS: 1793849534.425339\n親\n\n=== THREAD REPLIES (${replies.length} total) ===\n\n${replies.join('\n')}`,
+    }),
+  )
+
+/** Slack とエンジンの代わりを立て、紐付けまで済ませる。 */
+async function setUp($: Engine, on: On, initial: string[]) {
+  const world = { replies: initial, submitted: [] as string[], isSubmitFailing: false }
+  on('command.register', () => ({ value: { command: 'slack-link' } }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('mcp.call', (_, e) => {
+    expect(e.server).toBe(SERVER)
+    if (e.tool === 'slack_read_user_profile') {
+      return { value: textResult(JSON.stringify({ result: `User ID: ${OWNER}\nUsername: m\n` })) }
+    }
+    return { value: thread(world.replies) }
+  })
+  on('prompt.submit', (_, e) => {
+    if (world.isSubmitFailing) throw new Error('submit failed')
+    world.submitted.push(e.text)
+    return { text: e.text }
+  })
+  on('tool.call', () => ({ result: {} }))
+  on('ui.status', () => ({ value: undefined }))
+  const clock = mock.clock(on)
+  const run = (args: string) =>
+    $.command.run({
+      command: 'slack-link',
+      args,
+      origin: { kind: 'composer' },
+      presentation: { isFullscreen: false, columns: 80 },
+    })
+  const checkNow = async () => {
+    await run('now')
+    await clock.settle()
+  }
+
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await run(URL)
+
+  return { world, clock, run, checkNow }
+}
+
+test('パーマリンクから親スレッドの channel と ts を取り出す', async () => {
+  expect(parsePermalink(URL)).toEqual({ channel: 'C07QD6X30Q2', threadTs: '1793849534.425339' })
+  expect(parsePermalink('https://x.slack.com/archives/C1/p1793849534425339')).toEqual({
+    channel: 'C1',
+    threadTs: '1793849534.425339',
+  })
+  expect(parsePermalink('https://example.com/')).toBe(undefined)
+})
+
+test('ts は倍精度で潰れる桁まで比べる', async () => {
+  expect(tsAfter('1794214480.861520', '1794214480.861519')).toBe(true)
+  expect(tsAfter('1794214480.861519', '1794214480.861519')).toBe(false)
+  expect(tsAfter('999999999.999999', '1000000000.000000')).toBe(false)
+})
+
+test('返信から投稿者の ID と表示名を分けて取り出す', async () => {
+  expect(parseReplies(reply('1.000001', OWNER, 'mitsuhashi', '本文'))).toEqual([
+    { ts: '1.000001', userId: OWNER, name: 'mitsuhashi', text: '本文' },
+  ])
+  expect(parseUserId(`User ID: ${OWNER}\nUsername: m`)).toBe(OWNER)
+})
+
+test('他の人の返信だけでは渡さず、本人が書いたら溜まった分ごと時系列で渡す', async ($, on) => {
+  const { world, clock } = await setUp($, on, [reply('1794214469.303829', OTHER, '奥村', '既存の返信')])
+
+  world.replies = [...world.replies, reply('1794214500.000001', OTHER, '奥村', '他の人の一件目')]
+  await clock.advance(60_000)
+  expect(world.submitted.length).toBe(0)
+
+  world.replies = [
+    ...world.replies,
+    reply('1794214510.000001', OWNER, 'mitsuhashi', '本人の依頼'),
+    reply('1794214520.000001', OTHER, '塩原', '他の人の二件目'),
+  ]
+  await clock.advance(60_000)
+
+  expect(world.submitted.length).toBe(1)
+  const prompt = world.submitted[0] ?? ''
+  expect(prompt).not.toContain('既存の返信')
+  expect(prompt).toContain('[【本人】mitsuhashi]')
+  expect(prompt).toContain('[奥村]')
+  expect(prompt.indexOf('他の人の一件目')).toBeLessThan(prompt.indexOf('本人の依頼'))
+  expect(prompt.indexOf('本人の依頼')).toBeLessThan(prompt.indexOf('他の人の二件目'))
+
+  // 渡した返信は二度渡さない。
+  await clock.advance(60_000)
+  expect(world.submitted.length).toBe(1)
+})
+
+test('セッション自身の投稿は本人の発言でも拾わない', async ($, on) => {
+  const { world, clock } = await setUp($, on, [])
+
+  world.replies = [reply('1794214480.861519', OWNER, 'mitsuhashi', 'セッションからの投稿')]
+  await $.tool.call({
+    tool: `mcp__${SERVER}__slack_send_message`,
+    channel_id: 'C07QD6X30Q2',
+    thread_ts: '1793849534.425339',
+    message: 'セッションからの投稿',
+  })
+  await clock.advance(60_000)
+
+  expect(world.submitted.length).toBe(0)
+})
+
+test('submit に失敗した返信は、次の確認でもう一度渡す', async ($, on) => {
+  const { world, checkNow } = await setUp($, on, [])
+
+  world.replies = [reply('1794214600.000001', OWNER, 'mitsuhashi', '依頼')]
+  world.isSubmitFailing = true
+  await checkNow()
+  expect(world.submitted.length).toBe(0)
+
+  world.isSubmitFailing = false
+  await checkNow()
+  expect(world.submitted.length).toBe(1)
+  expect(world.submitted[0]).toContain('依頼')
+})
+
+test('紐付け中は入力欄の上の帯にスレッドへのリンクが出て、外すと消える', async ($, on) => {
+  on('ui.render', ($, e) => {
+    const { Text } = $.ui.resolve(e)
+    return <Text>engine</Text>
+  })
+  const { run } = await setUp($, on, [])
+  const mountOn = (surface: 'terminal' | 'desktop', hasSurvey = false) =>
+    $.ui.mount({
+      plugin: 'slack-thread-link',
+      surface,
+      component: 'AbovePrompt',
+      props: { hasSurvey, isWorking: false, maxRows: 6, bodyColumns: 80, scroll: { offset: 0, bodyRows: 6 }, view: {} },
+    })
+
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await mountOn(surface)
+    const thread = await ui.find({ type: 'Link' })
+    expect(thread?.props?.href).toBe(URL)
+    await ui.unmount()
+  }
+
+  // アンケートが帯を使っているときは譲る。
+  const survey = await mountOn('desktop', true)
+  expect(await survey.find({ type: 'Link' })).toBe(undefined)
+  await survey.unmount()
+
+  await run('off')
+  const ui = await mountOn('desktop')
+  expect(await ui.find({ type: 'Link' })).toBe(undefined)
+  expect((await ui.find({ type: 'Text' }))?.text).toBe('engine')
+  await ui.unmount()
+})
+
+test('紐付けを外したら、本人の新着があっても渡さない', async ($, on) => {
+  const { world, clock, run } = await setUp($, on, [])
+
+  await run('off')
+  world.replies = [reply('1794214500.000001', OWNER, 'mitsuhashi', '新着')]
+  await clock.advance(60_000)
+
+  expect(world.submitted.length).toBe(0)
+  expect((await run('')).text).toBe('紐付けている Slack スレッドはありません。')
+})

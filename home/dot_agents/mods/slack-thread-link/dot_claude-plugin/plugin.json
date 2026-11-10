@@ -1,0 +1,6 @@
+{
+  "name": "slack-thread-link",
+  "version": "0.1.0",
+  "description": "Slack スレッドをセッションに紐付け、新しい返信が来たらターンを始める",
+  "types": "./types/index.d.ts"
+}
