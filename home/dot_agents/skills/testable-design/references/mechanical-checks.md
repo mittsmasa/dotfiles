@@ -63,7 +63,7 @@ node ~/.agents/skills/testable-design/tools/bin/testable-scan.ts <root> [paths..
 | `--exclude <glob>` | 一致するファイルを候補から除く。何度でも書ける。glob は `<root>` からの相対パスに当てる。シェルに展開させないよう引用符で囲む |
 | `--env-ignore <name>` | C3 の `touches` と C6 から外す環境変数。何度でも書ける。`NODE_ENV` は指定しなくても外す |
 
-`<root>` は、対象を含む最も近い workspace のルート（`pnpm-workspace.yaml` か、`workspaces` を持つ `package.json` のあるディレクトリ）にする。リポジトリのルートとは限らない。例: `frontend/` の下に pnpm workspace があり、`frontend/apps/c0` を調べるなら、`<root>` は `frontend/`、`[paths...]` は `apps/c0`。出力のパスは `apps/c0/src/…` になる。パッケージごとの `tsconfig.json` の `paths` と、workspace パッケージの `exports` を読んで import を解決する。
+`<root>` は、対象を含む最も近い workspace のルート（`pnpm-workspace.yaml` か、`workspaces` を持つ `package.json` のあるディレクトリ）にする。リポジトリのルートとは限らない。例: `frontend/` の下に pnpm workspace があり、`frontend/apps/c0` を調べるなら、`<root>` は `frontend/`、`[paths...]` は `apps/c0`。出力のパスは `apps/c0/src/…` になる。パッケージごとの `tsconfig.json` の `paths` と `baseUrl`、workspace パッケージの `exports` を読んで import を解決する。
 
 標準出力には、ファイル数、import の解決結果の内訳、チェックごとの候補数が出る。
 
