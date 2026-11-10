@@ -3,7 +3,7 @@ import type { Engine, TestBody } from 'claude-code/testing'
 
 type On = Parameters<TestBody>[1]
 
-import { parsePermalink, parseReplies, parseUserId, tsAfter } from '../hooks/slack'
+import { oneLine, parseParentText, parsePermalink, parseReplies, parseUserId, tsAfter } from '../hooks/slack'
 
 const SERVER = 'a329a196-37db-4b84-96fa-57e31701b03d'
 const URL = 'https://x.slack.com/archives/C07QD6X30Q2/p1794214480861519?thread_ts=1793849534.425339'
