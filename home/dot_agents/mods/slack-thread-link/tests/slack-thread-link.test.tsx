@@ -81,6 +81,15 @@ test('ts は倍精度で潰れる桁まで比べる', async () => {
   expect(tsAfter('999999999.999999', '1000000000.000000')).toBe(false)
 })
 
+test('親メッセージの本文を取り出し、Slack の記法と改行をほどいて 1 行にする', async () => {
+  const text = `=== THREAD PARENT MESSAGE ===\nFrom: a (${OTHER})\nMessage TS: 1.000001\n${PARENT}\nReactions: eyes (1)\n\n=== THREAD REPLIES (0 total) ===\n`
+  expect(oneLine(parseParentText(text) ?? '')).toBe(TITLE)
+  expect(oneLine('詳細は <https://example.com|こちら> と <https://example.com/b>')).toBe(
+    '詳細は こちら と https://example.com/b',
+  )
+  expect(parseParentText('親のない出力')).toBe(undefined)
+})
+
 test('返信から投稿者の ID と表示名を分けて取り出す', async () => {
   expect(parseReplies(reply('1.000001', OWNER, 'mitsuhashi', '本文'))).toEqual([
     { ts: '1.000001', userId: OWNER, name: 'mitsuhashi', text: '本文' },
