@@ -90,7 +90,7 @@ node ~/.agents/skills/testable-design/tools/bin/testable-scan.ts <root> [paths..
 
 ### `ir.json`
 
-候補のもとになった中間表現。ふだんは読まなくてよい。候補の理由を確かめたいときに、`jq` で引く。
+候補のもとになった中間表現。全体を読む必要はない。候補の理由を確かめたいときと、依存の図を描きたいときに、`jq` で必要な範囲だけを引く。
 
 - `files[]`: 1 ファイル 1 レコード。`kind`（`test` / `story` / `source`）、`imports`、`exports`、`jsx`、`importsReact`、`hookCalls`、`plays`
 - `files[].imports[]`: `source`（書かれた specifier）、`target`（解決先のファイル）、`resolution`、`via`（`import` / `reexport` / `dynamic` / `mock`）。名前つき import は、barrel を越えて、その名前を定義しているファイルを `target` に持つ
@@ -111,6 +111,27 @@ node ~/.agents/skills/testable-design/tools/bin/testable-scan.ts <root> [paths..
 ```bash
 jq -r '.files[] | .file as $f | .imports[] | select(.via == "mock" and .resolution == "unresolved") | "\($f)\t\(.source)"' <dir>/ir.json
 ```
+
+### 図にするとき
+
+可視化のためのツールは無い。図が要るときは、`ir.json` から範囲を絞って mermaid を書く。使う場面は、依存の向きを人に見せて判断を仰ぐときと、状態を issue などで共有するとき。
+
+全体を図にしない。数百ファイルの図は読めないので、ディレクトリ 1 つか、候補のファイルの周りに絞る。次の例は、`--arg dir` に渡したディレクトリに出入りする import を、mermaid の形で出す。型だけの import とモックは除いている。
+
+```bash
+jq -r --arg dir 'src/features/cart' '
+  [.files[] | .file as $from | .imports[]
+   | select(.resolution == "internal" and (.typeOnly | not) and .via != "mock")
+   | select(($from | startswith($dir)) or (.target | startswith($dir)))
+   | [$from, .target]] | unique as $edges
+  | ($edges | flatten | unique) as $nodes
+  | "graph LR",
+    ($nodes | to_entries[] | "  n\(.key)[\"\(.value)\"]"),
+    ($edges[] | . as [$from, $to] | "  n\($nodes | index($from)) --> n\($nodes | index($to))")
+' <dir>/ir.json
+```
+
+出力はそのまま貼らずに整える。テスト、story、ソースを `kind` で色分けする、候補のファイルに印を付ける、関係の薄いノードを落とす、といった加工は、見せたいことに合わせてその場で行う。
 
 ## 限界
 
