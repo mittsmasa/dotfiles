@@ -2,7 +2,15 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { SlackLink } from '../types'
-import { formatPrompt, messagesText, parsePermalink, parseReplies, parseUserId, tsAfter } from './slack'
+import {
+  findPermalink,
+  formatPrompt,
+  messagesText,
+  parsePermalink,
+  parseReplies,
+  parseUserId,
+  tsAfter,
+} from './slack'
 import type { Reply } from './slack'
 
 // この環境の Slack コネクタ（ツール名 mcp__<server>__slack_* の <server> 部分）。
@@ -107,6 +115,22 @@ export const register: Register = on => {
     $.clock.every(POLL_MS, () => {
       void poll($)
     })
+
+    return next(e)
+  })
+
+  // 入力したメッセージに Slack のパーマリンクがあり、まだ何も紐付いていなければ、そのスレッドに紐付ける。
+  // 紐付け中なら切り替えない（参考に貼っただけの URL で切り替わらないように）。
+  on('prompt.submit', async ($, e, next) => {
+    const url = e.origin.kind === 'composer' && !e.command ? findPermalink(e.text) : undefined
+    if (url && !(await read($, link))) {
+      try {
+        await linkThread($, url)
+        void $.ui.toast('このメッセージの Slack スレッドに紐付けました。')
+      } catch (err) {
+        void $.ui.toast(`Slack スレッドに紐付けられませんでした: ${err instanceof Error ? err.message : String(err)}`)
+      }
+    }
 
     return next(e)
   })
