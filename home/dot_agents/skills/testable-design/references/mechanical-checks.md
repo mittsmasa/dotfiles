@@ -59,7 +59,7 @@ node ~/.agents/skills/testable-design/tools/bin/testable-scan.ts <root> [paths..
 |---|---|
 | `<root>` | プロジェクトの基準ディレクトリ。`tsconfig.json` と `package.json` をここから探し、出力のパスもここからの相対で書く |
 | `[paths...]` | 調べる対象。`<root>` からの相対。省略すると `<root>` 全体 |
-| `--out <dir>` | 出力先。`ir.json` と `candidates.json` を書く。リポジトリに残さない場所（`$TMPDIR` か、gitignore された作業ディレクトリ）にする |
+| `--out <dir>` | 出力先。`ir.json` と `candidates.json` を書く。既定は SKILL.md の「呼び出したら最初に」で決めた場所（git リポジトリ内なら `.workflow/testable-scan/`、外なら `$TMPDIR/testable-scan/`）。L1 の `oxlint.json` と、対象を記録した `args` も同じ場所に置く。実行済みかどうかはこの場所で判定する |
 | `--exclude <glob>` | 一致するファイルを候補から除く。何度でも書ける。glob は `<root>` からの相対パスに当てる。シェルに展開させないよう引用符で囲む |
 | `--env-ignore <name>` | C3 の `touches` と C6 から外す環境変数。何度でも書ける。`NODE_ENV` は指定しなくても外す |
 
