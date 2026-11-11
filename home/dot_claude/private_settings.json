@@ -184,73 +184,6 @@
     ],
     "defaultMode": "auto"
   },
-  "autoMode": {
-    "classifyAllShell": true
-  },
-  "sandbox": {
-    "enabled": true,
-    "failIfUnavailable": true,
-    "autoAllowBashIfSandboxed": false,
-    "excludedCommands": [
-      "gh *",
-      "git fetch *",
-      "git pull *",
-      "git push *",
-      "git ls-remote *",
-      "mise install",
-      "mise install *",
-      "fnox exec -- pnpm install",
-      "fnox exec -- pnpm install *",
-      "git commit *",
-      "pnpm exec vitest *",
-      "pnpm vrt",
-      "pnpm vrt *"
-    ],
-    "filesystem": {
-      "allowWrite": [
-        "~/.local/state/mise",
-        "~/.local/share/chezmoi",
-        "~/.config/chezmoi",
-        "~/.npm"
-      ],
-      "denyRead": [
-        "~/.zsh_history",
-        "~/.zsh_sessions"
-      ]
-    },
-    "network": {
-      "allowedDomains": [
-        "github.com",
-        "api.github.com",
-        "registry.npmjs.org",
-        "npm.pkg.github.com"
-      ],
-      "strictAllowlist": true,
-      "allowLocalBinding": true
-    },
-    "credentials": {
-      "envVars": [
-        {
-          "name": "GITHUB_TOKEN",
-          "mode": "deny"
-        },
-        {
-          "name": "GH_TOKEN",
-          "mode": "deny"
-        },
-        {
-          "name": "NODE_AUTH_TOKEN",
-          "mode": "deny"
-        }
-      ],
-      "files": [
-        {
-          "path": "~/.ssh",
-          "mode": "deny"
-        }
-      ]
-    }
-  },
   "hooks": {
     "UserPromptSubmit": [
       {
@@ -354,7 +287,9 @@
   },
   "enabledPlugins": {
     "document-skills@anthropic-agent-skills": false,
-    "cowork-plugin-management@inline": false
+    "cowork-plugin-management@inline": false,
+    "slack-thread-link@my-mods": true,
+    "context7@claude-plugins-official": true
   },
   "extraKnownMarketplaces": {
     "cursor-plugins": {
@@ -362,10 +297,80 @@
         "source": "github",
         "repo": "cursor/plugins"
       }
+    },
+    "my-mods": {
+      "source": {
+        "source": "directory",
+        "path": "/Users/masahiro_mitsuhashi/.agents/mods"
+      }
     }
   },
   "outputStyle": "maaya",
   "language": "日本語",
+  "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "autoAllowBashIfSandboxed": false,
+    "network": {
+      "allowedDomains": [
+        "github.com",
+        "api.github.com",
+        "registry.npmjs.org",
+        "npm.pkg.github.com"
+      ],
+      "strictAllowlist": true,
+      "allowLocalBinding": true
+    },
+    "filesystem": {
+      "allowWrite": [
+        "~/.local/state/mise",
+        "~/.local/share/chezmoi",
+        "~/.config/chezmoi",
+        "~/.npm"
+      ],
+      "denyRead": [
+        "~/.zsh_history",
+        "~/.zsh_sessions"
+      ]
+    },
+    "credentials": {
+      "files": [
+        {
+          "path": "~/.ssh",
+          "mode": "deny"
+        }
+      ],
+      "envVars": [
+        {
+          "name": "GITHUB_TOKEN",
+          "mode": "deny"
+        },
+        {
+          "name": "GH_TOKEN",
+          "mode": "deny"
+        },
+        {
+          "name": "NODE_AUTH_TOKEN",
+          "mode": "deny"
+        }
+      ]
+    },
+    "excludedCommands": [
+      "gh *",
+      "git fetch *",
+      "git pull *",
+      "git push *",
+      "git ls-remote *",
+      "mise install",
+      "mise install *",
+      "fnox exec -- pnpm install",
+      "fnox exec -- pnpm install *",
+      "git commit *",
+      "pnpm exec vitest *",
+      "pnpm vrt",
+      "pnpm vrt *"
+    ]
+  },
   "effortLevel": "high",
   "autoUpdatesChannel": "latest",
   "voice": {
@@ -378,5 +383,8 @@
   "theme": "dark-daltonized",
   "agentPushNotifEnabled": true,
   "skipAutoPermissionPrompt": true,
+  "autoMode": {
+    "classifyAllShell": true
+  },
   "voiceEnabled": false
 }
