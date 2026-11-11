@@ -101,6 +101,20 @@ chezmoi source-path ~/.<target>   # ソースパスを取得
 chezmoi status   # 空であること
 ```
 
+### 6.5 mise Tools Sync
+
+`~/.config/mise/config.toml` も chezmoi 管理下にあり、pull でバージョンが上がることがある。同期の最後に毎回実行する（変更がなければどちらも何もしない）。
+
+```bash
+mise install       # config に書かれたバージョンを入れる
+mise prune -y      # どの config からも使われていない古いバージョンを消す
+```
+
+- `mise install` は sandbox の `excludedCommands` に入っているので単独で呼べば通る
+- `mise prune` は `~/.local/share/mise/installs` を消すため sandbox 内では落ちる。`dangerouslyDisableSandbox` で実行する
+- `mise install` が失敗したら `mise prune` は実行しない（古いバージョンを消して使えるものが無くなるのを避ける）
+- 入ったバージョンと消したバージョンを報告に含める
+
 ### 7. Remote Sync Check
 
 ```bash
