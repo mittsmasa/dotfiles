@@ -1,0 +1,15 @@
+{
+  "name": "pr-review-inbox",
+  "version": "0.1.2",
+  "description": "Fetches the pull requests waiting for your review, pre-reads each with a restricted subagent, and lists verdicts and findings in a pane.",
+  "license": "MIT",
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "utcOffsetMinutes": {
+      "type": "number",
+      "title": "UTC offset (minutes)",
+      "description": "Your timezone's offset from UTC, used for the weekday 8-17 fetch window.",
+      "default": 540
+    }
+  }
+}

@@ -1,5 +1,16 @@
 {
   "name": "my-mods",
-  "owner": { "name": "mitsuhashi" },
-  "plugins": [{ "name": "slack-thread-link", "source": "./slack-thread-link" }]
+  "owner": {
+    "name": "mitsuhashi"
+  },
+  "plugins": [
+    {
+      "name": "slack-thread-link",
+      "source": "./slack-thread-link"
+    },
+    {
+      "name": "pr-review-inbox",
+      "source": "./pr-review-inbox"
+    }
+  ]
 }
