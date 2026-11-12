@@ -32,6 +32,7 @@ import {
   select,
   send,
   setMode,
+  showBody,
   showHumanReview,
   toggle,
 } from './run'
