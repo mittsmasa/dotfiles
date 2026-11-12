@@ -436,6 +436,19 @@ test('the session running the inbox refuses every subagent that is not its revie
   expect((await $.tool.call({ tool: 'Bash', command: 'ls' } as never)).deny).toBe(undefined)
 })
 
+test('a reviewer is pointed at the testable-design files and may read them, and no other skill file', async ($, on) => {
+  const { clock, calls } = world(on, [review({ status: 'queued', findings: [], verdict: undefined })])
+  await begin($, clock)
+  const skill = '/Users/me/.agents/skills/testable-design'
+  const read = (file: string) => $.tool.call({ tool: 'Read', file_path: `${skill}/${file}`, agentId: 'reviewer-1' } as never)
+
+  expect(calls.prompts[0]).toContain(`${skill}/SKILL.md`)
+  expect(calls.prompts[0]).toContain(`${skill}/references/separation-of-concerns.md`)
+  expect((await read('SKILL.md')).deny).toBe(undefined)
+  expect((await read('references/mechanical-checks.md')).deny).toBe(undefined)
+  expect(typeof (await read('references/sources.md')).deny).toBe('string')
+})
+
 // ---- what the pane and the band draw ----
 
 test('the pane lists a review, opens its findings, and offers what it can send', async ($, on) => {
