@@ -1,5 +1,5 @@
 import { atom, read } from 'claude-code'
-import type { Register } from 'claude-code'
+import type { EngineInterface, Register, RenderSurface } from 'claude-code'
 
 import type { Finding, Inbox, Review, ReviewPayload } from '../types'
 import { actionsOf, primaryOf } from './posting'
