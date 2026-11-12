@@ -270,13 +270,21 @@ function toFetched(
  * New pull requests and ones whose head moved are queued; the rest keep what
  * they hold. One being reviewed is never touched, and never dropped. One whose
  * review was sent leaves the search; it stays listed until it is marked read.
+ * One in `reRequested` was sent and then asked for again: it starts over, even
+ * at the same head.
  */
-export function selectQueued(fetched: readonly Fetched[], stored: readonly Review[]): Review[] {
+export function selectQueued(
+  fetched: readonly Fetched[],
+  stored: readonly Review[],
+  reRequested: ReadonlySet<string> = new Set(),
+): Review[] {
   const fetchedKeys = new Set(fetched.map(one => one.key))
   const next = fetched.map((one): Review => {
     const existing = stored.find(review => review.key === one.key)
     if (existing?.status === 'reviewing') return existing
-    if (existing && existing.headSha === one.headSha) return { ...existing, title: one.title, body: one.body }
+    if (existing && existing.headSha === one.headSha && !reRequested.has(one.key)) {
+      return { ...existing, title: one.title, body: one.body }
+    }
 
     return {
       ...one,
@@ -300,10 +308,11 @@ export function selectQueued(fetched: readonly Fetched[], stored: readonly Revie
 export function applyFetchResult(
   result: { search: CommandOutput; views: readonly (CommandOutput & { key: string })[] },
   stored: readonly Review[],
+  reRequested: ReadonlySet<string> = new Set(),
 ): readonly Review[] {
   const fetched = toFetched(result.search, result.views)
 
-  return fetched ? selectQueued(fetched, stored) : stored
+  return fetched ? selectQueued(fetched, stored, reRequested) : stored
 }
 
 // ---- a review's life ----
@@ -448,7 +457,7 @@ function withResult(review: Review, json: Record<string, unknown>, now: Date): R
 /** What a sent review leaves beside its result, so a reused result stays sent. */
 export type Posted = { postedAt: string; postedUrl?: string; postedEvent: ReviewEvent }
 
-function toPosted(raw: unknown): Posted | undefined {
+export function toPosted(raw: unknown): Posted | undefined {
   if (!isRecord(raw) || typeof raw.postedAt !== 'string') return undefined
   if (raw.postedEvent !== 'COMMENT' && raw.postedEvent !== 'APPROVE') return undefined
 
