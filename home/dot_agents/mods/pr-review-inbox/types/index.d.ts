@@ -23,6 +23,8 @@ export type Review = {
   key: string
   title: string
   url: string
+  /** The pull request's description, made safe to draw as markdown; absent until fetched. */
+  body?: string
   headSha: string
   baseRefName: string
   files: string[]
