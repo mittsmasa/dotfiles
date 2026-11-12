@@ -482,6 +482,51 @@ test("a reviewer's prompt names the testable-design files by their real paths", 
   )
 })
 
+// ---- 深掘りする ----
+
+const DEEP_DIVE = 'https://github.com/acme/widgets/pull/12 を別セッションで詳しくレビューして'
+
+async function pressDeepDive($: Engine, clock: { settle: () => Promise<void> }) {
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: `row:${KEY}` })
+  await clock.settle()
+  await ui.press({ key: 'deep-dive' })
+  await clock.settle()
+  await ui.unmount()
+}
+
+test('深掘りするで、依頼文が入力欄に入る', async ($, on) => {
+  const { clock, surface } = world(on, [review()])
+  await begin($, clock)
+
+  await pressDeepDive($, clock)
+
+  expect(surface.filled).toEqual([DEEP_DIVE])
+  expect(surface.copied).toEqual([])
+})
+
+test('入力欄が断ると、深掘りの依頼文はクリップボードに入り、toast で知らせる', async ($, on) => {
+  const { clock, surface } = world(on, [review()])
+  surface.isFilled = false
+  await begin($, clock)
+
+  await pressDeepDive($, clock)
+
+  expect(surface.copied).toEqual([DEEP_DIVE])
+  expect(surface.toasts).toEqual(['深掘りの依頼文をコピーしました。入力欄に貼って送ってください'])
+})
+
+test('入力欄もクリップボードも断ると、toast に深掘りの依頼文そのものが出る', async ($, on) => {
+  const { clock, surface } = world(on, [review()])
+  surface.isFilled = false
+  surface.isCopied = false
+  await begin($, clock)
+
+  await pressDeepDive($, clock)
+
+  expect(surface.toasts).toEqual([`入力欄に入れられませんでした。次の文を送ってください: ${DEEP_DIVE}`])
+})
+
 // ---- what the pane and the band draw ----
 
 test('the pane lists a review, opens its findings, and offers what it can send', async ($, on) => {
