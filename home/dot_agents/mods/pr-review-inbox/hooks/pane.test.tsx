@@ -99,6 +99,8 @@ function world(
     writes: [] as string[],
     argv: [] as (readonly string[])[],
   }
+  // What GitHub says of the review requests: when each named me, and whether it answers at all.
+  const github = { requestedAt: [] as string[], isDown: false }
   // This session's agents as `$.agent.list()` reports them.
   const agents: { id: string; status: string }[] = []
   const clock = mock.clock(on, { now: Date.UTC(2026, 10, 9, 2, 0) })
@@ -179,12 +181,37 @@ function world(
           })
         : argv.includes('get-url')
           ? 'git@github.com:acme/widgets.git'
-          : ''
+          : argv.includes('graphql')
+            ? JSON.stringify({
+                data: {
+                  viewer: { login: 'me' },
+                  repository: {
+                    pullRequest: {
+                      timelineItems: {
+                        nodes: github.requestedAt.map(createdAt => ({
+                          createdAt,
+                          requestedReviewer: { __typename: 'User', login: 'me' },
+                        })),
+                      },
+                    },
+                  },
+                },
+              })
+            : ''
+    const isFailing = argv.includes('graphql') && github.isDown
 
-    return { value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+    return {
+      value: {
+        exitCode: isFailing ? 1 : 0,
+        stdout: isFailing ? '' : stdout,
+        stderr: isFailing ? 'HTTP 502' : '',
+        isStdoutTruncated: false,
+        isStderrTruncated: false,
+      },
+    }
   })
 
-  return { clock, calls, store, agents }
+  return { clock, calls, store, agents, github }
 }
 
 type Engine = Parameters<TestBody>[0]
@@ -519,12 +546,19 @@ test('a waiting review takes the result accepted for the same commit, with no re
   await pane.unmount()
 })
 
+const SENT_NOTE = JSON.stringify({ postedAt: '2026-11-09T01:00:00.000Z', postedEvent: 'APPROVE' })
+const BEFORE_SENT = '2026-11-09T00:30:00Z'
+const AFTER_SENT = '2026-11-09T01:30:00Z'
+const isRmSaved = (argv: readonly string[]) => argv[0] === 'rm' && argv.length === 5
+
 test('a result that was sent comes back as sent', async ($, on) => {
-  const { clock, calls } = world(on, [waiting()], {}, {
+  const { clock, calls, github } = world(on, [waiting()], {}, {
     [`${SAVED}.accepted.json`]: result({ findings: [] }),
-    [`${SAVED}.posted.json`]: JSON.stringify({ postedAt: '2026-11-09T01:00:00.000Z', postedEvent: 'APPROVE' }),
+    [`${SAVED}.posted.json`]: SENT_NOTE,
     [DIFF_PATH]: DIFF,
   })
+  // Still in the search, but nobody asked again since it was sent.
+  github.requestedAt = [BEFORE_SENT]
   await begin($, clock)
   await clock.settle()
 
@@ -534,6 +568,63 @@ test('a result that was sent comes back as sent', async ($, on) => {
   await clock.settle()
   expect(await pane.find({ key: 'approve' })).toBe(undefined)
   expect(await pane.find({ key: 'comment' })).toBe(undefined)
+  await pane.unmount()
+})
+
+test('a sent review asked for again at the same commit is reviewed from nothing', async ($, on) => {
+  const { clock, calls, github } = world(on, [waiting()], {}, {
+    [`${SAVED}.accepted.json`]: result({ findings: [] }),
+    [`${SAVED}.posted.json`]: SENT_NOTE,
+    [DIFF_PATH]: DIFF,
+  })
+  github.requestedAt = [BEFORE_SENT, AFTER_SENT]
+  await begin($, clock)
+  await clock.settle()
+
+  expect(calls.argv.filter(isRmSaved)).toEqual([RM_SAVED])
+  expect(calls.spawn).toBe(1)
+  const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect(await pane.find({ type: 'Text', text: /承認済み/ })).toBe(undefined)
+  await pane.unmount()
+})
+
+const SENT_AND_READ = { postedAt: '2026-11-09T01:00:00.000Z', postedEvent: 'COMMENT', isRead: true } as const
+
+test('a sent review still held here is reviewed again once it is asked for again', async ($, on) => {
+  const { clock, calls, github } = world(on, [review(SENT_AND_READ)])
+  github.requestedAt = [AFTER_SENT]
+  await begin($, clock)
+  await clock.settle()
+
+  expect(calls.spawn).toBe(1)
+})
+
+test('a sent review still in the search, with no new request, is left as sent', async ($, on) => {
+  const { clock, calls, github } = world(on, [review(SENT_AND_READ)])
+  github.requestedAt = [BEFORE_SENT]
+  await begin($, clock)
+  await clock.settle()
+
+  expect(calls.argv.filter(isRmSaved)).toEqual([])
+  expect(calls.spawn).toBe(0)
+})
+
+test('a fetch that cannot read the review requests changes nothing', async ($, on) => {
+  const sent = review(SENT_AND_READ)
+  const { clock, calls, store, github } = world(on, [sent], {}, {
+    [`${SAVED}.accepted.json`]: result(),
+    [`${SAVED}.posted.json`]: SENT_NOTE,
+    [DIFF_PATH]: DIFF,
+  })
+  github.isDown = true
+  await begin($, clock)
+  await clock.settle()
+
+  expect(calls.argv.filter(isRmSaved)).toEqual([])
+  expect(calls.spawn).toBe(0)
+  expect((store.get('inbox') as { reviews: Review[] }).reviews).toEqual([sent])
+  const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect((await pane.find({ type: 'Text', text: /取得に失敗/ }))?.text).toBe('取得に失敗しました: HTTP 502')
   await pane.unmount()
 })
 

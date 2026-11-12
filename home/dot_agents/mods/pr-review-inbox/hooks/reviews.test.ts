@@ -15,11 +15,13 @@ import {
   isAllowedToolCall,
   isDue,
   isTimedOut,
+  lastRequestedAt,
   localPathOf,
   originMatches,
   parseConfig,
   parseReviewerJson,
   recoverOnStart,
+  requestedArgs,
   reviewFromSaved,
   reviewerPrompt,
   buildSearchArgv,
@@ -420,6 +422,59 @@ test('selectQueued leaves a sent review at the same head as it is', () => {
 
   expect(selectQueued([fetched(SHA_A)], [sent])).toEqual([sent])
   expect(selectQueued([fetched(SHA_B)], [sent])[0]?.status).toBe('queued')
+})
+
+test('selectQueued starts a sent review over once it is asked for again', () => {
+  const sent = review({ ...POSTED, isRead: true })
+
+  const [again] = selectQueued([fetched(SHA_A)], [sent], new Set([KEY]))
+  expect(again?.status).toBe('queued')
+  expect(again?.isRead).toBe(false)
+  expect(again?.postedAt).toBe(undefined)
+  expect(again?.postedEvent).toBe(undefined)
+  // Asked again for another pull request: this one stays as sent.
+  expect(selectQueued([fetched(SHA_A)], [sent], new Set(['acme/widgets#13']))).toEqual([sent])
+  // One being reviewed is never touched.
+  const busy = review({ status: 'reviewing', agentId: 'a1' })
+  expect(selectQueued([fetched(SHA_A)], [busy], new Set([KEY]))).toEqual([busy])
+})
+
+const timeline = (nodes: unknown[], login: unknown = 'me') =>
+  JSON.stringify({ data: { viewer: { login }, repository: { pullRequest: { timelineItems: { nodes } } } } })
+const asked = (createdAt: string, requestedReviewer: unknown) => ({ createdAt, requestedReviewer })
+const USER_ME = { __typename: 'User', login: 'me' }
+
+test('lastRequestedAt is the newest request that names me or a team', () => {
+  expect(
+    lastRequestedAt(
+      timeline([
+        asked('2026-11-12T08:04:46Z', USER_ME),
+        asked('2026-11-12T08:38:34Z', USER_ME),
+        asked('2026-11-12T09:00:00Z', { __typename: 'User', login: 'someone-else' }),
+      ]),
+    ),
+  ).toBe('2026-11-12T08:38:34Z')
+  expect(lastRequestedAt(timeline([asked('2026-11-12T08:04:46Z', { __typename: 'Team' })]))).toBe('2026-11-12T08:04:46Z')
+})
+
+test('lastRequestedAt tells no request apart from an answer it cannot read', () => {
+  expect(lastRequestedAt(timeline([]))).toBe(null)
+  expect(lastRequestedAt(timeline([asked('2026-11-12T09:00:00Z', { __typename: 'User', login: 'someone-else' })]))).toBe(null)
+  expect(lastRequestedAt(timeline([asked('not a date', USER_ME), asked('2026-11-12T09:00:00Z', null)]))).toBe(null)
+
+  expect(lastRequestedAt('')).toBe(undefined)
+  expect(lastRequestedAt('{"errors":[{"message":"Bad credentials"}]}')).toBe(undefined)
+  expect(lastRequestedAt(timeline([], null))).toBe(undefined)
+  expect(lastRequestedAt(JSON.stringify({ data: { viewer: { login: 'me' }, repository: null } }))).toBe(undefined)
+})
+
+test('the request history is asked for with the pull request as variables', () => {
+  const argv = requestedArgs('acme/widgets#12') as string[]
+
+  expect(argv.slice(0, 3)).toEqual(['gh', 'api', 'graphql'])
+  expect(argv.slice(-6)).toEqual(['-f', 'owner=acme', '-f', 'name=widgets', '-F', 'number=12'])
+  expect(argv.find(one => one.startsWith('query='))?.includes('acme')).toBe(false)
+  expect(requestedArgs('not a key')).toBe(undefined)
 })
 
 test('the band does not count a review that was sent', () => {
