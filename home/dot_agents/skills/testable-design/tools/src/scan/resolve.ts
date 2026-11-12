@@ -147,6 +147,25 @@ function resolveByBaseUrl(
   return result.target === null ? null : result;
 }
 
+const OUTPUT_EXTENSION = /(\.d)?\.[cm]?[jt]sx?$/;
+
+/**
+ * Reads an `exports` target in a generated directory directly under the
+ * package (`dist/index.mjs`, `dist/index.d.ts`) as the build output of the
+ * same path under `src`, because an unbuilt checkout has no `dist`. Falls
+ * back to `resolvePath` when no such source exists.
+ */
+function resolveExportTarget(pkg: PackageInfo, target: string, project: Project): Resolution {
+  const path = posix.join(pkg.dir, target);
+  const resolved = resolvePath(path, project);
+  if (resolved.resolution !== 'generated') return resolved;
+  const [outDir, ...rest] = posix.relative(pkg.dir, path).split('/');
+  if (!project.generatedDirectories.includes(outDir) || rest.length === 0) return resolved;
+  const stem = posix.join(pkg.dir, 'src', ...rest).replace(OUTPUT_EXTENSION, '');
+  const source = findFile(stem, project.files);
+  return source && CODE_FILE.test(source) ? { target: source, resolution: 'internal' } : resolved;
+}
+
 function resolveByWorkspace(
   specifier: string,
   project: Project,
@@ -158,8 +177,7 @@ function resolveByWorkspace(
     for (const [pattern, target] of Object.entries(pkg.exports)) {
       const matched = matchPattern(pattern, subpath);
       if (matched === null) continue;
-      const path = posix.join(pkg.dir, target.replace('*', matched));
-      return resolvePath(path, project);
+      return resolveExportTarget(pkg, target.replace('*', matched), project);
     }
     return UNRESOLVED;
   }

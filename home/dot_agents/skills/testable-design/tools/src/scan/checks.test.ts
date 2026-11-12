@@ -326,6 +326,35 @@ describe('C4: components no story reaches', () => {
     expect(c4).toEqual([{ file: 'card.tsx' }]);
   });
 
+  it('follows a workspace package whose exports point at an unbuilt dist to its source barrel', () => {
+    const files: Record<string, FileFacts> = {
+      'packages/lib/src/index.ts': facts({
+        imports: [{ source: './Editable', names: ['Editable'], typeOnly: false, via: 'reexport' }],
+      }),
+      'packages/lib/src/Editable.tsx': component('Editable'),
+      'packages/lib/src/Orphan.tsx': component('Orphan'),
+      'packages/storybook/src/Editable.stories.tsx': story(
+        0,
+        uses('@repo/lib', 'Editable'),
+      ),
+    };
+    const ir = buildIr(new Map(Object.entries(files)), {
+      files: new Set(Object.keys(files)),
+      tsconfigs: [],
+      packages: [
+        {
+          dir: 'packages/lib',
+          name: '@repo/lib',
+          dependencies: [],
+          exports: { '.': './dist/index.mjs' },
+        },
+        { dir: 'packages/storybook', name: 'storybook', dependencies: ['@repo/lib'], exports: {} },
+      ],
+      generatedDirectories: ['dist'],
+    });
+    expect(runChecks(ir, buildGraph(ir)).c4).toEqual([{ file: 'packages/lib/src/Orphan.tsx' }]);
+  });
+
   it('treats a default-exported function with JSX as a component', () => {
     const { c4 } = check({ 'widget.tsx': component('default') });
     expect(c4).toEqual([{ file: 'widget.tsx' }]);

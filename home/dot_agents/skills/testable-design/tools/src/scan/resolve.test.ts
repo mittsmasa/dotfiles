@@ -377,6 +377,51 @@ describe('generated directories', () => {
   });
 });
 
+describe('build output of workspace packages', () => {
+  const built: Project = {
+    files: new Set([
+      'packages/lib/src/index.ts',
+      'packages/lib/src/button/index.tsx',
+      'packages/lib/src/icons.ts',
+      'packages/storybook/src/Button.stories.tsx',
+    ]),
+    tsconfigs: [],
+    packages: [
+      {
+        dir: 'packages/lib',
+        name: '@repo/lib',
+        dependencies: [],
+        exports: {
+          '.': './dist/index.mjs',
+          './button': './dist/button/index.js',
+          './icons': './dist/icons.d.ts',
+          './theme': './dist/theme.js',
+        },
+      },
+    ],
+    generatedDirectories: ['dist'],
+  };
+  const story = 'packages/storybook/src/Button.stories.tsx';
+
+  it.each([
+    ['@repo/lib', 'packages/lib/src/index.ts'],
+    ['@repo/lib/button', 'packages/lib/src/button/index.tsx'],
+    ['@repo/lib/icons', 'packages/lib/src/icons.ts'],
+  ])('maps %s from the missing dist file to its source in src', (specifier, target) => {
+    expect(resolveSpecifier(specifier, story, built)).toEqual({
+      target,
+      resolution: 'internal',
+    });
+  });
+
+  it('stays generated when src has no matching source', () => {
+    expect(resolveSpecifier('@repo/lib/theme', story, built)).toEqual({
+      target: null,
+      resolution: 'generated',
+    });
+  });
+});
+
 describe('packageName', () => {
   it.each([
     ['next', 'next'],
