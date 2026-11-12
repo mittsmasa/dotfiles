@@ -71,6 +71,15 @@ export function mockSpecifier(node: AstNode): string | null {
 }
 
 /**
+ * Whether a module specifier points at this project's own code: a relative
+ * path, or one starting with a configured alias such as `@/`. Decided by the
+ * string alone; baseUrl-style specifiers (`utils/axios`) need an alias entry.
+ */
+export function isInternalSpecifier(specifier: string, aliases: readonly string[]): boolean {
+  return specifier.startsWith('.') || aliases.some((alias) => specifier.startsWith(alias));
+}
+
+/**
  * `it(...)`, `test(...)`, and modifier forms such as `it.only(...)`,
  * `test.each(table)(...)`, `it.each`...``(...)`. Only calls that receive a
  * function are tests (`it.todo('x')` and the inner `it.each(table)` are not).
