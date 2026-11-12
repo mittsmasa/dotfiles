@@ -100,12 +100,21 @@ export function splitForReview(
   return { inline: adopted.filter(isInline), inBody: adopted.filter(finding => !isInline(finding)) }
 }
 
-/** How a finding reads in the review body: its place first, when it has one. */
-export function bodyLine(finding: Finding): string {
-  if (finding.file === undefined) return finding.comment
-  const place = finding.line === undefined ? finding.file : `${finding.file}:${finding.line}`
+/**
+ * A finding's comment as sent, led by its severity. A person's own comment
+ * goes as written: its severity is a default nobody chose.
+ */
+export function taggedComment(finding: Finding): string {
+  return finding.source === 'human' ? finding.comment : `${severityTag(finding.severity)} ${finding.comment}`
+}
 
-  return `${place} ${finding.comment}`
+/** How a finding reads in the review body: the severity, then its place, when it has one. */
+export function bodyLine(finding: Finding): string {
+  if (finding.file === undefined) return taggedComment(finding)
+  const place = finding.line === undefined ? finding.file : `${finding.file}:${finding.line}`
+  const tag = finding.source === 'human' ? '' : `${severityTag(finding.severity)} `
+
+  return `${tag}${place} ${finding.comment}`
 }
 
 const INLINE_ONLY_BODY = 'インラインコメントを参照してください。'
@@ -128,7 +137,7 @@ export function buildReviewPayload(
       path: finding.file as string,
       line: finding.line as number,
       side: 'RIGHT',
-      body: finding.comment,
+      body: taggedComment(finding),
     })),
   }
 }
