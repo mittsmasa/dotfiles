@@ -437,7 +437,7 @@ test('the session running the inbox refuses every subagent that is not its revie
   expect((await $.tool.call({ tool: 'Bash', command: 'ls' } as never)).deny).toBe(undefined)
 })
 
-test('a reviewer is pointed at the testable-design files and may read them, and no other skill file', async ($, on) => {
+test('a reviewer may read the testable-design files its prompt names, but no other skill file', async ($, on) => {
   const { clock, calls } = world(on, [review({ status: 'queued', findings: [], verdict: undefined })])
   await begin($, clock)
   const skill = '/Users/me/.agents/skills/testable-design'
