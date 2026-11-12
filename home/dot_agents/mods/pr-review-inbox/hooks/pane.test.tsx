@@ -650,15 +650,15 @@ test('APPROVE 送信後、その PR が一覧に出ない', async ($, on) => {
   await ui.unmount()
 })
 
-test('COMMENT 送信後は一覧に残る', async ($, on) => {
+test('COMMENT 送信後、その PR が一覧に出ない', async ($, on) => {
   const { clock } = world(on, [review({ findings: [finding({ severity: 'recommended' })] })])
   await begin($, clock)
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   await sendFrom(ui, clock, 'comment')
 
-  expect((await ui.find({ type: 'Text', text: /#12/ }))?.text).toBe('#12')
-  expect((await ui.find({ type: 'Text', text: /送信済み/ }))?.text).toMatch(/^送信済み/)
+  expect(await ui.find({ type: 'Text', text: /#12/ })).toBe(undefined)
+  expect(await ui.find({ type: 'Text', text: /レビュー待ちはありません/ })).toBeDefined()
   await ui.unmount()
 })
 
