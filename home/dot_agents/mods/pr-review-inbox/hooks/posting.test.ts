@@ -96,9 +96,41 @@ test('a finding on a line the diff shows goes inline, on the right side of the h
   const payload = buildReviewPayload(review(), LINES, 'COMMENT')
   expect(payload.commit_id).toBe(SHA)
   expect(payload.comments).toEqual([
-    { path: 'src/a.ts', line: 11, side: 'RIGHT', body: 'cleanup を足すのはどうでしょうか' },
+    { path: 'src/a.ts', line: 11, side: 'RIGHT', body: '[recommended] cleanup を足すのはどうでしょうか' },
   ])
   expect(payload.body?.includes('cleanup')).toBe(false)
+})
+
+test('an inline comment starts with its severity tag', async () => {
+  const blocker = review({ findings: [finding({ severity: 'blocker' })] })
+  const optional = review({ findings: [finding({ severity: 'suggestion' })] })
+
+  expect(buildReviewPayload(blocker, LINES, 'COMMENT').comments[0]?.body).toBe(
+    '[blocker] cleanup を足すのはどうでしょうか',
+  )
+  expect(buildReviewPayload(optional, LINES, 'COMMENT').comments[0]?.body).toBe(
+    '[suggestion] cleanup を足すのはどうでしょうか',
+  )
+})
+
+test('a comment in the body starts with its severity tag, then its place', async () => {
+  const off = review({
+    findings: [
+      finding({ id: 'f1', severity: 'blocker', line: 99, comment: '行が diff の外' }),
+      finding({ id: 'f2', severity: 'suggestion', file: undefined, line: undefined, comment: '全体の話' }),
+    ],
+  })
+
+  expect(buildReviewPayload(off, LINES, 'COMMENT').body).toBe('[blocker] src/a.ts:99 行が diff の外\n\n[suggestion] 全体の話')
+})
+
+test("a person's own comment is sent without a severity tag", async () => {
+  const placed = addHumanComment(review({ findings: [] }), { place: 'src/new.ts:2', body: 'ここ好きです' })
+  const off = addHumanComment(review({ findings: [] }), { place: 'src/a.ts:99', body: '外の行' })
+  if ('error' in placed || 'error' in off) throw new Error('expected both to be added')
+
+  expect(buildReviewPayload(placed.review, LINES, 'COMMENT').comments[0]?.body).toBe('ここ好きです')
+  expect(buildReviewPayload(off.review, LINES, 'COMMENT').body).toBe('src/a.ts:99 外の行')
 })
 
 test('a finding off the diff goes into the body with its place first', async () => {
@@ -112,7 +144,7 @@ test('a finding off the diff goes into the body with its place first', async () 
   const payload = buildReviewPayload(off, LINES, 'COMMENT')
   expect(payload.comments).toEqual([])
   expect(payload.body).toBe(
-    'src/a.ts:99 行が diff の外\n\nsrc/other.ts:1 ファイルが diff の外\n\nconstructor:1 名前が紛らわしいファイル',
+    '[recommended] src/a.ts:99 行が diff の外\n\n[recommended] src/other.ts:1 ファイルが diff の外\n\n[recommended] constructor:1 名前が紛らわしいファイル',
   )
 })
 
