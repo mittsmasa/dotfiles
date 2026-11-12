@@ -1,3 +1,4 @@
+import { type DependencyOptions, dependencyChecks } from './dependencies.ts';
 import type { Graph } from './graph.ts';
 import type { C1Candidate, C4Candidate, Candidates, FileRecord, Ir } from './ir.ts';
 
@@ -14,7 +15,7 @@ const DEFAULT_ENV_IGNORE = ['NODE_ENV'];
 /** C5 lists a pair of tests only when they share at least this many literals. */
 const MIN_SHARED_LITERALS = 2;
 
-export interface CheckOptions {
+export interface CheckOptions extends DependencyOptions {
   /** Environment variables left out of C3 `touches` and C6, besides `NODE_ENV`. */
   envIgnore?: readonly string[];
 }
@@ -86,7 +87,7 @@ const storyStem = (file: string): string => file.replace(/\.stories\.[cm]?[jt]sx
 const sourceStem = (file: string): string => file.replace(/\.[cm]?[jt]sx?$/, '');
 
 /**
- * Produces the candidates of checks C1 to C6.
+ * Produces the candidates of checks C1 to C8.
  *
  * These are candidates, not verdicts: an import shows that a test or story
  * touches a module, not which behavior it verifies.
@@ -226,7 +227,15 @@ export function runChecks(ir: Ir, graph: Graph, options: CheckOptions = {}): Can
         b.testFiles.length - a.testFiles.length || a.target.localeCompare(b.target),
     );
 
-  return { c1, c2, c3, c4, c5: sharedExpectations(), c6: sharedEnvironment() };
+  return {
+    c1,
+    c2,
+    c3,
+    c4,
+    c5: sharedExpectations(),
+    c6: sharedEnvironment(),
+    ...dependencyChecks(ir, options),
+  };
 
   /**
    * C5: test `direct` imports a module that test `indirect` reaches for real

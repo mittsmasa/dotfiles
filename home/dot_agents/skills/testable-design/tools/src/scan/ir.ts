@@ -158,4 +158,17 @@ export interface Candidates {
   c5: { direct: string; indirect: string; subjects: string[]; literals: string[] }[];
   /** Groups of 2 or more source files that read the same environment variables. */
   c6: { env: string[]; files: string[] }[];
+  /**
+   * Import cycles among source files: strongly connected components of 2 or
+   * more files, or a file importing itself. Edges are imports that run at load
+   * time (`import`, `reexport`; not type-only, `import()` or mocks) and point
+   * at `module`, so a cycle through a barrel is kept. `edges` lists the
+   * imports inside the component.
+   */
+  c7: { files: string[]; edges: [string, string][] }[];
+  /**
+   * Imports against an inferred layer order (`rule`: `layer <lower> -> <higher>`)
+   * or between different units of an `--isolate` glob (`rule`: `isolate <glob>`).
+   */
+  c8: { file: string; target: string; rule: string }[];
 }

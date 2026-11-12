@@ -3,7 +3,7 @@ import { excludeCandidates } from './exclude.ts';
 import type { Candidates } from './ir.ts';
 
 function candidates(partial: Partial<Candidates> = {}): Candidates {
-  return { c1: [], c2: [], c3: [], c4: [], c5: [], c6: [], ...partial };
+  return { c1: [], c2: [], c3: [], c4: [], c5: [], c6: [], c7: [], c8: [], ...partial };
 }
 
 describe('excludeCandidates', () => {
@@ -16,7 +16,7 @@ describe('excludeCandidates', () => {
     });
     expect(excludeCandidates(input, ['**/mocks/**'])).toEqual({
       candidates: candidates({ c1: [{ file: 'src/domains/score.ts', reach: 'none' }] }),
-      excluded: { c1: 1, c2: 0, c3: 0, c4: 0, c5: 0, c6: 0 },
+      excluded: { c1: 1, c2: 0, c3: 0, c4: 0, c5: 0, c6: 0, c7: 0, c8: 0 },
     });
   });
 
@@ -53,7 +53,7 @@ describe('excludeCandidates', () => {
       candidates: candidates({
         c3: [{ target: 'src/db/queries.ts', testFiles: ['src/mocks/b.test.ts'], touches: [], partial: [] }],
       }),
-      excluded: { c1: 0, c2: 0, c3: 1, c4: 0, c5: 0, c6: 0 },
+      excluded: { c1: 0, c2: 0, c3: 1, c4: 0, c5: 0, c6: 0, c7: 0, c8: 0 },
     });
   });
 
@@ -63,7 +63,7 @@ describe('excludeCandidates', () => {
     });
     expect(excludeCandidates(input, ['**/mock-guard/**'])).toEqual({
       candidates: candidates({ c4: [{ file: 'src/card/index.tsx' }] }),
-      excluded: { c1: 0, c2: 0, c3: 0, c4: 1, c5: 0, c6: 0 },
+      excluded: { c1: 0, c2: 0, c3: 0, c4: 1, c5: 0, c6: 0, c7: 0, c8: 0 },
     });
   });
 
@@ -87,7 +87,7 @@ describe('excludeCandidates', () => {
     });
     expect(excludeCandidates(input, [])).toEqual({
       candidates: input,
-      excluded: { c1: 0, c2: 0, c3: 0, c4: 0, c5: 0, c6: 0 },
+      excluded: { c1: 0, c2: 0, c3: 0, c4: 0, c5: 0, c6: 0, c7: 0, c8: 0 },
     });
   });
 
@@ -133,5 +133,31 @@ describe('excludeCandidates', () => {
       { env: ['API_KEY', 'API_URL'], files: ['src/a.ts', 'src/b.ts'] },
     ]);
     expect(result.excluded.c6).toBe(2);
+  });
+
+  it('drops a C7 cycle only when all its files match', () => {
+    const input = candidates({
+      c7: [
+        { files: ['src/mocks/a.ts', 'src/mocks/b.ts'], edges: [] },
+        { files: ['src/mocks/c.ts', 'src/form/d.ts'], edges: [] },
+      ],
+    });
+    const result = excludeCandidates(input, ['**/mocks/**']);
+    expect(result.candidates.c7.map((cycle) => cycle.files)).toEqual([
+      ['src/mocks/c.ts', 'src/form/d.ts'],
+    ]);
+    expect(result.excluded.c7).toBe(1);
+  });
+
+  it('removes C8 candidates by the importing file', () => {
+    const input = candidates({
+      c8: [
+        { file: 'src/mocks/a.ts', target: 'src/features/b.ts', rule: 'layer utils -> features' },
+        { file: 'src/utils/c.ts', target: 'src/features/d.ts', rule: 'layer utils -> features' },
+      ],
+    });
+    const result = excludeCandidates(input, ['**/mocks/**']);
+    expect(result.candidates.c8.map((candidate) => candidate.file)).toEqual(['src/utils/c.ts']);
+    expect(result.excluded.c8).toBe(1);
   });
 });

@@ -13,7 +13,8 @@ export type ExcludedCounts = Record<keyof Candidates, number>;
  * candidate, such as the test files that mock a module, are not matched.
  * C5 and C6 are about several files: a C5 pair loses the matching `subjects`
  * and a C6 group the matching `files`, and they are dropped when too few
- * remain.
+ * remain. A C7 cycle is dropped only when all its files match, since part of a
+ * cycle no longer reads as one. C8 is matched by the importing `file`.
  *
  * Exclusion only filters what is reported. The graph the candidates were
  * computed from still contains the excluded files.
@@ -35,6 +36,8 @@ export function excludeCandidates(
     c6: groupByFiles(
       candidates.c6.map((group) => ({ ...group, files: group.files.filter(keep) })),
     ),
+    c7: candidates.c7.filter((cycle) => cycle.files.some(keep)),
+    c8: candidates.c8.filter((candidate) => keep(candidate.file)),
   };
   return {
     candidates: kept,
@@ -45,6 +48,8 @@ export function excludeCandidates(
       c4: candidates.c4.length - kept.c4.length,
       c5: candidates.c5.length - kept.c5.length,
       c6: candidates.c6.length - kept.c6.length,
+      c7: candidates.c7.length - kept.c7.length,
+      c8: candidates.c8.length - kept.c8.length,
     },
   };
 }

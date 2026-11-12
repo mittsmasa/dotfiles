@@ -59,7 +59,7 @@ L2 の `<root>` と同じディレクトリから実行し、`<path>` には L2 
 ## L2: `testable-scan`
 
 ```bash
-node ~/.agents/skills/testable-design/tools/bin/testable-scan.ts <root> [paths...] --out <dir> [--exclude <glob>]... [--env-ignore <name>]...
+node ~/.agents/skills/testable-design/tools/bin/testable-scan.ts <root> [paths...] --out <dir> [--exclude <glob>]... [--env-ignore <name>]... [--isolate <glob>]...
 ```
 
 | 引数 | 意味 |
@@ -69,6 +69,7 @@ node ~/.agents/skills/testable-design/tools/bin/testable-scan.ts <root> [paths..
 | `--out <dir>` | 出力先。`ir.json` と `candidates.json` を書く。既定は SKILL.md の「呼び出したら最初に」で決めた場所（git リポジトリ内なら `.workflow/testable-scan/`、外なら `$TMPDIR/testable-scan/`）。L1 の `oxlint.json` と、対象を記録した `args` も同じ場所に置く。実行済みかどうかはこの場所で判定する |
 | `--exclude <glob>` | 一致するファイルを候補から除く。何度でも書ける。glob は `<root>` からの相対パスに当てる。シェルに展開させないよう引用符で囲む |
 | `--env-ignore <name>` | C3 の `touches` と C6 から外す環境変数。何度でも書ける。`NODE_ENV` は指定しなくても外す |
+| `--isolate <glob>` | C8 で、glob に一致する別々のディレクトリの間の import を報告する。何度でも書ける。例: `--isolate 'features/*'` で `features/a` から `features/b` への import を報告する。単位は、パスの先頭から glob のセグメント数ぶん（`features/a/hooks/x.ts` の単位は `features/a`）。プロジェクトの規約で feature 間の import を禁じているときに渡す |
 
 `<root>` は、対象を含む最も近い workspace のルート（`pnpm-workspace.yaml` か、`workspaces` を持つ `package.json` のあるディレクトリ）にする。リポジトリのルートとは限らない。例: `frontend/` の下に pnpm workspace があり、`frontend/apps/c0` を調べるなら、`<root>` は `frontend/`、`[paths...]` は `apps/c0`。出力のパスは `apps/c0/src/…` になる。パッケージごとの `tsconfig.json` の `paths` と `baseUrl`、workspace パッケージの `exports` を読んで import を解決する。
 
@@ -76,7 +77,7 @@ node ~/.agents/skills/testable-design/tools/bin/testable-scan.ts <root> [paths..
 
 ### `candidates.json` の読み方
 
-6 つのチェックの結果が入る。C3 は数えた事実、C1・C2・C4・C6 は候補、C5 は参考。import していることしか見えていないので、何を検証しているかは読んで確かめる。
+8 つのチェックの結果が入る。C3 と C7 は数えた事実、C1・C2・C4・C6・C8 は候補、C5 は参考。import していることしか見えていないので、何を検証しているかは読んで確かめる。
 
 | キー | 中身 | 読んだあとに確かめること |
 |---|---|---|
@@ -86,6 +87,8 @@ node ~/.agents/skills/testable-design/tools/bin/testable-scan.ts <root> [paths..
 | `c4` | コンポーネントのうち、どの story からもたどって届かないもの。Next.js のルートファイル（`page.tsx`、`layout.tsx` など）は除く。`siblingStory` は、同じディレクトリに同じ名前の story ファイルがあるのにこのコンポーネントを描いていないときの、その story。`serverActions` は、`'use server'` のファイルから値として import している名前 | `siblingStory` があれば、書いたつもりの story が対象を外していないかを先に見る。`serverActions` があれば、それが story にできない理由になっている。どちらも無ければ、見た目の回帰を守るものがあるか。story を持たない方針の層（画面単位のつなぎ込みなど）かどうかは、プロジェクトの規約で決める |
 | `c5` | テストの組のうち、一方（`direct`）が直接 import するモジュール（`subjects`）に、もう一方（`indirect`）がモックされずに別のモジュール経由で届き、両方が matcher の引数に同じ文字列リテラル（10 文字以上）を 2 個以上書いているもの。`literals` はその共有リテラル | 同じ出力を二つの層で確かめていないか。`indirect` 側で確かめたいのが結線だけなら、一つに減らせる。参考扱い: `test.each` の表や共有の定数に書いた期待値は拾えないので、出なくても重複が無い根拠にはしない |
 | `c6` | 同じ環境変数を読むソースファイル（テストと story を除く）を、読むファイルの組ごとにまとめたもの。2 ファイル以上のグループだけ。`NODE_ENV` と `--env-ignore` に渡したものは除く | 一つの外部サービスの知識（ベース URL、認証方式、エンドポイント）が複数ファイルに散っていないか。同じ設定を別プロセス（マイグレーション、設定ファイル）が読むだけなら、散らばりではないこともある。環境変数を一つのモジュール（zod で検証する `env.ts` など）に集めているプロジェクトでは何も出ない。そのときは、そのモジュールのメンバーをどのファイルが import しているかを `ir.json` で引く |
+| `c7` | ソースファイルの循環 import。強連結成分のうち 2 ファイル以上のもの、または自分自身を import するファイル。大きい順。`files` は成分のファイル、`edges` は成分の中の import（`[import する側, される側]`）。辺は読み込み時に走る import（`import` と `reexport`）だけで、型だけの import、`import()`、モックは数えない。辺の先は specifier が指すファイル（barrel なら barrel）なので、barrel を通る循環も出る | 循環が、一つの関心事を二つ以上のファイルに分けた結果か（同じ理由で変わるなら一つにまとめる）、共通の部品が上の層を呼んでいるのか（共通部を下に切り出す）。`edges` に barrel（`index.ts`）があり、barrel を通らない import に書き換えれば切れる循環は、初期化順の不具合（読み込み前の値を読む）の候補として先に見る |
+| `c8` | 依存の向きに逆らう import。`rule` は 2 種類。`layer <下> -> <上>`: 下の層から上の層への import。層はディレクトリ名から推定する（下から `types` `constants` / `lib` `utils` `api` / `hooks` / `components` / `features` / `pages` `app`。同じ区切りの中は同じ順位）。ファイルの層は、パスの先頭から見て最初に一致したディレクトリで決める（`features/chat/hooks/x.ts` は `features`）。そのディレクトリより前（`src/`、`apps/web/src/` など）が同じファイルの間だけを比べる。`isolate <glob>`: `--isolate` で渡した glob の、別々の単位の間の import | 推定した層がプロジェクトの規約と合っているかを先に確かめる。規約が別の向きを決めていれば規約で読み替え、合わない候補は捨てる。合っていれば、下の層が上の層の何を使っているか（定数、フック、コンポーネント）を読み、下に移すか、引数や props で受け取る形にできないかを考える。`isolate` は、一つの要望の変更が複数の feature に散らばっていないかの候補。共有すべきものなら共通の層に移す |
 
 候補が多いときは、今回の変更に関係するファイルに絞って読む。依頼の範囲外で見つけた崩れは直さず、報告に一文で書く。
 
@@ -158,6 +161,8 @@ jq -r --arg dir 'src/features/cart' '
 - `vi.doMock` はホイストされず、呼んだ後の動的 import にだけ効く。`vi.mock` と同じに扱うので、テストの途中まで本物が走る場合を見落とす
 - 解決するのは、相対パス、最も近い `tsconfig.json` の `paths` と `baseUrl`、workspace パッケージの `exports`。試す順は TypeScript と同じで、`paths`、`baseUrl` 相対、パッケージの順。`paths` の置換先は、`baseUrl` があれば `baseUrl` から、無ければ tsconfig のディレクトリから引く
 - `baseUrl` 相対（`utils/format` を `<baseUrl>/utils/format` と読む）は、ファイルが実在するときだけ採用する。実在すれば、`package.json` に載っている同名のパッケージより優先する。実在しなければ、パッケージの判定に進む
+- C7 と C8 は、ソースファイル（テストと story を除く）の間の import だけを見る。型だけの import は数えない。C7 は `import()` も数えない（呼んだときに読み込まれ、初期化の順序に関わらないため）。C8 は `import()` を数える
+- C8 の層は、ディレクトリ名からの推定で、プロジェクトの規約を読まない。表に無い名前（`shared`、`domain`、`entities` など）のディレクトリは層を持たず、検査しない。表の名前に一致しない barrel（ルート直下の `index.ts` など）を経由した下から上への import は、辺の先が barrel になるので報告されない
 - `package.json` の `imports` は扱わない。tsconfig の `extends` は辿らないので、継承元にだけ書かれた `paths` と `baseUrl` は効かない。絶対パスの `baseUrl` は無視する。`tsconfig.json` 以外の名前（`tsconfig.app.json` など）は読まない
 - `paths` に複数のパターンが一致するとき、TypeScript は接頭辞の最も長いパターンを選ぶが、このツールは書かれた順で最初のパターンを選ぶ。`paths` のパターンに一致して置換先にファイルが無いと、`baseUrl` もパッケージも試さず `unresolved` にする
 - Oxlint の JS plugin が読めるファイルだけが対象。`.mdx` や `.vue` からの import は見えない。MDX からだけ使われるコンポーネントは、C4 に出る

@@ -446,3 +446,129 @@ describe('C6: source files that read the same environment variables', () => {
     expect(c6).toEqual([]);
   });
 });
+
+const imports = (...records: RawImport[]): FileFacts => logic('run', { imports: records });
+
+describe('C7: import cycles among source files', () => {
+  it('lists two files that import each other, with the edges inside the cycle', () => {
+    const { c7 } = check({
+      'a.ts': imports(uses('./b', 'b')),
+      'b.ts': imports(uses('./a', 'a')),
+      'c.ts': imports(uses('./a', 'a')),
+    });
+    expect(c7).toEqual([{ files: ['a.ts', 'b.ts'], edges: [['a.ts', 'b.ts'], ['b.ts', 'a.ts']] }]);
+  });
+
+  it('lists a file that imports itself', () => {
+    const { c7 } = check({ 'a.ts': imports(uses('./a', 'a')) });
+    expect(c7).toEqual([{ files: ['a.ts'], edges: [['a.ts', 'a.ts']] }]);
+  });
+
+  it('keeps a cycle through a barrel even when the name is defined past it', () => {
+    const { c7 } = check({
+      'form/Field.tsx': imports(uses('./index', 'MAX')),
+      'form/index.ts': facts({ imports: [reexports('./Field'), reexports('./constants')] }),
+      'form/constants.ts': facts({ exports: [{ name: 'MAX', kind: 'value' }] }),
+    });
+    expect(c7).toEqual([
+      {
+        files: ['form/Field.tsx', 'form/index.ts'],
+        edges: [
+          ['form/Field.tsx', 'form/index.ts'],
+          ['form/index.ts', 'form/Field.tsx'],
+        ],
+      },
+    ]);
+  });
+
+  it('does not count type-only imports, dynamic imports or test files', () => {
+    const { c7 } = check({
+      'a.ts': imports(uses('./b', 'b')),
+      'b.ts': imports(uses('./a', 'A', { typeOnly: true }), uses('./a', '*', { via: 'dynamic' })),
+      'b.test.ts': test(uses('./b', 'b')),
+      'c.ts': imports(uses('./b.test', 'x')),
+    });
+    expect(c7).toEqual([]);
+  });
+
+  it('orders larger cycles first', () => {
+    const { c7 } = check({
+      'x.ts': imports(uses('./y', 'y')),
+      'y.ts': imports(uses('./x', 'x')),
+      'a.ts': imports(uses('./b', 'b')),
+      'b.ts': imports(uses('./c', 'c')),
+      'c.ts': imports(uses('./a', 'a')),
+    });
+    expect(c7.map((cycle) => cycle.files)).toEqual([
+      ['a.ts', 'b.ts', 'c.ts'],
+      ['x.ts', 'y.ts'],
+    ]);
+  });
+});
+
+describe('C8: imports against the layer order or across isolated units', () => {
+  it('reports an import from a lower layer to a higher one', () => {
+    const { c8 } = check({
+      'utils/a.ts': imports(uses('../features/b', 'b')),
+      'features/b.ts': logic('b'),
+    });
+    expect(c8).toEqual([
+      { file: 'utils/a.ts', target: 'features/b.ts', rule: 'layer utils -> features' },
+    ]);
+  });
+
+  it('takes the first layer directory on the path, so a nested hook belongs to features', () => {
+    const { c8 } = check({
+      'features/chat/hooks/x.ts': imports(uses('../../../components/y', 'Y')),
+      'components/y.tsx': component('Y'),
+    });
+    expect(c8).toEqual([]);
+  });
+
+  it('does not report the same rank, directories outside the table, or type-only imports', () => {
+    const { c8 } = check({
+      'lib/a.ts': imports(uses('../utils/b', 'b')),
+      'utils/b.ts': imports(uses('../features/c', 'C', { typeOnly: true })),
+      'scripts/d.ts': imports(uses('../features/c', 'c')),
+      'features/c.ts': logic('c'),
+    });
+    expect(c8).toEqual([]);
+  });
+
+  it('compares files only under the same base path', () => {
+    const { c8 } = check({
+      'apps/a/src/utils/u.ts': imports(uses('../../../b/src/features/f', 'f')),
+      'apps/b/src/features/f.ts': logic('f'),
+      'apps/b/src/utils/v.ts': imports(uses('../features/f', 'f')),
+    });
+    expect(c8).toEqual([
+      {
+        file: 'apps/b/src/utils/v.ts',
+        target: 'apps/b/src/features/f.ts',
+        rule: 'layer utils -> features',
+      },
+    ]);
+  });
+
+  it('counts a dynamic import as a dependency', () => {
+    const { c8 } = check({
+      'components/a.tsx': imports(uses('../pages/b', '*', { via: 'dynamic' })),
+      'pages/b.tsx': component('B'),
+    });
+    expect(c8).toEqual([
+      { file: 'components/a.tsx', target: 'pages/b.tsx', rule: 'layer components -> pages' },
+    ]);
+  });
+
+  it('reports imports between different units of an isolate glob, including nested files', () => {
+    const files = {
+      'features/a/hooks/x.ts': imports(uses('../../b/y', 'y'), uses('../z', 'z')),
+      'features/a/z.ts': logic('z'),
+      'features/b/y.ts': logic('y'),
+    };
+    expect(check(files).c8).toEqual([]);
+    expect(check(files, { isolate: ['features/*'] }).c8).toEqual([
+      { file: 'features/a/hooks/x.ts', target: 'features/b/y.ts', rule: 'isolate features/*' },
+    ]);
+  });
+});
