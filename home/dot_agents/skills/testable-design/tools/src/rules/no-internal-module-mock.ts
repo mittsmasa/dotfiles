@@ -1,4 +1,4 @@
-import { isViMockCall, mockSpecifier } from '../ast.ts';
+import { isInternalSpecifier, isViMockCall, mockSpecifier } from '../ast.ts';
 import type { Rule } from '../types.ts';
 
 interface Options {
@@ -37,10 +37,7 @@ const rule: Rule = {
         if (!isViMockCall(node)) return;
         const specifier = mockSpecifier(node);
         if (specifier === null || allowed.has(specifier)) return;
-        const internal =
-          specifier.startsWith('.') ||
-          aliases.some((alias) => specifier.startsWith(alias));
-        if (internal) {
+        if (isInternalSpecifier(specifier, aliases)) {
           context.report({
             node: node.arguments[0],
             messageId: 'internal',
