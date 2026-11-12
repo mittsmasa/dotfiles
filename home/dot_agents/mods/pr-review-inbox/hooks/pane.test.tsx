@@ -521,6 +521,156 @@ test('sending a review leaves a note beside its result', async ($, on) => {
   await pane.unmount()
 })
 
+// ---- sending takes an approved review off the list ----
+
+/** Selects the review, presses one send control, and sends what the confirm screen shows. */
+async function sendFrom(ui: Awaited<ReturnType<Engine['ui']['mount']>>, clock: { settle: () => Promise<void> }, control: string) {
+  await ui.press({ key: `row:${KEY}` })
+  await clock.settle()
+  await ui.press({ key: control })
+  await clock.settle()
+  await ui.press({ key: 'send' })
+  await clock.settle()
+}
+
+test('APPROVE 送信後、その PR が一覧に出ない', async ($, on) => {
+  const { clock } = world(on, [review({ findings: [finding({ severity: 'recommended' })], body: '本文です' })])
+  await begin($, clock)
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await sendFrom(ui, clock, 'approve')
+
+  expect(await ui.find({ type: 'Text', text: /#12/ })).toBe(undefined)
+  // The selection went with it: no detail is drawn.
+  expect(await ui.find({ key: 'body' })).toBe(undefined)
+  expect(await ui.find({ type: 'Text', text: /^概要$/ })).toBe(undefined)
+  expect(await ui.find({ type: 'Text', text: /レビュー待ちはありません/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('COMMENT 送信後は一覧に残る', async ($, on) => {
+  const { clock } = world(on, [review({ findings: [finding({ severity: 'recommended' })] })])
+  await begin($, clock)
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await sendFrom(ui, clock, 'comment')
+
+  expect((await ui.find({ type: 'Text', text: /#12/ }))?.text).toBe('#12')
+  expect((await ui.find({ type: 'Text', text: /送信済み/ }))?.text).toMatch(/^送信済み/)
+  await ui.unmount()
+})
+
+// ---- what the selected review shows ----
+
+const OTHER = 'acme/widgets#13'
+const lines = (count: number) => Array.from({ length: count }, (_, index) => `行 ${index + 1}`).join('\n')
+
+test('選択行の Box に borderStyle があり、未選択行には無い', async ($, on) => {
+  const { clock } = world(on, [review(), review({ key: OTHER, url: 'https://github.com/acme/widgets/pull/13' })])
+  await begin($, clock)
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect((await ui.find({ key: `row-box:${KEY}` }))?.props.borderStyle).toBe(undefined)
+  await ui.press({ key: `row:${KEY}` })
+  await clock.settle()
+
+  expect((await ui.find({ key: `row-box:${KEY}` }))?.props.borderStyle).toBe('round')
+  expect((await ui.find({ key: `row-box:${OTHER}` }))?.props.borderStyle).toBe(undefined)
+  await ui.unmount()
+})
+
+test('選択時に概要 Markdown が出る', async ($, on) => {
+  const { clock } = world(on, [review({ body: '## 背景\n絞り込みが欲しいという要望' })])
+  await begin($, clock)
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect(await ui.find({ key: 'body' })).toBe(undefined)
+  await ui.press({ key: `row:${KEY}` })
+  await clock.settle()
+
+  const body = await ui.find({ key: 'body' })
+  expect(body?.type).toBe('Markdown')
+  expect(body?.props.text).toBe('## 背景\n絞り込みが欲しいという要望')
+  expect(await ui.find({ key: 'more-body' })).toBe(undefined)
+  await ui.unmount()
+})
+
+test('13 行の本文で『続きを表示』が出て、押すと全文が出る', async ($, on) => {
+  const { clock } = world(on, [review({ body: lines(13) })])
+  await begin($, clock)
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: `row:${KEY}` })
+  await clock.settle()
+  expect((await ui.find({ key: 'body' }))?.props.text).toBe(lines(12))
+
+  await ui.press({ key: 'more-body' })
+  await clock.settle()
+  expect((await ui.find({ key: 'body' }))?.props.text).toBe(lines(13))
+  expect(await ui.find({ key: 'more-body' })).toBe(undefined)
+  await ui.unmount()
+})
+
+test('展開後に別の PR を選ぶと折りたたみに戻る', async ($, on) => {
+  const { clock } = world(on, [
+    review({ body: lines(13) }),
+    review({ key: OTHER, url: 'https://github.com/acme/widgets/pull/13', body: lines(20) }),
+  ])
+  await begin($, clock)
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: `row:${KEY}` })
+  await clock.settle()
+  await ui.press({ key: 'more-body' })
+  await clock.settle()
+  await ui.press({ key: `row:${OTHER}` })
+  await clock.settle()
+
+  expect((await ui.find({ key: 'body' }))?.props.text).toBe(lines(12))
+  expect(await ui.find({ key: 'more-body' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('body が無い PR で『本文なし』が出る', async ($, on) => {
+  const { clock } = world(on, [review()])
+  await begin($, clock)
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: `row:${KEY}` })
+  await clock.settle()
+
+  expect(await ui.find({ key: 'body' })).toBe(undefined)
+  expect((await ui.find({ type: 'Text', text: /本文なし/ }))?.text).toBe('本文なし')
+  await ui.unmount()
+})
+
+test('指摘行のタグに blocker 等の severity が出る', async ($, on) => {
+  const { clock } = world(on, [review()])
+  await begin($, clock)
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: `row:${KEY}` })
+  await clock.settle()
+
+  expect((await ui.find({ type: 'Text', text: /^blocker/ }))?.text).toBe('blocker · R-1')
+  await ui.unmount()
+})
+
+test('人間が見る観点の各行が ・ で始まる', async ($, on) => {
+  const { clock } = world(on, [review()])
+  await begin($, clock)
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: `row:${KEY}` })
+  await clock.settle()
+  await ui.press({ key: 'more-points' })
+  await clock.settle()
+
+  const points = await ui.findAll({ type: 'Text', text: /観点 \d/ })
+  expect(points.map(one => one.text)).toEqual(['・ 観点 1', '・ 観点 2', '・ 観点 3'])
+  await ui.unmount()
+})
+
 // ---- the config file ----
 
 test('with no config file, nothing is fetched and the pane says where to set one', async ($, on) => {
