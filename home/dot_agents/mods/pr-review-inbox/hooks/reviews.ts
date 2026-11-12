@@ -713,6 +713,47 @@ export const COMMENT_STYLE = [
   '- 避ける例: 「null チェックがありません。早期 return を追加してください」',
 ].join('\n')
 
+/** The testable-design files a reviewer may read, relative to the skill, in reading order. */
+export const SKILL_FILES = [
+  'SKILL.md',
+  'references/separation-of-concerns.md',
+  'references/test-quality.md',
+  'references/mechanical-checks.md',
+] as const
+
+/**
+ * How to use the testable-design files. Section names are pointed at, not
+ * copied, so checks the skill adds later (c7 and on, new rules) reach the
+ * reviewer without a change here.
+ */
+function testableDesignGuide(skillFiles: readonly string[]): string {
+  if (skillFiles.length === 0) return 'No testable-design files: judge by separation of concerns and test quality.'
+
+  return [
+    'testable-design: the viewpoints to judge separation of concerns and test quality by. Read these files, in this order:',
+    ...skillFiles.map(file => `- ${file}`),
+    'Read only these; skip other files they link to (frontend-testing.md, sources.md, tools/), which you cannot open.',
+    'In SKILL.md, the section 「レビューするとき」 is the order to apply. separation-of-concerns.md 「観点」 numbers the',
+    'viewpoints 1 to 8; test-quality.md 「レビューの出し方」 is the order for tests.',
+    'mechanical-checks.md tells what the mechanical check output means: the table under 「L1: Oxlint のルール」 for',
+    'each rule in oxlint.json, and the table under 「`candidates.json` の読み方」 for each key (c1, c2, ...) of',
+    'candidates.json. The checks were already run: run no command from these files.',
+  ].join('\n')
+}
+
+/** What a finding from testable-design must carry. */
+const TESTABLE_FINDING = [
+  'A finding with source "testable-design":',
+  '- reason starts with the viewpoint in brackets, as 「[関心の分離 観点 3] 」 or 「[テスト品質: 実装詳細への結合] 」',
+  '- comment names the concrete case that breaks: whose change request, and what changes or breaks with it',
+  '  (「管理画面だけ email を出したい要望で showEmail を足すと、生徒画面の表示条件も一緒に変わります」),',
+  '  or for a test, which refactor fails it while behaviour stays the same. Say it in plain words: the author',
+  '  does not know the viewpoint numbers, so leave them out of comment',
+  '- no finding on a viewpoint name alone, or on line or file counts alone',
+  '- a problem this change did not make worse goes under humanReview as an existing one, not as a finding',
+  'A criteria finding that also meets a testable-design viewpoint may carry the viewpoint the same way.',
+].join('\n')
+
 export function reviewerPrompt(input: {
   key: string
   headSha: string
@@ -720,6 +761,8 @@ export function reviewerPrompt(input: {
   diffPath: string
   scanDir?: string
   criteriaPath?: string
+  /** Real paths of the testable-design files, in reading order. */
+  skillFiles?: readonly string[]
   resultPath: string
   files: readonly string[]
 }): string {
