@@ -401,7 +401,7 @@ export const register: Register = (on, options) => {
                 key="deep-dive"
                 plain
                 label="深掘りする"
-                onPress={() => void $.prompt.fill({ text: deepDivePrompt(review.url), mode: 'replace' })}
+                onPress={press => void deepDive($, review.url, press.surface)}
               />
             )}
             <Button key="read" plain label="既読" onPress={() => void markRead($, review.key)} />
