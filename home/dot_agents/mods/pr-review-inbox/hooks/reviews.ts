@@ -775,8 +775,8 @@ export function reviewerPrompt(input: {
         isUnsure: false,
         file: 'path relative to the repository root',
         line: 1,
-        reason: 'なぜ問題か、1〜2 文',
-        comment: 'PR に書くコメントの下書き、1〜3 文。何が問題かと直し方',
+        reason: 'なぜ問題か、1〜2 文。testable-design なら先頭に [観点]',
+        comment: 'PR に書くコメントの下書き、1〜3 文。何が問題かと直し方。testable-design なら壊れる具体シナリオ',
         source: 'criteria | testable-design',
         criteriaId: 'A-1 (only with a criteria file)',
       },
@@ -790,11 +790,17 @@ export function reviewerPrompt(input: {
     `Checkout (read only): ${input.worktree}`,
     `Diff against the base branch: ${input.diffPath}`,
     input.scanDir
-      ? `Mechanical check output (candidates, not findings; read the files before judging): ${input.scanDir}`
+      ? [
+          `Mechanical check output: ${input.scanDir} (oxlint.json, candidates.json, ir.json).`,
+          'These are candidates that narrow what to read, not findings: read the flagged files and judge them by',
+          'the testable-design viewpoints. Look at candidates touching the changed files; never cite the output alone.',
+        ].join('\n')
       : 'No mechanical check output for this pull request.',
     input.criteriaPath
-      ? `Review criteria to follow strictly, read it first: ${input.criteriaPath}`
-      : 'No project criteria file: judge by separation of concerns and test quality.',
+      ? `Review criteria to follow strictly, read it first; where it differs from testable-design, it wins: ${input.criteriaPath}`
+      : 'No project criteria file.',
+    testableDesignGuide(input.skillFiles ?? []),
+    TESTABLE_FINDING,
     `Changed files:\n${input.files.slice(0, 200).map(file => `- ${file}`).join('\n')}`,
     'severity: blocker = must fix before merge; recommended = better fixed; suggestion = optional.',
     'Set isUnsure to true when the finding depends on a spec you cannot see.',
