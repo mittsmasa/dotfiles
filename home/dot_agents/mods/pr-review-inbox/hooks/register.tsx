@@ -416,7 +416,7 @@ export const register: Register = (on, options) => {
           flexDirection="row"
           gap="sm"
           marginTop="sm"
-          {...(false ? { borderStyle: 'round', borderColor: 'suggestion', paddingRight: 'sm' } : {})}
+          {...(isSelected ? { borderStyle: 'round', borderColor: 'suggestion', paddingRight: 'sm' } : {})}
         >
           {bar(tone)}
           <Box flexDirection="column" flexGrow={1}>
