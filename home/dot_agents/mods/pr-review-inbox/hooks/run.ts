@@ -537,11 +537,18 @@ async function startReview($: EngineInterface, config: Config, review: Review) {
     const repoReal = await realPath($, repo)
     const criteriaReal = criteria ? await realPath($, `${repo}/${criteria}`) : undefined
     const criteriaPath = repoReal && criteriaReal ? criteriaRoot(repoReal, criteriaReal) : undefined
+    // The skill's viewpoints, opened file by file: the reviewer cannot load a skill.
+    const skillFiles: string[] = []
+    for (const file of SKILL_FILES) {
+      const real = await realPath($, `${config.home}/.agents/skills/testable-design/${file}`)
+      if (real) skillFiles.push(real)
+    }
     const allowedRoots = [
       worktreeReal,
       await realPath($, scanDir),
       await realPath($, diffPath),
       criteriaPath,
+      ...skillFiles,
     ].flatMap(one => one ?? [])
 
     const started = await $.agent.spawn({
