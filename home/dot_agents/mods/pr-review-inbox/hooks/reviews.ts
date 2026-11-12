@@ -196,13 +196,15 @@ function toFetched(
     if (!view || view.exitCode !== 0) return undefined
     const detail = parseJson(view.stdout)
     if (!isRecord(detail)) return undefined
-    const { headRefOid, baseRefName, files } = detail
+    const { headRefOid, baseRefName, files, body } = detail
     if (typeof headRefOid !== 'string' || typeof baseRefName !== 'string') return undefined
     if (!/^[0-9a-f]{40}$/.test(headRefOid) || !/^[\w./-]+$/.test(baseRefName)) return undefined
     fetched.push({
       key,
       title: typeof row.title === 'string' ? row.title : '',
       url: typeof row.url === 'string' ? row.url : '',
+      // A missing description is no failed fetch.
+      body: typeof body === 'string' ? toBodyMarkdown(body) : undefined,
       headSha: headRefOid,
       baseRefName,
       files: Array.isArray(files)
@@ -224,7 +226,7 @@ export function selectQueued(fetched: readonly Fetched[], stored: readonly Revie
   const next = fetched.map((one): Review => {
     const existing = stored.find(review => review.key === one.key)
     if (existing?.status === 'reviewing') return existing
-    if (existing && existing.headSha === one.headSha) return { ...existing, title: one.title }
+    if (existing && existing.headSha === one.headSha) return { ...existing, title: one.title, body: one.body }
 
     return {
       ...one,
@@ -495,6 +497,9 @@ export function statusLabel(review: Review): string {
 /** Theme colour names, so a row reads the same in light and dark. */
 export type Tone = 'error' | 'warning' | 'subtle' | 'success' | 'inactive'
 
+/** How a severity is written on a comment and a finding's tags. */
+export const severityTag = (severity: Severity) => `[${severity}]`
+
 export const SEVERITY_TONE: Readonly<Record<Severity, Tone>> = {
   blocker: 'error',
   recommended: 'warning',
@@ -611,6 +616,18 @@ export const REVIEWER_SYSTEM = [
   'Write reason, comment, humanReview and skipped in Japanese.',
 ].join('\n')
 
+/** How `comment` is written: a colleague's suggestion, not a verdict. */
+export const COMMENT_STYLE = [
+  'comment は PR の作者に向けたレビューコメントの下書き。次の書き方で書く:',
+  '- 1〜3 文。何が問題かを先に書く',
+  '- 断定や命令を避け、相談形で書く（「〜はどうでしょうか」「〜とよさそうです」「〜かもです」）',
+  '- 理由を「〜なので」で添える',
+  '- 丁寧語どまり。「〜すべき」「〜してください」「〜は問題です」のような言い切りは使わない',
+  '- suggestion は「細かいですが」で始めるか、末尾に「（対応不要です」を付ける',
+  '- 良い例: 「ここ user が null のとき落ちるかもです。早期 return を入れるのはどうでしょうか」',
+  '- 避ける例: 「null チェックがありません。早期 return を追加してください」',
+].join('\n')
+
 export function reviewerPrompt(input: {
   key: string
   headSha: string
@@ -653,6 +670,7 @@ export function reviewerPrompt(input: {
     `Changed files:\n${input.files.slice(0, 200).map(file => `- ${file}`).join('\n')}`,
     'severity: blocker = must fix before merge; recommended = better fixed; suggestion = optional.',
     'Set isUnsure to true when the finding depends on a spec you cannot see.',
+    COMMENT_STYLE,
     `Write the result as JSON to exactly this path and nowhere else: ${input.resultPath}`,
     'If that write is refused, do not try another path: end with the same JSON in a ```json block.',
     `The JSON has this shape:\n${JSON.stringify(shape, null, 2)}`,
