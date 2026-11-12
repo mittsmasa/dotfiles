@@ -97,12 +97,63 @@ export function viewArgs(key: string): string[] | undefined {
 
   return [
     'gh', 'pr', 'view', String(parsed.number), '-R', parsed.fullName,
-    '--json', 'headRefOid,baseRefName,files',
+    '--json', 'headRefOid,baseRefName,files,body',
   ]
 }
 
+// ---- a pull request's description, drawn as markdown ----
+
+const ENTITY_OF: Readonly<Record<string, string>> = { colon: ':', tab: '\t', newline: '\n', amp: '&' }
+
+/** Numeric and the few named character references a link destination may hide a scheme behind. */
+function decodeEntities(text: string): string {
+  return text.replace(/&(?:#(\d+)|#[xX]([0-9a-fA-F]+)|(\w+));/g, (whole, dec, hex, name) => {
+    if (dec !== undefined || hex !== undefined) {
+      const code = dec !== undefined ? Number(dec) : Number.parseInt(hex, 16)
+
+      return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : whole
+    }
+
+    return ENTITY_OF[String(name).toLowerCase()] ?? whole
+  })
+}
+
+/** `f`, or that letter as a character reference or a backslash escape. */
+function anyForm(char: string): string {
+  const code = char.charCodeAt(0)
+
+  return `(?:${char}|&#0*${code};|&#[xX]0*${code.toString(16)};|\\\\${char})`
+}
+
+// `file:` however it is written: any case, letters as references, the colon too.
+const FILE_SCHEME = new RegExp(
+  `${[...'file'].map(anyForm).join('')}\\s*(?::|&#0*58;|&#[xX]0*3[aA];|&colon;|\\\\:)`,
+  'gi',
+)
+
+const isWebUrl = (url: string) => /^https?:/i.test(url.replace(/^[\s\u0000-\u001f]+/, ''))
+
+/**
+ * A pull request's description, made safe to hand to `Markdown`: no control
+ * character the element refuses, and no link a press would open on this machine.
+ * The renderer links only http, https and file; file is what is taken out, in
+ * every way markdown or HTML can spell it.
+ */
+export function toBodyMarkdown(raw: string): string {
+  const clean = raw.replace(/\r/g, '').replace(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/g, '')
+  // An HTML anchor whose href is not a web address loses the href.
+  const anchors = clean.replace(/<a\b[^>]*>/gi, tag =>
+    tag.replace(/\s+href\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, (attr, value: string) =>
+      isWebUrl(decodeEntities(value.replace(/^["']|["']$/g, ''))) ? attr : '',
+    ),
+  )
+
+  // `file∶` (a ratio sign, not a colon) reads the same and is no scheme.
+  return anchors.replace(FILE_SCHEME, 'file∶')
+}
+
 type CommandOutput = { exitCode: number; stdout: string }
-type Fetched = Pick<Review, 'key' | 'title' | 'url' | 'headSha' | 'baseRefName' | 'files'>
+type Fetched = Pick<Review, 'key' | 'title' | 'url' | 'body' | 'headSha' | 'baseRefName' | 'files'>
 
 function parseJson(text: string): unknown {
   try {
