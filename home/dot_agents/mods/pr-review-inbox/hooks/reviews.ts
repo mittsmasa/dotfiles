@@ -743,6 +743,7 @@ function testableDesignGuide(skillFiles: readonly string[]): string {
 
 /** What a finding from testable-design must carry. */
 const TESTABLE_FINDING = [
+  'Every finding sets source: "criteria" only when it follows the criteria file, "testable-design" otherwise.',
   'A finding with source "testable-design":',
   '- reason starts with the viewpoint in brackets, as 「[関心の分離 観点 3] 」 or 「[テスト品質: 実装詳細への結合] 」',
   '- comment names the concrete case that breaks: whose change request, and what changes or breaks with it',
