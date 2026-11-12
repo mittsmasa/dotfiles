@@ -186,8 +186,19 @@ export function select($: EngineInterface, key: string | undefined) {
   return mutate($, state =>
     isSending
       ? state
-      : { ...state, selectedKey: key, mode: undefined, openFindingId: undefined, isHumanReviewOpen: false },
+      : {
+          ...state,
+          selectedKey: key,
+          mode: undefined,
+          openFindingId: undefined,
+          isHumanReviewOpen: false,
+          isBodyOpen: false,
+        },
   )
+}
+
+export function showBody($: EngineInterface) {
+  return mutate($, state => ({ ...state, isBodyOpen: true }))
 }
 
 /** Opens one finding of the selected review, closing the one that was open. */
@@ -673,9 +684,17 @@ export async function send($: EngineInterface, config: Config, key: string) {
   } finally {
     isSending = false
   }
+  // An approval leaves nothing to do: it leaves the list at once.
+  const isDone = error === undefined && payload.event === 'APPROVE'
   await mutate($, state => ({
     ...state,
     mode: error === undefined ? undefined : { kind: 'confirm', payload, error },
+    ...(isDone
+      ? {
+          selectedKey: undefined,
+          reviews: state.reviews.map(one => (one.key === key ? { ...one, isRead: true } : one)),
+        }
+      : {}),
   }))
 }
 
