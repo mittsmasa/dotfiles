@@ -250,6 +250,7 @@ test('a session that only loaded the mod does nothing', async ($, on) => {
 
   const band = await $.ui.mount(BAND)
   expect(await band.find({ key: 'open-pane' })).toBe(undefined)
+  expect(await band.find({ type: 'Text', text: 'engine' })).toBeDefined()
   await band.unmount()
 })
 
@@ -313,6 +314,7 @@ test('a session stops by itself once another has taken the inbox', async ($, on)
   await pane.unmount()
   const band = await $.ui.mount(BAND)
   expect(await band.find({ key: 'open-pane' })).toBe(undefined)
+  expect(await band.find({ type: 'Text', text: 'engine' })).toBeDefined()
   await band.unmount()
 })
 
