@@ -54,6 +54,8 @@ const TITLE = 'PR レビュー'
 // The left edge of a row: its colour alone says how heavy the row is.
 const EDGE = '▍'
 const HUMAN_REVIEW_SHOWN = 2
+// A description longer than this many lines is folded until asked for.
+const BODY_SHOWN_LINES = 12
 
 export const register: Register = (on, options) => {
   let config: Config | undefined
@@ -135,7 +137,7 @@ export const register: Register = (on, options) => {
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    const { Box, Text, Button, Link, Input } = $.ui.resolve(e)
+    const { Box, Text, Button, Link, Input, Markdown } = $.ui.resolve(e)
     const state = await read($, inboxAtom)
     const ready = config
     if (!ready || !(await read($, activeAtom))) {
@@ -150,6 +152,9 @@ export const register: Register = (on, options) => {
     const selected = visible.find(review => review.key === state.selectedKey)
     const mode = selected ? state.mode : undefined
     const isOpen = isDue(new Date(await $.clock.now()), offset)
+
+    // The left edge of a block: one cell wide, as tall as what stands beside it.
+    const bar = (color: string) => <Box width={1} flexShrink={0} backgroundColor={color} />
 
     const heading = (text: string) => (
       <Box marginTop="md">
@@ -206,6 +211,7 @@ export const register: Register = (on, options) => {
       const isShown = state.openFindingId === one.id
       const isEditing = isEditable && mode?.kind === 'edit' && mode.id === one.id
       const tags = [
+        one.source === 'human' ? undefined : one.severity,
         one.criteriaId,
         one.isUnsure ? '要確認' : undefined,
         one.source === 'human' ? '自分' : undefined,
@@ -214,7 +220,7 @@ export const register: Register = (on, options) => {
 
       return (
         <Box flexDirection="row" gap="sm" marginTop="sm">
-          <Text color={one.isAdopted ? SEVERITY_TONE[one.severity] : 'inactive'}>{EDGE}</Text>
+          {bar(one.isAdopted ? SEVERITY_TONE[one.severity] : 'inactive')}
           <Box flexDirection="column" flexGrow={1}>
             <Box flexDirection="row" justifyContent="space-between" gap="sm">
               <Button key={`open:${one.id}`} plain onPress={() => void openFinding($, one.id)}>
@@ -282,9 +288,23 @@ export const register: Register = (on, options) => {
       const total = review.findings.length
       const points = state.isHumanReviewOpen ? review.humanReview : review.humanReview.slice(0, HUMAN_REVIEW_SHOWN)
       const hidden = review.humanReview.length - points.length
+      const bodyLines = (review.body ?? '').trim() === '' ? [] : (review.body as string).split('\n')
+      const isBodyFolded = !state.isBodyOpen && bodyLines.length > BODY_SHOWN_LINES
 
       return (
         <Box flexDirection="column">
+          {heading('概要')}
+          {bodyLines.length === 0 ? (
+            <Text dimColor>本文なし</Text>
+          ) : (
+            <Markdown
+              key="body"
+              text={isBodyFolded ? bodyLines.slice(0, BODY_SHOWN_LINES).join('\n') : bodyLines.join('\n')}
+            />
+          )}
+          {isBodyFolded && (
+            <Button key="more-body" plain label="続きを表示" onPress={() => void showBody($)} />
+          )}
           {review.status === 'done' &&
             heading(
               total === 0 ? '指摘' : isEditable ? `指摘 · ${total} 件中 ${adopted} 件を送る` : `指摘 · ${total} 件`,
@@ -333,7 +353,7 @@ export const register: Register = (on, options) => {
           )}
           {points.length > 0 && heading('人間が見る観点')}
           {points.map(point => (
-            <Text dimColor>{point}</Text>
+            <Text dimColor>・ {point}</Text>
           ))}
           {hidden > 0 && (
             <Button key="more-points" plain label={`ほか ${hidden} 件`} onPress={() => void showHumanReview($)} />
@@ -391,8 +411,14 @@ export const register: Register = (on, options) => {
       const tone = toneOf(review)
 
       return (
-        <Box flexDirection="row" gap="sm" marginTop="sm">
-          <Text color={tone}>{EDGE}</Text>
+        <Box
+          key={`row-box:${review.key}`}
+          flexDirection="row"
+          gap="sm"
+          marginTop="sm"
+          {...(isSelected ? { borderStyle: 'round', borderColor: 'suggestion', paddingRight: 'sm' } : {})}
+        >
+          {bar(tone)}
           <Box flexDirection="column" flexGrow={1}>
             <Box flexDirection="row" justifyContent="space-between" gap="sm">
               <Button
