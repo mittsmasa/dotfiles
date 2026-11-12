@@ -21,7 +21,6 @@ import {
 } from './posting'
 import {
   REVIEWER_SYSTEM,
-  REVIEW_TIMEOUT_MS,
   guardOf,
   acceptReviewerOutput,
   acceptedCopyOf,
@@ -33,7 +32,6 @@ import {
   isAllowedToolCall,
   isDue,
   isScript,
-  isTimedOut,
   localPathOf,
   originMatches,
   parseConfig,
@@ -44,6 +42,7 @@ import {
   reviewFromSaved,
   buildSearchArgv,
   searchedKeys,
+  timeoutAction,
   viewArgs,
 } from './reviews'
 
@@ -145,6 +144,7 @@ async function stop($: EngineInterface, config: Config) {
   isActive = false
   await update($, activeAtom, () => false)
   const mine = running
+  // The store's `running` is the new owner's now: only this copy is dropped.
   running = undefined
   if (mine) await removeWorktree($, config, mine.key)
   await $.ui.close({ id: 'review-inbox' }).catch(() => undefined)
@@ -271,18 +271,47 @@ export async function init($: EngineInterface, config: Config) {
   const stored = (await $.store.get('inbox')) as Partial<Inbox> | undefined
   const before = Array.isArray(stored?.reviews) ? stored.reviews : []
   await knownReviewers($)
-  running = undefined
+  // A reload leaves the reviewer it had running at work: the mod cannot stop
+  // it, so it is taken up again rather than cut off under its feet.
+  const left = ((await $.store.get('running')) as Running | null | undefined) ?? undefined
+  const alive = await aliveAgentIds($)
+  const kept =
+    left &&
+    alive.includes(left.agentId) &&
+    before.some(one => one.key === left.key && one.status === 'reviewing' && one.agentId === left.agentId)
+      ? left
+      : undefined
+  await setRunning($, kept)
   isSending = false
   inbox = EMPTY
   await mutate($, () => ({
     ...EMPTY,
-    reviews: recoverOnStart(before),
+    reviews: recoverOnStart(before, kept ? [kept.agentId] : []),
     lastFetchedAt: stored?.lastFetchedAt,
   }))
   await refreshWithDiff($, config)
   // A review cut off by a restart leaves its worktree behind.
-  for (const review of before.filter(one => one.status === 'reviewing')) {
+  for (const review of before.filter(one => one.status === 'reviewing' && one.key !== kept?.key)) {
     await removeWorktree($, config, review.key)
+  }
+  if (kept) await onTimeout($, config, kept.key)
+}
+
+/** Keeps `running` in the store too, so a reload can take its reviewer up again. */
+async function setRunning($: EngineInterface, value: Running | undefined) {
+  running = value
+  // The store takes JSON data only: null, not undefined, says there is none.
+  await $.store.set('running', value ?? null)
+}
+
+const ALIVE = new Set(['pending', 'running', 'waiting'])
+
+/** This session's agents still at work; none when the engine cannot say. */
+async function aliveAgentIds($: EngineInterface): Promise<string[]> {
+  try {
+    return (await $.agent.list()).filter(agent => ALIVE.has(agent.status)).map(agent => agent.id)
+  } catch {
+    return []
   }
 }
 
@@ -497,7 +526,7 @@ async function startReview($: EngineInterface, config: Config, review: Review) {
     const agentId = started.agentId
     reviewerAgentIds = [...reviewerAgentIds, agentId].slice(-100)
     await $.store.set('reviewerAgentIds', reviewerAgentIds)
-    running = { key: review.key, agentId, repo, worktree, resultPath, allowedRoots }
+    await setRunning($, { key: review.key, agentId, repo, worktree, resultPath, allowedRoots })
     const startedAt = (await now($)).toISOString()
     await patch($, review.key, one => ({
       ...one,
@@ -506,7 +535,7 @@ async function startReview($: EngineInterface, config: Config, review: Review) {
       reviewStartedAt: startedAt,
       skipped,
     }))
-    $.clock.after(REVIEW_TIMEOUT_MS + 1000, () => void onTimeout($, config, review.key))
+    await onTimeout($, config, review.key)
   } catch (error) {
     const reason = firstLine(String(error instanceof Error ? error.message : error))
     await patch($, review.key, one => fail(one, reason))
@@ -520,7 +549,7 @@ async function startReview($: EngineInterface, config: Config, review: Review) {
 
 async function finish($: EngineInterface, config: Config, key: string) {
   await removeWorktree($, config, key)
-  running = undefined
+  await setRunning($, undefined)
   await refreshWithDiff($, config)
   await pump($, config)
 }
@@ -550,11 +579,21 @@ export async function onTurnComplete(
   await finish($, config, mine.key)
 }
 
+/**
+ * A review's timer: arms itself until the review ends. A reviewer still at
+ * work past the timeout is waited on, since nothing here can stop it.
+ */
 async function onTimeout($: EngineInterface, config: Config, key: string) {
   const review = inbox.reviews.find(one => one.key === key)
-  if (!review || running?.key !== key || !isTimedOut(review, await now($))) return
-  await patch($, key, one => fail(one, 'タイムアウト'))
-  await finish($, config, key)
+  const mine = running
+  if (!review || mine?.key !== key || review.agentId !== mine.agentId) return
+  const action = timeoutAction(review, await now($), (await aliveAgentIds($)).includes(mine.agentId))
+  if (action.kind === 'wait') {
+    $.clock.after(action.ms, () => void onTimeout($, config, key))
+  } else if (action.kind === 'fail') {
+    await patch($, key, one => fail(one, 'タイムアウト'))
+    await finish($, config, key)
+  }
 }
 
 // ---- adopting, editing, and sending a review ----
