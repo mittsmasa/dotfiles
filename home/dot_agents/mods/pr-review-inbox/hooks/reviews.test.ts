@@ -680,6 +680,8 @@ test('reviewerPrompt asks a testable-design finding for its viewpoint in reason 
 
   expect(prompt).toContain('reason starts with the viewpoint in brackets, as 「[関心の分離 観点 3] 」')
   expect(prompt).toContain('comment names the concrete case that breaks: whose change request')
+  // Left out, source reads as "criteria" even with no criteria file.
+  expect(prompt).toContain('Every finding sets source: "criteria" only when it follows the criteria file')
 })
 
 test('reviewerPrompt without the testable-design files still names what to judge by', () => {
