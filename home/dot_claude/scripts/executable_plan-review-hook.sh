@@ -117,6 +117,10 @@ PROMPTS_DIR="${PLAN_REVIEW_PROMPTS:-$HOME/.claude/scripts/plan-review-prompts}"
 REVIEWER_BIN="${PLAN_REVIEW_REVIEWER_CMD:-claude}"
 APPLIER_BIN="${PLAN_REVIEW_APPLIER_CMD:-claude}"
 REVIEW_MODEL="${PLAN_REVIEW_MODEL:-claude-opus-5-5}"
+# この hook は `fnox exec --` 経由で起動され、cwd のリポジトリの fnox.toml も読み込まれる。
+# リポジトリが自分のアプリ用に ANTHROPIC_BASE_URL を定義していると(例: 社内 LLM ゲートウェイ)、
+# reviewer / applier の claude がそこへ向いて 401 になるため、接続先は既定に戻す。
+unset ANTHROPIC_BASE_URL
 # 1 呼び出しあたりの上限（秒）。claude --print が混雑等で長時間化しても
 # .exit を確実に書いて後始末できるようにするための保険。
 REVIEWER_TIMEOUT="${PLAN_REVIEW_REVIEWER_TIMEOUT:-300}"
