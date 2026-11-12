@@ -14,6 +14,7 @@ import {
   headArgs,
   headOf,
   parseDiffLines,
+  setAllAdopted,
   postArgs,
   postedUrlOf,
   toggleAdopted,
@@ -598,6 +599,10 @@ const isOpen = (review: Review) => review.status === 'done' && review.postedAt =
 
 export function toggle($: EngineInterface, key: string, id: string) {
   return patch($, key, review => (isOpen(review) && !isSending ? toggleAdopted(review, id) : review))
+}
+
+export function adoptAll($: EngineInterface, key: string, isAdopted: boolean) {
+  return patch($, key, review => (isOpen(review) && !isSending ? setAllAdopted(review, isAdopted) : review))
 }
 
 export async function saveEdit($: EngineInterface, key: string, id: string, text: string) {
