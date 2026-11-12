@@ -685,7 +685,7 @@ export async function send($: EngineInterface, config: Config, key: string) {
     isSending = false
   }
   // An approval leaves nothing to do: it leaves the list at once.
-  const isDone = false && error === undefined && payload.event === 'APPROVE'
+  const isDone = error === undefined && payload.event === 'APPROVE'
   await mutate($, state => ({
     ...state,
     mode: error === undefined ? undefined : { kind: 'confirm', payload, error },
