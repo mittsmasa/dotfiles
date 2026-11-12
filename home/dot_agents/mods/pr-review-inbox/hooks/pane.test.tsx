@@ -219,7 +219,26 @@ function world(
     }
   })
 
-  return { clock, calls, store, agents, github }
+  // What the surface takes: the prompt box, the clipboard. The desktop app draws
+  // its own composer, so it refuses the fill.
+  const surface = { isFilled: true, isCopied: true, filled: [] as string[], copied: [] as string[], toasts: [] as string[] }
+  on('prompt.fill', (_, e) => {
+    if (surface.isFilled) surface.filled.push(e.text)
+
+    return surface.isFilled ? { isFilled: true } : { isFilled: false, refusal: 'no_composer' }
+  })
+  on('ui.copy', (_, e) => {
+    if (surface.isCopied) surface.copied.push(e.text)
+
+    return { value: surface.isCopied ? { isCopied: true } : { isCopied: false, reason: 'no-clipboard' } } as never
+  })
+  on('ui.toast', (_, e) => {
+    surface.toasts.push((e as { text: string }).text)
+
+    return { value: undefined } as never
+  })
+
+  return { clock, calls, store, agents, github, surface }
 }
 
 type Engine = Parameters<TestBody>[0]
