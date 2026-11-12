@@ -58,6 +58,23 @@ const HUMAN_REVIEW_SHOWN = 2
 // A description longer than this many lines is folded until asked for.
 const BODY_SHOWN_LINES = 12
 
+/**
+ * Puts the deep-dive request in the prompt box. A surface that draws its own
+ * composer (the desktop app) refuses the fill, so the request goes to the
+ * clipboard instead, and failing that it is shown to be copied by hand.
+ */
+async function deepDive($: EngineInterface, url: string, surface: RenderSurface) {
+  const text = deepDivePrompt(url)
+  if ((await $.prompt.fill({ text, mode: 'replace' })).isFilled) return
+  const copied = await $.ui.copy({ text, surface })
+  $.ui.toast(
+    copied.isCopied
+      ? '深掘りの依頼文をコピーしました。入力欄に貼って送ってください'
+      : `入力欄に入れられませんでした。次の文を送ってください: ${text}`,
+    { timeoutMs: 10_000 },
+  )
+}
+
 export const register: Register = (on, options) => {
   let config: Config | undefined
 
