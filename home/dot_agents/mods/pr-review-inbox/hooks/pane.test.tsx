@@ -619,7 +619,7 @@ test('sending a review leaves a note beside its result', async ($, on) => {
   await pane.unmount()
 })
 
-// ---- sending takes an approved review off the list ----
+// ---- sending takes a review off the list ----
 
 /** Selects the review, presses one send control, and sends what the confirm screen shows. */
 async function sendFrom(
