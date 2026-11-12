@@ -660,3 +660,30 @@ test('reviewerPrompt asks for comments written as a suggestion, with a reason, n
   expect(prompt).toContain('良い例:')
   expect(prompt).toContain('避ける例:')
 })
+
+const promptWith = (over: Partial<Parameters<typeof reviewerPrompt>[0]>) =>
+  reviewerPrompt({ key: KEY, headSha: SHA_A, worktree: '/w', diffPath: '/d.diff', resultPath: '/r.json', files: [], ...over })
+
+test('reviewerPrompt points the reviewer at the testable-design files and the sections that explain the check output', () => {
+  const prompt = promptWith({ skillFiles: ['/s/SKILL.md', '/s/references/mechanical-checks.md'], scanDir: '/scan' })
+
+  expect(prompt).toContain('- /s/SKILL.md\n- /s/references/mechanical-checks.md')
+  // The sections are named, not copied: c7 and later rules reach the reviewer from the skill.
+  expect(prompt).toContain('「L1: Oxlint のルール」')
+  expect(prompt).toContain('「`candidates.json` の読み方」')
+  expect(prompt).toContain('run no command')
+  expect(prompt).toContain('not findings')
+})
+
+test('reviewerPrompt asks a testable-design finding for its viewpoint in reason and the case that breaks in comment', () => {
+  const prompt = promptWith({ skillFiles: ['/s/SKILL.md'] })
+
+  expect(prompt).toContain('reason starts with the viewpoint in brackets, as 「[関心の分離 観点 3] 」')
+  expect(prompt).toContain('comment names the concrete case that breaks: whose change request')
+})
+
+test('reviewerPrompt without the testable-design files still names what to judge by', () => {
+  const prompt = promptWith({})
+
+  expect(prompt).toContain('No testable-design files: judge by separation of concerns and test quality.')
+})
