@@ -86,7 +86,9 @@ test('a finding taken out is not sent, and comes back when put back', async () =
 
 test('an edited comment is sent as written; an empty edit changes nothing', async () => {
   const edited = editComment(review(), 'f1', 'ここ、cleanup が要りそうです')
-  expect(buildReviewPayload(edited, LINES, 'COMMENT').comments[0]?.body).toBe('ここ、cleanup が要りそうです')
+  expect(buildReviewPayload(edited, LINES, 'COMMENT').comments[0]?.body).toBe(
+    '[recommended] ここ、cleanup が要りそうです',
+  )
   expect(editComment(review(), 'f1', '   ')).toEqual(review())
 })
 
