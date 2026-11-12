@@ -348,7 +348,7 @@ export const register: Register = (on, options) => {
                   key="adopt-all"
                   plain
                   label={adopted > 0 ? 'すべて外す' : 'すべて戻す'}
-                  onPress={() => void adoptAll($, review.key, adopted === 0)}
+                  onPress={() => void adoptAll($, review.key, true)}
                 />
               )}
             </Box>
