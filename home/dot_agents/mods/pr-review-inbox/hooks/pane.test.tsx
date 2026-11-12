@@ -660,6 +660,32 @@ test('指摘行のタグに blocker 等の severity が出る', async ($, on) =>
   await ui.unmount()
 })
 
+test('すべて外すで全指摘が外れて Approve に変わり、すべて戻すで元に戻る', async ($, on) => {
+  const { clock } = world(on, [
+    review({ findings: [finding(), finding({ id: 'f2', severity: 'recommended', line: 10 })] }),
+  ])
+  await begin($, clock)
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: `row:${KEY}` })
+  await clock.settle()
+  expect((await ui.find({ key: 'adopt-all' }))?.props.label).toBe('すべて外す')
+
+  await ui.press({ key: 'adopt-all' })
+  await clock.settle()
+  expect(await ui.find({ type: 'Text', text: /2 件中 0 件を送る/ })).toBeDefined()
+  expect(await ui.find({ key: 'comment' })).toBe(undefined)
+  expect(await ui.find({ key: 'approve' })).toBeDefined()
+  expect((await ui.find({ key: 'adopt-all' }))?.props.label).toBe('すべて戻す')
+
+  await ui.press({ key: 'adopt-all' })
+  await clock.settle()
+  expect(await ui.find({ type: 'Text', text: /2 件中 2 件を送る/ })).toBeDefined()
+  expect(await ui.find({ key: 'comment' })).toBeDefined()
+  expect(await ui.find({ key: 'approve' })).toBe(undefined)
+  await ui.unmount()
+})
+
 test('人間が見る観点の各行が ・ で始まる', async ($, on) => {
   const { clock } = world(on, [review()])
   await begin($, clock)
