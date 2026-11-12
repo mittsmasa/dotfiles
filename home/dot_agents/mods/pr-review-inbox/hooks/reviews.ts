@@ -101,6 +101,55 @@ export function viewArgs(key: string): string[] | undefined {
   ]
 }
 
+const REQUESTED_QUERY = [
+  'query($owner: String!, $name: String!, $number: Int!) {',
+  '  viewer { login }',
+  '  repository(owner: $owner, name: $name) { pullRequest(number: $number) {',
+  '    timelineItems(last: 20, itemTypes: [REVIEW_REQUESTED_EVENT]) { nodes {',
+  '      ... on ReviewRequestedEvent { createdAt requestedReviewer { __typename ... on User { login } } }',
+  '    } }',
+  '  } }',
+  '}',
+].join('\n')
+
+/** Asks when a review was last requested; the key goes as variables, never into the query. */
+export function requestedArgs(key: string): string[] | undefined {
+  const parsed = parseKey(key)
+  if (!parsed) return undefined
+  const [owner, name] = parsed.fullName.split('/') as [string, string]
+
+  return [
+    'gh', 'api', 'graphql',
+    '-f', `query=${REQUESTED_QUERY}`,
+    '-f', `owner=${owner}`,
+    '-f', `name=${name}`,
+    '-F', `number=${parsed.number}`,
+  ]
+}
+
+/**
+ * When my review was last asked for: the newest request naming me or a team.
+ * null with no such request, undefined when the answer cannot be read.
+ */
+export function lastRequestedAt(stdout: string): string | null | undefined {
+  const raw = parseJson(stdout)
+  const data = isRecord(raw) ? raw.data : undefined
+  if (!isRecord(data) || !isRecord(data.viewer) || typeof data.viewer.login !== 'string') return undefined
+  const pullRequest = isRecord(data.repository) ? data.repository.pullRequest : undefined
+  const nodes = isRecord(pullRequest) && isRecord(pullRequest.timelineItems) ? pullRequest.timelineItems.nodes : undefined
+  if (!Array.isArray(nodes)) return undefined
+  const me = data.viewer.login
+  let latest: string | null = null
+  for (const node of nodes) {
+    if (!isRecord(node) || typeof node.createdAt !== 'string' || Number.isNaN(Date.parse(node.createdAt))) continue
+    const asked = node.requestedReviewer
+    const isMine = isRecord(asked) && (asked.__typename === 'Team' || (asked.__typename === 'User' && asked.login === me))
+    if (isMine && (latest === null || Date.parse(node.createdAt) > Date.parse(latest))) latest = node.createdAt
+  }
+
+  return latest
+}
+
 // ---- a pull request's description, drawn as markdown ----
 
 const ENTITY_OF: Readonly<Record<string, string>> = { colon: ':', tab: '\t', newline: '\n', amp: '&' }
