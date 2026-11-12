@@ -128,8 +128,9 @@ function world(
   // Counts the reviewers asked for. The kit hands a mod no agentId for a spawn,
   // so a review started here ends as failed; what a result does once accepted
   // is covered by the pure functions in reviews.test.ts.
-  on('agent.spawn', () => {
+  on('agent.spawn', (_, e) => {
     calls.spawn += 1
+    calls.prompts.push((e as { prompt?: string }).prompt ?? '')
 
     return { model: 'test', agentId: `reviewer-${calls.spawn}` }
   })
