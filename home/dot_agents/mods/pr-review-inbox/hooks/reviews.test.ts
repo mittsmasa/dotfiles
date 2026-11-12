@@ -471,3 +471,114 @@ test('a copy for reuse is kept only for a result that was accepted', () => {
   expect(acceptedCopyOf(late, json)).toBe(undefined)
   expect(acceptedCopyOf(other, json)).toBe(undefined)
 })
+
+// ---- a pull request's description ----
+
+// What a neutralized `file:` reads as: a ratio sign in place of the colon.
+const NO_SCHEME = 'file∶'
+
+test('toBodyMarkdown removes CR', () => {
+  expect(toBodyMarkdown('## 背景\r\n本文\r\n')).toBe('## 背景\n本文\n')
+})
+
+test('toBodyMarkdown removes control chars but keeps tab and newline', () => {
+  expect(toBodyMarkdown('a\u0000b\u0007c\u001bd\u007fe\u0085f\tg\nh')).toBe('abcdef\tg\nh')
+})
+
+test('toBodyMarkdown neutralizes inline link file:', () => {
+  expect(toBodyMarkdown('[x](file:///etc/passwd)')).toBe(`[x](${NO_SCHEME}///etc/passwd)`)
+})
+
+test('toBodyMarkdown neutralizes reference definition file:', () => {
+  expect(toBodyMarkdown('[x]\n\n[x]: file:///etc/passwd')).toBe(`[x]\n\n[x]: ${NO_SCHEME}///etc/passwd`)
+})
+
+test('toBodyMarkdown neutralizes autolink file:', () => {
+  expect(toBodyMarkdown('<file:///etc/passwd>')).toBe(`<${NO_SCHEME}///etc/passwd>`)
+})
+
+test('toBodyMarkdown neutralizes bare file: url', () => {
+  expect(toBodyMarkdown('see file:///tmp/x here')).toBe(`see ${NO_SCHEME}///tmp/x here`)
+})
+
+test('toBodyMarkdown neutralizes uppercase and spaced scheme', () => {
+  expect(toBodyMarkdown('[a](FILE:///x)')).toBe(`[a](${NO_SCHEME}///x)`)
+  expect(toBodyMarkdown('[a]( file:///x)')).toBe(`[a]( ${NO_SCHEME}///x)`)
+  expect(toBodyMarkdown('[a](file :///x)')).toBe(`[a](${NO_SCHEME}///x)`)
+})
+
+test('toBodyMarkdown neutralizes decimal entity scheme', () => {
+  expect(toBodyMarkdown('[a](&#102;ile:///x)')).toBe(`[a](${NO_SCHEME}///x)`)
+  expect(toBodyMarkdown('[a](fil&#101;&#58;///x)')).toBe(`[a](${NO_SCHEME}///x)`)
+})
+
+test('toBodyMarkdown neutralizes hex entity scheme', () => {
+  expect(toBodyMarkdown('[a](&#x66;ile:///x)')).toBe(`[a](${NO_SCHEME}///x)`)
+  expect(toBodyMarkdown('[a](&#X46;IL&#x45;&#x3A;///x)')).toBe(`[a](${NO_SCHEME}///x)`)
+})
+
+test('toBodyMarkdown neutralizes backslash-escaped scheme', () => {
+  expect(toBodyMarkdown('[a](file\\:///x)')).toBe(`[a](${NO_SCHEME}///x)`)
+})
+
+test('toBodyMarkdown keeps https link', () => {
+  const text = '[PR](https://github.com/acme/widgets/pull/1) と <https://example.com>\n![img](https://github.com/a.png)'
+  expect(toBodyMarkdown(text)).toBe(text)
+})
+
+test('toBodyMarkdown removes file: href from a tag', () => {
+  expect(toBodyMarkdown('<a href="file:///x">x</a>')).toBe('<a>x</a>')
+  expect(toBodyMarkdown("<A HREF='javascript:alert(1)' title=t>x</A>")).toBe('<A title=t>x</A>')
+})
+
+test('toBodyMarkdown removes entity-encoded href from a tag', () => {
+  expect(toBodyMarkdown('<a href="&#x66;ile:///x">x</a>')).toBe('<a>x</a>')
+})
+
+test('toBodyMarkdown keeps https href in a tag', () => {
+  const text = '<a href="https://github.com/acme">acme</a>'
+  expect(toBodyMarkdown(text)).toBe(text)
+})
+
+test('keeps body undefined when gh returns null body', () => {
+  const search = {
+    exitCode: 0,
+    stdout: JSON.stringify([{ number: 12, title: 't', url: 'u', repository: { nameWithOwner: 'acme/widgets' } }]),
+  }
+  const view = (body: unknown) => ({
+    key: KEY,
+    exitCode: 0,
+    stdout: JSON.stringify({ headRefOid: SHA_A, baseRefName: 'main', files: [], body }),
+  })
+
+  const nullBody = applyFetchResult({ search, views: [view(null)] }, [])
+  expect(nullBody.map(one => [one.key, one.status, one.body])).toEqual([[KEY, 'queued', undefined]])
+  // A description that is there arrives made safe.
+  const withBody = applyFetchResult({ search, views: [view('a\r\nb')] }, [])
+  expect(withBody[0]?.body).toBe('a\nb')
+})
+
+test('selectQueued updates only body on same headSha', () => {
+  const stored = review({ status: 'done', verdict: 'clean', body: '古い本文', humanReview: ['観点'] })
+  const [next] = selectQueued([{ ...fetched(SHA_A), body: '新しい本文' }], [stored])
+
+  expect(next).toEqual({ ...stored, body: '新しい本文' })
+})
+
+test('reviewerPrompt asks for comments written as a suggestion, with a reason, not a verdict', () => {
+  const prompt = reviewerPrompt({
+    key: KEY,
+    headSha: SHA_A,
+    worktree: '/w',
+    diffPath: '/d.diff',
+    resultPath: '/r.json',
+    files: [],
+  })
+
+  expect(prompt).toContain('相談形')
+  expect(prompt).toContain('〜はどうでしょうか')
+  expect(prompt).toContain('理由を「〜なので」で添える')
+  expect(prompt).toContain('「〜すべき」「〜してください」')
+  expect(prompt).toContain('良い例:')
+  expect(prompt).toContain('避ける例:')
+})
