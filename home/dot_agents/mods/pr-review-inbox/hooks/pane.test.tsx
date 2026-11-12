@@ -99,6 +99,8 @@ function world(
     writes: [] as string[],
     argv: [] as (readonly string[])[],
   }
+  // This session's agents as `$.agent.list()` reports them.
+  const agents: { id: string; status: string }[] = []
   const clock = mock.clock(on, { now: Date.UTC(2026, 10, 9, 2, 0) })
   mock.env(on, { HOME: '/Users/me' })
   on('store.get', (_, e) => ({ value: store.get(e.key) }))
@@ -129,6 +131,7 @@ function world(
 
     return { model: 'test', agentId: `reviewer-${calls.spawn}` }
   })
+  on('agent.list', () => ({ value: agents.map(one => ({ ...one, description: '', type: 'pr-review-inbox:reviewer' })) }) as never)
   on('turn.complete', () => ({ text: '' }) as never)
   on('fs.exists', (_, e) => ({ value: !files || !e.path.startsWith(DATA) || e.path in files }))
   on('fs.stat', (_, e) => ({ value: { kind: 'file', isLink: false, realPath: e.path } }) as never)
@@ -181,7 +184,7 @@ function world(
     return { value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
   })
 
-  return { clock, calls, store }
+  return { clock, calls, store, agents }
 }
 
 type Engine = Parameters<TestBody>[0]
@@ -289,6 +292,101 @@ test('taking the inbox over cuts off the review the last session left running', 
   // The queue moved on: the one that was waiting is no longer waiting.
   expect(await pane.find({ type: 'Text', text: /待機中/ })).toBe(undefined)
   await pane.unmount()
+})
+
+// ---- a reviewer the mod cannot stop ----
+
+const WORKTREE_12 = '/Users/me/src/widgets/.claude/worktrees/review-12'
+const removals = (argv: readonly (readonly string[])[]) =>
+  argv.filter(one => one.includes('remove') && one.includes(WORKTREE_12)).length
+
+test('a reload takes up the reviewer still at work instead of cutting it off', async ($, on) => {
+  const left = review({
+    status: 'reviewing',
+    agentId: 'reviewer-x',
+    reviewStartedAt: '2026-11-09T01:55:00.000Z',
+    findings: [],
+    verdict: undefined,
+  })
+  const waiting = review({ key: 'acme/widgets#13', status: 'queued', findings: [], verdict: undefined })
+  const running = {
+    key: KEY,
+    agentId: 'reviewer-x',
+    repo: '/Users/me/src/widgets',
+    worktree: WORKTREE_12,
+    resultPath: `${SAVED}.json`,
+    allowedRoots: [WORKTREE_12],
+  }
+  const { clock, calls, agents } = world(on, [left, waiting], { running, reviewerAgentIds: ['reviewer-x'] })
+  agents.push({ id: 'reviewer-x', status: 'running' })
+  await begin($, clock)
+
+  expect(removals(calls.argv)).toBe(0)
+  // One at a time still: the waiting one waits.
+  expect(calls.spawn).toBe(0)
+  const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect(await pane.find({ type: 'Text', text: /中断/ })).toBe(undefined)
+  await pane.unmount()
+  // Its checkout and result file are still its own.
+  const read = { tool: 'Read', file_path: `${WORKTREE_12}/a.ts`, agentId: 'reviewer-x' } as never
+  expect((await $.tool.call(read)).deny).toBe(undefined)
+  const write = { tool: 'Write', file_path: `${SAVED}.json`, content: '{}', agentId: 'reviewer-x' } as never
+  expect((await $.tool.call(write)).deny).toBe(undefined)
+})
+
+test('a reload cuts off a review whose reviewer has ended', async ($, on) => {
+  const left = review({ status: 'reviewing', agentId: 'reviewer-x', findings: [], verdict: undefined })
+  const running = { key: KEY, agentId: 'reviewer-x', repo: '', worktree: WORKTREE_12, resultPath: '', allowedRoots: [] }
+  const { clock, calls, agents } = world(on, [left], { running })
+  agents.push({ id: 'reviewer-x', status: 'completed' })
+  await begin($, clock)
+
+  expect(removals(calls.argv)).toBeGreaterThan(0)
+  const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect(await pane.find({ type: 'Text', text: /失敗: 中断/ })).toBeDefined()
+  await pane.unmount()
+})
+
+// The kit's spawn hands back no agentId, so a reviewer at work is set up as
+// one a reload took up, started `minutesAgo` before the mocked now.
+function reviewerAtWork(on: On, minutesAgo: number, more: Review[] = []) {
+  const started = new Date(Date.UTC(2026, 10, 9, 2, 0) - minutesAgo * 60 * 1000).toISOString()
+  const left = review({ status: 'reviewing', agentId: 'reviewer-x', reviewStartedAt: started, findings: [], verdict: undefined })
+  const running = { key: KEY, agentId: 'reviewer-x', repo: '', worktree: WORKTREE_12, resultPath: '', allowedRoots: [] }
+  const made = world(on, [left, ...more], { running, reviewerAgentIds: ['reviewer-x'] })
+  made.agents.push({ id: 'reviewer-x', status: 'running' })
+
+  return made
+}
+
+test('a reviewer past the timeout but still at work keeps its worktree, and none other starts', async ($, on) => {
+  const waiting = review({ key: 'acme/widgets#13', status: 'queued', findings: [], verdict: undefined })
+  const { clock, calls, agents } = reviewerAtWork(on, 10, [waiting])
+  await begin($, clock)
+
+  // Past the 15 minutes, and on to 40.
+  await clock.advance(30 * 60 * 1000)
+  expect(removals(calls.argv)).toBe(0)
+  expect(calls.spawn).toBe(0)
+
+  // Once it has ended, the review fails as timed out and the queue moves on.
+  agents[0] = { id: 'reviewer-x', status: 'completed' }
+  await clock.advance(5 * 60 * 1000)
+  expect(removals(calls.argv)).toBe(1)
+  expect(calls.spawn).toBe(1)
+  const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect(await pane.find({ type: 'Text', text: /失敗: タイムアウト/ })).toBeDefined()
+  await pane.unmount()
+})
+
+test('a reviewer still at work is given up on after the hard limit', async ($, on) => {
+  const { clock, calls } = reviewerAtWork(on, 50)
+  await begin($, clock)
+
+  await clock.advance(9 * 60 * 1000)
+  expect(removals(calls.argv)).toBe(0)
+  await clock.advance(2 * 60 * 1000)
+  expect(removals(calls.argv)).toBe(1)
 })
 
 // ---- what a subagent may do ----

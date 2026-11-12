@@ -28,6 +28,7 @@ import {
   selectQueued,
   shortName,
   splitPlace,
+  timeoutAction,
   toneOf,
   verdictOf,
 } from './reviews'
@@ -118,6 +119,28 @@ test('a review times out 15 minutes after it started', async () => {
   expect(isTimedOut(started, new Date('2026-11-09T01:14:59.000Z'))).toBe(false)
   expect(isTimedOut(started, new Date('2026-11-09T01:15:00.000Z'))).toBe(true)
   expect(isTimedOut(review(), new Date('2026-11-09T09:00:00.000Z'))).toBe(false)
+})
+
+test('a reviewer still at work past the timeout is waited on, up to the hard limit', async () => {
+  const started = review({ status: 'reviewing', agentId: 'r1', reviewStartedAt: '2026-11-09T01:00:00.000Z' })
+  const at = (time: string) => new Date(`2026-11-09T${time}.000Z`)
+  expect(timeoutAction(started, at('01:10:00'), true)).toEqual({ kind: 'wait', ms: 5 * 60 * 1000 + 1000 })
+  expect(timeoutAction(started, at('01:15:00'), true)).toEqual({ kind: 'wait', ms: 5 * 60 * 1000 })
+  expect(timeoutAction(started, at('01:58:00'), true)).toEqual({ kind: 'wait', ms: 2 * 60 * 1000 + 1000 })
+  expect(timeoutAction(started, at('02:00:00'), true)).toEqual({ kind: 'fail' })
+  expect(timeoutAction(started, at('01:15:00'), false)).toEqual({ kind: 'fail' })
+  expect(timeoutAction(review(), at('09:00:00'), false)).toEqual({ kind: 'none' })
+})
+
+test('a restart keeps a review whose reviewer is still at work', async () => {
+  const recovered = recoverOnStart(
+    [review({ status: 'reviewing', agentId: 'r1' }), review({ key: 'acme/widgets#13', status: 'reviewing', agentId: 'r2' })],
+    ['r1'],
+  )
+  expect(recovered.map(one => [one.status, one.failReason])).toEqual([
+    ['reviewing', undefined],
+    ['failed', '中断'],
+  ])
 })
 
 test('a restart turns a review left running into a failed one, and nothing else', async () => {
