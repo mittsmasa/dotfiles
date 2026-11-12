@@ -21,6 +21,7 @@ import {
 } from './posting'
 import {
   REVIEWER_SYSTEM,
+  SKILL_FILES,
   guardOf,
   acceptReviewerOutput,
   acceptedCopyOf,
@@ -561,6 +562,7 @@ async function startReview($: EngineInterface, config: Config, review: Review) {
         diffPath,
         scanDir: skipped.some(one => one.startsWith('機械チェック')) ? undefined : scanDir,
         criteriaPath,
+        skillFiles,
         resultPath,
         files: review.files,
       }),
