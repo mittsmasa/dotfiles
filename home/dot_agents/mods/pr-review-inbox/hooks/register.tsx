@@ -19,6 +19,7 @@ import {
 import {
   activate,
   addComment,
+  adoptAll,
   fetchNow,
   isToolCallAllowed,
   makeConfig,
@@ -335,13 +336,21 @@ export const register: Register = (on, options) => {
             </Box>
           )}
           {isEditable && mode?.kind !== 'add' && (
-            <Box marginTop="sm">
+            <Box flexDirection="row" gap="md" marginTop="sm">
               <Button
                 key="add"
                 plain
                 label="+ コメントを追加"
                 onPress={() => void setMode($, { kind: 'add', place: '' })}
               />
+              {total > 0 && (
+                <Button
+                  key="adopt-all"
+                  plain
+                  label={adopted > 0 ? 'すべて外す' : 'すべて戻す'}
+                  onPress={() => void adoptAll($, review.key, adopted === 0)}
+                />
+              )}
             </Box>
           )}
           {review.status === 'done' && review.skipped.length > 0 && (
