@@ -71,6 +71,8 @@ export type Inbox = {
   /** The one finding of the selected review drawn open. */
   openFindingId?: string
   isHumanReviewOpen?: boolean
+  /** Whether the selected review's description is drawn in full. */
+  isBodyOpen?: boolean
   /** Keys of the reviews whose diff is saved, so their findings can be placed. */
   withDiff: string[]
 }
