@@ -167,7 +167,13 @@ function world(
           })),
         )
       : argv.includes('view')
-        ? JSON.stringify({ headRefOid: SHA, baseRefName: 'main', files: [] })
+        ? JSON.stringify({
+            headRefOid: SHA,
+            baseRefName: 'main',
+            files: [],
+            // Each pull request's own description, as stored.
+            body: reviews.find(one => one.key === `${argv[5]}#${argv[3]}`)?.body ?? null,
+          })
         : argv.includes('get-url')
           ? 'git@github.com:acme/widgets.git'
           : ''
@@ -358,7 +364,9 @@ test('the confirm screen shows the request, and going back sends nothing', async
 
   expect(await ui.find({ type: 'Text', text: /送信の確認/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /COMMENT レビューを送ります/ })).toBeDefined()
-  expect((await ui.find({ type: 'Text', text: /丸めを/ }))?.text).toBe('丸めを 1 か所に寄せるのはどうでしょうか')
+  expect((await ui.find({ type: 'Text', text: /丸めを/ }))?.text).toBe(
+    '[recommended] 丸めを 1 か所に寄せるのはどうでしょうか',
+  )
   expect(await ui.find({ key: 'send' })).toBeDefined()
 
   await ui.press({ key: 'back' })
