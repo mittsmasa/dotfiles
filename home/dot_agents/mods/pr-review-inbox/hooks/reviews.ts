@@ -265,12 +265,38 @@ export function isTimedOut(review: Review, now: Date): boolean {
   return now.getTime() - new Date(review.reviewStartedAt).getTime() >= REVIEW_TIMEOUT_MS
 }
 
+/** How long a reviewer still at work is waited on before its review fails anyway. */
+export const REVIEW_HARD_TIMEOUT_MS = 60 * 60 * 1000
+/** How often a reviewer past the timeout is checked on. */
+export const REVIEW_RECHECK_MS = 5 * 60 * 1000
+
+export type TimeoutAction = { kind: 'none' } | { kind: 'fail' } | { kind: 'wait'; ms: number }
+
+/**
+ * What a review's timer does. The mod cannot stop a reviewer, so one still at
+ * work past the timeout is waited on (its worktree kept, no other started)
+ * until it ends or the hard limit passes.
+ */
+export function timeoutAction(review: Review, now: Date, isReviewerAlive: boolean): TimeoutAction {
+  if (review.status !== 'reviewing' || review.reviewStartedAt === undefined) return { kind: 'none' }
+  const elapsed = now.getTime() - new Date(review.reviewStartedAt).getTime()
+  if (elapsed < REVIEW_TIMEOUT_MS) return { kind: 'wait', ms: REVIEW_TIMEOUT_MS - elapsed + 1000 }
+  if (elapsed >= REVIEW_HARD_TIMEOUT_MS || !isReviewerAlive) return { kind: 'fail' }
+
+  return { kind: 'wait', ms: Math.min(REVIEW_RECHECK_MS, REVIEW_HARD_TIMEOUT_MS - elapsed + 1000) }
+}
+
 export function fail(review: Review, failReason: string): Review {
   return { ...review, status: 'failed', failReason, agentId: undefined, reviewStartedAt: undefined }
 }
 
-export function recoverOnStart(reviews: readonly Review[]): Review[] {
-  return reviews.map(review => (review.status === 'reviewing' ? fail(review, '中断') : review))
+/** A review left running fails as cut off, unless its reviewer is still at work. */
+export function recoverOnStart(reviews: readonly Review[], aliveAgentIds: readonly string[] = []): Review[] {
+  return reviews.map(review =>
+    review.status === 'reviewing' && !(review.agentId !== undefined && aliveAgentIds.includes(review.agentId))
+      ? fail(review, '中断')
+      : review,
+  )
 }
 
 export function verdictOf(findings: readonly Pick<Finding, 'severity'>[]): Verdict {
