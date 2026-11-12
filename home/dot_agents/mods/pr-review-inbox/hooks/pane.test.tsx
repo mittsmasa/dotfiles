@@ -126,6 +126,12 @@ function world(
     return { value: { isPlaced: true } }
   })
   on('ui.close', () => ({ value: undefined }))
+  // Stands for the engine's own drawing, for what the mod leaves to it (`next(e)`).
+  on('ui.render', ($, e) => {
+    const { Text } = $.ui.resolve(e)
+
+    return <Text>engine</Text>
+  })
   // Counts the reviewers asked for. The kit hands a mod no agentId for a spawn,
   // so a review started here ends as failed; what a result does once accepted
   // is covered by the pure functions in reviews.test.ts.
