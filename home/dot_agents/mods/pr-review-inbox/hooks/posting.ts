@@ -16,6 +16,11 @@ export function toggleAdopted(review: Review, id: string): Review {
   return mapFinding(review, id, finding => ({ ...finding, isAdopted: !finding.isAdopted }))
 }
 
+/** Every finding taken out, or every one put back. */
+export function setAllAdopted(review: Review, isAdopted: boolean): Review {
+  return { ...review, findings: review.findings.map(finding => ({ ...finding, isAdopted })) }
+}
+
 /** An empty text is no edit: a comment with nothing to say is taken out instead. */
 export function editComment(review: Review, id: string, comment: string): Review {
   return comment.trim() === '' ? review : mapFinding(review, id, finding => ({ ...finding, comment }))
