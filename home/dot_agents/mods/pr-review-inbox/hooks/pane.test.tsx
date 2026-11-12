@@ -439,6 +439,11 @@ test('the session running the inbox refuses every subagent that is not its revie
 
 test('a reviewer may read the testable-design files its prompt names, but no other skill file', async ($, on) => {
   const { clock, calls } = world(on, [review({ status: 'queued', findings: [], verdict: undefined })])
+  on('agent.spawn', (_, e) => {
+    calls.prompts.push((e as { prompt?: string }).prompt ?? '')
+
+    return { value: { agentId: 'reviewer-1' } } as never
+  })
   await begin($, clock)
   const skill = '/Users/me/.agents/skills/testable-design'
   const read = (file: string) => $.tool.call({ tool: 'Read', file_path: `${skill}/${file}`, agentId: 'reviewer-1' } as never)
