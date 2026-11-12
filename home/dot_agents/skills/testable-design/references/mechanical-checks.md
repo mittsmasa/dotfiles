@@ -37,6 +37,9 @@ L2 の `<root>` と同じディレクトリから実行し、`<path>` には L2 
 |---|---|---|
 | `testable/max-module-mocks` | 1 ファイルの `vi.mock` / `vi.doMock` が 3 個以上 | モックが三つ以上要るなら、実装の分け方を見直す |
 | `testable/no-internal-module-mock` | 相対パスか `@/` で始まるモジュールへの `vi.mock` | モックは管理外の依存とネットワーク層に限る |
+| `testable/no-internal-module-spy` | 相対パスか `@/` で始まるモジュールから import した名前への `vi.spyOn`（`mod.default` や `api.client` の形も含む） | モックは管理外の依存とネットワーク層に限る |
+| `vitest/expect-expect`（Oxlint 組み込み） | アサーションが一つも無いテスト。`expect` か `assert` で始まる関数の呼び出しをアサーションと数える | 0 件ヒットを pass と扱わない |
+| `vitest/no-conditional-expect`（Oxlint 組み込み） | `if` や `catch` などの分岐の中にある `expect` | テストにロジックを書かない |
 | `testable/max-effects-in-component` | コンポーネント本体の `useEffect` / `useLayoutEffect` が 3 個以上 | 副作用はカスタムフックに閉じ込める |
 | `testable/no-fetch-in-component` | コンポーネントの中の `fetch(` | API 呼び出しは API クライアントに集める |
 | `testable/no-ambient-nondeterminism` | コンポーネントとフックの中の `Date.now()`、引数なしの `new Date()`、`Math.random()`、`crypto.randomUUID()`、`localStorage`、`sessionStorage` | 非決定的な依存は外から渡す |
@@ -45,9 +48,13 @@ L2 の `<root>` と同じディレクトリから実行し、`<path>` には L2 
 
 - 型情報は使っていない。コンポーネントは「名前が大文字で始まり JSX を含む関数」、フックは「名前が `use` で始まる関数」として見分けている
 - `no-ambient-nondeterminism` は、副作用を置くための専用の層（ストレージを包むフック、現在時刻を配る Provider）にも報告を出す。その層の報告は、症状ではない
-- `no-internal-module-mock` は specifier の文字列だけを見る。モックの対象が実在するかは L2 で分かる
-- `no-internal-module-mock` の報告は、L2 の C3 と同じモックを指す。境界の包み（fs、認証、外部 API）かどうかは、C3 の `touches` を見て判断する。`touches` があるものは境界の包みの可能性が高い
-- `tools/` には `testable/no-call-only-assertions`（`expect` が呼び出しの検証だけのテスト）もあるが、既定では無効にしている。コールバックや画面遷移の検証まで報告し、誤検知が多いため
+- `no-internal-module-mock` と `no-internal-module-spy` は specifier の文字列だけを見る。自前と判定するのは、`.` で始まるものと、`aliases` オプション（既定 `["@/"]`）のどれかで始まるもの。tsconfig は読まない
+- `baseUrl` で `utils/axios` のように書くプロジェクトでは、既定のままだとその import を自前と判定できない。設定ファイルを写して `aliases` に `baseUrl` 直下のディレクトリを足す（`["@/", "utils/", "features/"]` など）。漏れの無いモックの一覧は L2 の C3 で見る。C3 は tsconfig で解決するため
+- `no-internal-module-mock` の報告は、L2 の C3 と同じモックを指す。L1 はモックを書いた行を、C3 はモジュール単位の集計を受け持つ。境界の包み（fs、認証、外部 API）かどうかは、C3 の `touches` を見て判断する。`touches` があるものは境界の包みの可能性が高い
+- `no-internal-module-spy` は、トップレベルの import の名前だけを追う。テストの中で同じ名前のローカル変数を作って spyOn しても報告する
+- `no-internal-module-spy` は、HTTP クライアントのインスタンス（axios の `create` で作ったものなど）への spyOn も報告する。ネットワーク層の差し替えではあるが、MSW を使えるプロジェクトなら、MSW のハンドラに寄せられないかを見る
+- `vitest/expect-expect` は、自前のアサーションヘルパーの名前が `expect` か `assert` で始まっていればアサーションと数える。それ以外の名前（`verifyRow` など）のヘルパーだけを呼ぶテストは報告される
+- テストの分岐を広く拾う `vitest/no-conditional-in-test` は入れていない。`if (!x) throw` の型の絞り込み、MSW ハンドラの中の分岐、`textContent ?? ""` まで報告し、外れが多いため
 
 ## L2: `testable-scan`
 
@@ -147,7 +154,7 @@ jq -r --arg dir 'src/features/cart' '
 - 型情報を使わない。コンポーネントとフックは、構文と命名で見分けている
 - 「import している」は「検証している」を意味しない
 - 見逃しの数は測っていない。候補に出なかったことは、問題が無いことの根拠にならない
-- モックとして見えるのは、テストファイルの中の `vi.mock` / `vi.doMock` だけ。`vitest.config` の `setupFiles` で行うモック、`resolve.alias` でのモジュールの差し替え（Storybook の設定でのものも含む）、`sb.mock`、`vi.spyOn(module, 'fn')` は見えず、その先は `reach: test` のまま出る
+- L2 がモックとして見るのは、テストファイルの中の `vi.mock` / `vi.doMock` だけ。`vitest.config` の `setupFiles` で行うモック、`resolve.alias` でのモジュールの差し替え（Storybook の設定でのものも含む）、`sb.mock`、`vi.spyOn(module, 'fn')` は見えず、その先は `reach: test` のまま出る。自前モジュールへの `vi.spyOn` は L1 の `no-internal-module-spy` が報告するので、その報告があるファイルの `reach: test` は、モックで切られている可能性がある
 - `vi.doMock` はホイストされず、呼んだ後の動的 import にだけ効く。`vi.mock` と同じに扱うので、テストの途中まで本物が走る場合を見落とす
 - 解決するのは、相対パス、最も近い `tsconfig.json` の `paths` と `baseUrl`、workspace パッケージの `exports`。試す順は TypeScript と同じで、`paths`、`baseUrl` 相対、パッケージの順。`paths` の置換先は、`baseUrl` があれば `baseUrl` から、無ければ tsconfig のディレクトリから引く
 - `baseUrl` 相対（`utils/format` を `<baseUrl>/utils/format` と読む）は、ファイルが実在するときだけ採用する。実在すれば、`package.json` に載っている同名のパッケージより優先する。実在しなければ、パッケージの判定に進む
@@ -155,7 +162,7 @@ jq -r --arg dir 'src/features/cart' '
 - `paths` に複数のパターンが一致するとき、TypeScript は接頭辞の最も長いパターンを選ぶが、このツールは書かれた順で最初のパターンを選ぶ。`paths` のパターンに一致して置換先にファイルが無いと、`baseUrl` もパッケージも試さず `unresolved` にする
 - Oxlint の JS plugin が読めるファイルだけが対象。`.mdx` や `.vue` からの import は見えない。MDX からだけ使われるコンポーネントは、C4 に出る
 - 生成物のディレクトリ名（`styled-system`、`__generated__`、`generated` など）は、`tools/facts.oxlintrc.json` の `ignorePatterns` で決めている。プロジェクトの生成物が別の名前なら、そのファイルも調べる対象に入る
-- Oxlint の JS plugin は alpha で、ツールは oxlint 1.89.0 と 1.90.0 で確かめている。`tools/` のテストは `package.json` に固定した oxlint で走るので、`PATH` の oxlint の版が上がったことによる不具合は、テストでは見つからない
+- Oxlint の JS plugin は alpha で、ツールは oxlint 1.89.0、1.90.0、1.91.0 で確かめている。`tools/` のテストは `package.json` に固定した oxlint で走るので、`PATH` の oxlint の版が上がったことによる不具合は、テストでは見つからない
 
 ## ツールを直すとき
 

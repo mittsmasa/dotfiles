@@ -1,6 +1,10 @@
 {
-  "plugins": [],
-  "jsPlugins": ["./src/index.ts"],
+  "plugins": [
+    "vitest"
+  ],
+  "jsPlugins": [
+    "./src/index.ts"
+  ],
   "categories": {
     "correctness": "off",
     "suspicious": "off",
@@ -22,8 +26,24 @@
   "rules": {
     "testable/max-module-mocks": "warn",
     "testable/no-internal-module-mock": "warn",
-    "testable/max-effects-in-component": ["warn", { "max": 3 }],
+    "testable/max-effects-in-component": [
+      "warn",
+      {
+        "max": 3
+      }
+    ],
     "testable/no-fetch-in-component": "warn",
-    "testable/no-ambient-nondeterminism": "warn"
+    "testable/no-ambient-nondeterminism": "warn",
+    "testable/no-internal-module-spy": "warn",
+    "vitest/expect-expect": [
+      "warn",
+      {
+        "assertFunctionNames": [
+          "expect*",
+          "assert*"
+        ]
+      }
+    ],
+    "vitest/no-conditional-expect": "warn"
   }
 }

@@ -25,7 +25,7 @@ const rule: Rule = {
     },
   },
   create(context) {
-    const max = (context.options[0] as Options | undefined)?.max ?? 2;
+    const max = (context.options[0] as Options | undefined)?.max ?? 3;
     const tracker = createUnitTracker<{ node: AstNode }>((unit) => {
       if (unit.kind !== 'component' || unit.findings.length < max) return;
       context.report({

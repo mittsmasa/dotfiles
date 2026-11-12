@@ -12,8 +12,8 @@ const ruleTester = new RuleTester({
 ruleTester.run('max-effects-in-component', rule, {
   valid: [
     {
-      name: 'one effect stays below the default limit of two',
-      code: `function Panel() { useEffect(() => {}, []); return <div />; }`,
+      name: 'two effects stay below the default limit of three',
+      code: `function Panel() { useEffect(() => {}, []); useEffect(() => {}, []); return <div />; }`,
     },
     {
       name: 'effects inside a custom hook are not counted',
@@ -24,9 +24,9 @@ ruleTester.run('max-effects-in-component', rule, {
       code: `function A() { useEffect(() => {}, []); return <div />; } function B() { useEffect(() => {}, []); return <div />; }`,
     },
     {
-      name: 'a raised limit allows two effects',
-      code: `function Panel() { useEffect(() => {}, []); useEffect(() => {}, []); return <div />; }`,
-      options: [{ max: 3 }],
+      name: 'a raised limit allows three effects',
+      code: `function Panel() { useEffect(() => {}, []); useEffect(() => {}, []); useEffect(() => {}, []); return <div />; }`,
+      options: [{ max: 4 }],
     },
     {
       name: 'other hooks are not counted',
@@ -35,17 +35,10 @@ ruleTester.run('max-effects-in-component', rule, {
   ],
   invalid: [
     {
-      name: 'two effects reach the default limit',
-      code: `function Panel() { useEffect(() => {}, []); useEffect(() => {}, []); return <div />; }`,
-      errors: [
-        { messageId: 'tooMany', data: { name: 'Panel', count: '2', max: '2' } },
-      ],
-    },
-    {
-      name: 'useLayoutEffect and React.useEffect are counted together',
+      name: 'useLayoutEffect and React.useEffect are counted together up to the default limit',
       code: `const Panel = () => { useLayoutEffect(() => {}, []); React.useEffect(() => {}, []); useEffect(() => {}, []); return <div />; };`,
       errors: [
-        { messageId: 'tooMany', data: { name: 'Panel', count: '3', max: '2' } },
+        { messageId: 'tooMany', data: { name: 'Panel', count: '3', max: '3' } },
       ],
     },
     {
@@ -58,8 +51,8 @@ ruleTester.run('max-effects-in-component', rule, {
     },
     {
       name: 'only the component over the limit is reported',
-      code: `function A() { useEffect(() => {}, []); return <div />; } function B() { useEffect(() => {}, []); useEffect(() => {}, []); return <div />; }`,
-      errors: [{ messageId: 'tooMany', data: { name: 'B', count: '2', max: '2' } }],
+      code: `function A() { useEffect(() => {}, []); return <div />; } function B() { useEffect(() => {}, []); useEffect(() => {}, []); useEffect(() => {}, []); return <div />; }`,
+      errors: [{ messageId: 'tooMany', data: { name: 'B', count: '3', max: '3' } }],
     },
   ],
 });
