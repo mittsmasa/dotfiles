@@ -95,6 +95,7 @@ function world(
     run: 0,
     register: 0,
     spawn: 0,
+    prompts: [] as string[],
     open: [] as unknown[],
     writes: [] as string[],
     argv: [] as (readonly string[])[],
