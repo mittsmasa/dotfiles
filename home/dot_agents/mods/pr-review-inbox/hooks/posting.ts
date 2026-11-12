@@ -1,7 +1,7 @@
 // Pure logic of sending a review: which findings go, where each lands, and
 // what the request holds. The sending itself is in run.ts.
 import type { Finding, Review, ReviewEvent, ReviewPayload } from '../types'
-import { parseKey } from './reviews'
+import { parseKey, severityTag } from './reviews'
 
 // ---- adopting, editing, adding ----
 
