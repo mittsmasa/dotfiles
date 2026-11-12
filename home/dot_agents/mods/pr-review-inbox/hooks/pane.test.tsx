@@ -524,7 +524,11 @@ test('sending a review leaves a note beside its result', async ($, on) => {
 // ---- sending takes an approved review off the list ----
 
 /** Selects the review, presses one send control, and sends what the confirm screen shows. */
-async function sendFrom(ui: Awaited<ReturnType<Engine['ui']['mount']>>, clock: { settle: () => Promise<void> }, control: string) {
+async function sendFrom(
+  ui: { press: (target: { key: string }) => Promise<unknown> },
+  clock: { settle: () => Promise<void> },
+  control: string,
+) {
   await ui.press({ key: `row:${KEY}` })
   await clock.settle()
   await ui.press({ key: control })
