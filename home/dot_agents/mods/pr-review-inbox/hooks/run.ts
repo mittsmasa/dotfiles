@@ -32,17 +32,20 @@ import {
   isAllowedToolCall,
   isDue,
   isScript,
+  lastRequestedAt,
   localPathOf,
   originMatches,
   parseConfig,
   parseKey,
   parseReviewerJson,
   recoverOnStart,
+  requestedArgs,
   reviewerPrompt,
   reviewFromSaved,
   buildSearchArgv,
   searchedKeys,
   timeoutAction,
+  toPosted,
   viewArgs,
 } from './reviews'
 
@@ -62,6 +65,9 @@ export type Config = {
   home: string
   dataDir: string
 }
+
+/** One commit of one pull request: what a saved result is filed under. */
+type Commit = Pick<Review, 'key' | 'headSha'>
 
 type Running = {
   key: string
@@ -346,8 +352,23 @@ export async function fetchNow($: EngineInterface, config: Config) {
       views.push({ key, ...(argv ? await run($, argv, config) : { exitCode: 1, stdout: '' }) })
     }
     const stored = inbox.reviews
-    const next = applyFetchResult({ search, views }, stored)
+    // A review that was sent and is asked for again starts over at the same head.
+    const reRequested = new Map<string, string>()
+    for (const view of views) {
+      const headSha = view.exitCode === 0 ? headOf(view.stdout) : undefined
+      if (headSha === undefined || !/^[0-9a-f]{40}$/.test(headSha)) continue
+      const sentAt = await sentAtOf($, config, stored, { key: view.key, headSha })
+      const argv = sentAt === undefined ? undefined : requestedArgs(view.key)
+      if (sentAt === undefined || !argv) continue
+      const asked = await run($, argv, config)
+      const requestedAt = asked.exitCode === 0 ? lastRequestedAt(asked.stdout) : undefined
+      if (requestedAt === undefined) throw new Error(firstLine(asked.stderr) || 'レビュー依頼の履歴を読めませんでした')
+      if (requestedAt !== null && Date.parse(requestedAt) > Date.parse(sentAt)) reRequested.set(view.key, headSha)
+    }
+    const next = applyFetchResult({ search, views }, stored, new Set(reRequested.keys()))
     if (next === stored) throw new Error(firstLine(search.stderr) || '取得結果を読めませんでした')
+    // Only once the fetch is good: a failed one leaves the saved results too.
+    for (const [key, headSha] of reRequested) await dropSaved($, config, { key, headSha })
     const fetchedAt = (await now($)).toISOString()
     await mutate($, state => ({ ...state, reviews: [...next], lastFetchedAt: fetchedAt }))
   } catch (error) {
@@ -355,6 +376,21 @@ export async function fetchNow($: EngineInterface, config: Config) {
   }
   await mutate($, state => ({ ...state, isFetching: false, fetchError }))
   await pump($, config)
+}
+
+/** When a review of this commit was sent: what the store holds, or the note left beside its result. */
+async function sentAtOf(
+  $: EngineInterface,
+  config: Config,
+  stored: readonly Review[],
+  commit: Commit,
+): Promise<string | undefined> {
+  const held = stored.find(review => review.key === commit.key && review.headSha === commit.headSha)
+  if (held?.postedAt !== undefined) return held.postedAt
+  const saved = savedPathsOf(config, commit)
+  const note = saved && (await $.fs.read(saved.posted).then(String, () => undefined))
+
+  return note === undefined ? undefined : toPosted(parseReviewerJson(note, undefined))?.postedAt
 }
 
 export async function tick($: EngineInterface, config: Config) {
@@ -604,14 +640,14 @@ function slotOf(key: string) {
   return parsed ? `${parsed.fullName}/${parsed.number}` : undefined
 }
 
-function diffPathOf(config: Config, review: Review) {
+function diffPathOf(config: Config, review: Commit) {
   const slot = slotOf(review.key)
 
   return slot ? `${config.dataDir}/diffs/${slot}/${review.headSha}.diff` : undefined
 }
 
 /** A commit's results: the reviewer's file, the mod's accepted copy, and what was sent. */
-function savedPathsOf(config: Config, review: Review) {
+function savedPathsOf(config: Config, review: Commit) {
   const slot = slotOf(review.key)
   if (!slot) return undefined
   const base = `${config.dataDir}/results/${slot}/${review.headSha}`
@@ -620,7 +656,7 @@ function savedPathsOf(config: Config, review: Review) {
 }
 
 /** Forgets a commit's results, so the next review of it starts from nothing. */
-async function dropSaved($: EngineInterface, config: Config, review: Review) {
+async function dropSaved($: EngineInterface, config: Config, review: Commit) {
   const saved = savedPathsOf(config, review)
   if (saved) await $.process.run(['rm', '-f', saved.result, saved.accepted, saved.posted])
 }
