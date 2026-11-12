@@ -118,11 +118,12 @@ function decodeEntities(text: string): string {
   })
 }
 
-/** `f`, or that letter as a character reference or a backslash escape. */
+/** `f` or `F`, or either as a character reference or a backslash escape. */
 function anyForm(char: string): string {
-  const code = char.charCodeAt(0)
+  const codes = [char.toLowerCase(), char.toUpperCase()].map(one => one.charCodeAt(0))
+  const references = codes.flatMap(code => [`&#0*${code};`, `&#[xX]0*${code.toString(16)};`])
 
-  return `(?:${char}|&#0*${code};|&#[xX]0*${code.toString(16)};|\\\\${char})`
+  return `(?:${char}|${references.join('|')}|\\\\${char})`
 }
 
 // `file:` however it is written: any case, letters as references, the colon too.
