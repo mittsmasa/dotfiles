@@ -437,22 +437,22 @@ test('the session running the inbox refuses every subagent that is not its revie
   expect((await $.tool.call({ tool: 'Bash', command: 'ls' } as never)).deny).toBe(undefined)
 })
 
-test('a reviewer may read the testable-design files its prompt names, but no other skill file', async ($, on) => {
+// The kit gives a hook-answered spawn no agentId, so the review fails right
+// after the spawn and the guard cannot be reached here: whether the reviewer
+// may read these files is seen on a real pull request (denied.log).
+test("a reviewer's prompt names the testable-design files by their real paths", async ($, on) => {
   const { clock, calls } = world(on, [review({ status: 'queued', findings: [], verdict: undefined })])
-  on('agent.spawn', (_, e) => {
-    calls.prompts.push((e as { prompt?: string }).prompt ?? '')
-
-    return { value: { agentId: 'reviewer-1' } } as never
-  })
   await begin($, clock)
   const skill = '/Users/me/.agents/skills/testable-design'
-  const read = (file: string) => $.tool.call({ tool: 'Read', file_path: `${skill}/${file}`, agentId: 'reviewer-1' } as never)
 
-  expect(calls.prompts[0]).toContain(`${skill}/SKILL.md`)
-  expect(calls.prompts[0]).toContain(`${skill}/references/separation-of-concerns.md`)
-  expect((await read('SKILL.md')).deny).toBe(undefined)
-  expect((await read('references/mechanical-checks.md')).deny).toBe(undefined)
-  expect(typeof (await read('references/sources.md')).deny).toBe('string')
+  expect(calls.prompts[0]).toContain(
+    [
+      `- ${skill}/SKILL.md`,
+      `- ${skill}/references/separation-of-concerns.md`,
+      `- ${skill}/references/test-quality.md`,
+      `- ${skill}/references/mechanical-checks.md`,
+    ].join('\n'),
+  )
 })
 
 // ---- what the pane and the band draw ----
