@@ -8,6 +8,7 @@ import {
   bandText,
   bandTone,
   clockText,
+  countsText,
   deepDivePrompt,
   isDue,
   isGithubUrl,
@@ -444,7 +445,19 @@ export const register: Register = (on, options) => {
               </Text>
             </Box>
           )}
-          {points.length > 0 && heading('人間が見る観点')}
+          {heading('概要')}
+          {bodyLines.length === 0 ? (
+            <Text dimColor>本文なし</Text>
+          ) : (
+            <Markdown
+              key="body"
+              text={isBodyFolded ? bodyLines.slice(0, BODY_SHOWN_LINES).join('\n') : bodyLines.join('\n')}
+            />
+          )}
+          {isBodyFolded && (
+            <Button key="more-body" plain label="続きを表示" onPress={() => void showBody($)} />
+          )}
+          {points.length > 0 && heading('送る前に見るところ')}
           {points.map(point => (
             <Text dimColor>・ {point}</Text>
           ))}
@@ -464,7 +477,7 @@ export const register: Register = (on, options) => {
                 <Button
                   key="comment"
                   variant={primary === 'comment' ? 'primary' : 'secondary'}
-                  label={`COMMENT で送る (${adopted})`}
+                  label={`コメントで送る (${adopted})`}
                   onPress={() => void openConfirm($, ready, review.key, 'COMMENT')}
                 />
               )}
@@ -472,33 +485,21 @@ export const register: Register = (on, options) => {
                 <Button
                   key="approve"
                   variant={primary === 'approve' ? 'primary' : 'secondary'}
-                  label="Approve で送る"
+                  label="承認して送る"
                   onPress={() => void openConfirm($, ready, review.key, 'APPROVE')}
                 />
               )}
               {actions.includes('rereview') && (
-                <Button key="rereview" label="再レビュー" onPress={() => void requeue($, ready, review.key)} />
+                <Button key="rereview" label="もう一度レビューする" onPress={() => void requeue($, ready, review.key)} />
               )}
               {review.status === 'failed' && (
-                <Button key="retry" label="やり直す" onPress={() => void retry($, ready, review.key)} />
+                <Button key="retry" label="もう一度レビューする" onPress={() => void retry($, ready, review.key)} />
               )}
               {review.postedUrl !== undefined && review.postedUrl.startsWith('https://github.com/') && (
                 <Link href={review.postedUrl} label="送ったレビューを開く" />
               )}
             </Box>
           )}
-          <Box flexDirection="row" gap="md" marginTop="sm" alignItems="center" flexWrap="wrap">
-            {isGithubUrl(review.url) && <Link href={review.url} label="GitHub で開く" />}
-            {isGithubUrl(review.url) && (
-              <Button
-                key="deep-dive"
-                plain
-                label="深掘りする"
-                onPress={press => void deepDive($, review.url, press.surface)}
-              />
-            )}
-            <Button key="read" plain label="既読" onPress={() => void markRead($, review.key)} />
-          </Box>
         </Box>
       )
     }
