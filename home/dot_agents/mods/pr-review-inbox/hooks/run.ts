@@ -480,14 +480,28 @@ async function resolveTools($: EngineInterface, config: Config) {
   return tools
 }
 
-/** Runs oxlint and testable-scan over the changed scripts; says what it left out. */
+/** The checks the config sets, or the default ones with their binaries found. */
+async function checksOf($: EngineInterface, config: Config): Promise<Check[]> {
+  if (config.profile.checks) return config.profile.checks
+  const skillDir = skillDirOf(config.home)
+  if (!(await $.fs.exists(`${skillDir}/tools`))) throw new Error('testable-design の tools が無い')
+
+  return defaultChecks(await resolveTools($, config), skillDir)
+}
+
+/**
+ * Runs the checks over the changed scripts. A check fails only when it cannot
+ * start, times out, or leaves an output it names missing: a lint that finds
+ * something exits non-zero and its output is the point. `outputs` is absent
+ * when nothing could run at all; the reviewer then gets no output directory.
+ */
 async function mechanicalChecks(
   $: EngineInterface,
   config: Config,
   review: Review,
   worktreeReal: string,
   scanDir: string,
-): Promise<string | undefined> {
+): Promise<{ skipped: string[]; outputs?: { name: string; files: string[] }[] }> {
   const targets: string[] = []
   for (const file of review.files.filter(isScript).slice(0, 200)) {
     const stat = await $.fs.stat(`${worktreeReal}/${file}`, { resolve: true }).catch(() => undefined)
@@ -495,24 +509,43 @@ async function mechanicalChecks(
     const isInside = stat?.realPath?.startsWith(worktreeReal + '/') === true
     if (stat && stat.kind === 'file' && !stat.isLink && isInside) targets.push(stat.realPath as string)
   }
-  if (targets.length === 0) return '機械チェック（対象の JS / TS ファイルなし）'
+  if (targets.length === 0) return { skipped: ['機械チェック（対象の JS / TS ファイルなし）'] }
+  let checks: Check[]
   try {
-    const { oxlint, node } = await resolveTools($, config)
-    const skill = `${config.home}/.agents/skills/testable-design/tools`
-    const lint = await run($, [oxlint, '-c', `${skill}/oxlintrc.json`, '-f', 'json', ...targets], config, 120_000)
-    await $.fs.write(`${scanDir}/oxlint.json`, lint.stdout.slice(0, 3_000_000))
-    const relative = targets.map(path => path.slice(worktreeReal.length + 1))
-    const scan = await run(
-      $,
-      [node, `${skill}/bin/testable-scan.ts`, worktreeReal, ...relative, '--out', scanDir],
-      config,
-      180_000,
-    )
-
-    return scan.exitCode === 0 ? undefined : `testable-scan（${firstLine(scan.stderr)}）`
+    checks = await checksOf($, config)
   } catch (error) {
-    return `機械チェック（${firstLine(String(error))}）`
+    return { skipped: [`機械チェック（${firstLine(String(error instanceof Error ? error.message : error))}）`] }
   }
+  if (checks.length === 0) return { skipped: [] , outputs: [] }
+  const results: CheckResult[] = []
+  for (const check of checks) {
+    const written = outputsOf(check).map(name => `${scanDir}/${name}`)
+    // A retry at the same head must not read what an earlier run left.
+    if (written.length > 0) await $.process.run(['rm', '-f', ...written])
+    try {
+      const argv = expandArgv(check.argv, { files: targets, worktree: worktreeReal, outDir: scanDir })
+      const ran = await run($, argv, config, 180_000)
+      if (check.stdout) await $.fs.write(`${scanDir}/${check.stdout}`, ran.stdout.slice(0, 3_000_000))
+      const missing: string[] = []
+      for (const name of check.outputs) if (!(await $.fs.exists(`${scanDir}/${name}`))) missing.push(name)
+      results.push(
+        missing.length === 0 ? { check } : { check, failure: firstLine(ran.stderr) || `出力が無い: ${missing.join(', ')}` },
+      )
+    } catch (error) {
+      results.push({ check, failure: firstLine(String(error instanceof Error ? error.message : error)) })
+    }
+  }
+
+  return summarizeChecks(results)
+}
+
+/** A file the config names, read whole; what could not be read goes to `skipped`. */
+async function readNamed($: EngineInterface, path: string | undefined, label: string, skipped: string[]) {
+  if (path === undefined) return undefined
+  const text = await $.fs.read(path).then(String, () => undefined)
+  if (text === undefined || text.trim() === '') skipped.push(`${label}（読めない。既定を使った）`)
+
+  return text?.trim() ? text : undefined
 }
 
 /**
