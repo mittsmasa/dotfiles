@@ -6,8 +6,8 @@ import type { EngineInterface } from 'claude-code'
 import type { Inbox, Mode, Placement, Review, ReviewEvent } from '../types'
 import { hunkAt } from './diff'
 import type { RepoConfig } from './reviews'
-import { defaultChecks, expandArgv, failureOf, outputsOf, pickViewpointFiles, skillDirOf, summarizeChecks, warningLine } from './profile'
-import type { Check, CheckResult, ViewpointStat } from './profile'
+import { expandArgv, failureOf, outputsOf, pickViewpointFiles, summarizeChecks, warningLine } from './profile'
+import type { CheckResult, ViewpointStat } from './profile'
 import {
   addHumanComment,
   buildReviewPayload,
