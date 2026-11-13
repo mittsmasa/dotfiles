@@ -190,7 +190,7 @@ export const register: Register = (on, options) => {
     // ---- the confirm block: stands where the send controls were, so nothing above it moves ----
     // Which finding goes where is on each finding's own row (`placement`); here, the request as a whole.
     const confirm = (review: Review, payload: ReviewPayload, isSending: boolean, error?: string) => {
-      const name = shortName(review.key, ready.repos)
+      const name = shortName(review.key, ready.sources)
 
       return (
         <Box
@@ -482,7 +482,7 @@ export const register: Register = (on, options) => {
     }
 
     const row = (review: Review) => {
-      const name = shortName(review.key, ready.repos)
+      const name = shortName(review.key, ready.sources)
       const isSelected = review.key === selected?.key
       const tone = toneOf(review)
 

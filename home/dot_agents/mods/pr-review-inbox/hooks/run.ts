@@ -6,7 +6,7 @@ import type { EngineInterface } from 'claude-code'
 import type { Inbox, Mode, Placement, Review, ReviewEvent } from '../types'
 import { hunkAt } from './diff'
 import type { RepoConfig } from './reviews'
-import { defaultChecks, expandArgv, outputsOf, pickViewpointFiles, skillDirOf, summarizeChecks, warningLine } from './profile'
+import { defaultChecks, expandArgv, failureOf, outputsOf, pickViewpointFiles, skillDirOf, summarizeChecks, warningLine } from './profile'
 import type { Check, CheckResult, ViewpointStat } from './profile'
 import {
   addHumanComment,
@@ -306,7 +306,7 @@ export async function makeConfig($: EngineInterface, options: Readonly<Record<st
   const stats: ViewpointStat[] = []
   for (const path of profile.viewpoints) {
     const stat = await $.fs.stat(path, { resolve: true }).catch(() => undefined)
-    const kind = stat === undefined ? undefined : stat.kind === 'file' || stat.kind === 'directory' ? stat.kind : 'other'
+    const kind = stat?.kind
     stats.push(kind === undefined ? { path } : { path, kind })
   }
   const picked = pickViewpointFiles(stats)
@@ -516,7 +516,7 @@ async function mechanicalChecks(
   } catch (error) {
     return { skipped: [`機械チェック（${firstLine(String(error instanceof Error ? error.message : error))}）`] }
   }
-  if (checks.length === 0) return { skipped: [], outputs: [] }
+  if (checks.length === 0) return { skipped: [] }
   const results: CheckResult[] = []
   for (const check of checks) {
     const written = outputsOf(check).map(name => `${scanDir}/${name}`)
@@ -528,9 +528,8 @@ async function mechanicalChecks(
       if (check.stdout) await $.fs.write(`${scanDir}/${check.stdout}`, ran.stdout.slice(0, 3_000_000))
       const missing: string[] = []
       for (const name of check.outputs) if (!(await $.fs.exists(`${scanDir}/${name}`))) missing.push(name)
-      results.push(
-        missing.length === 0 ? { check } : { check, failure: firstLine(ran.stderr) || `出力が無い: ${missing.join(', ')}` },
-      )
+      const failure = failureOf(ran, missing)
+      results.push(failure === undefined ? { check } : { check, failure })
     } catch (error) {
       results.push({ check, failure: firstLine(String(error instanceof Error ? error.message : error)) })
     }

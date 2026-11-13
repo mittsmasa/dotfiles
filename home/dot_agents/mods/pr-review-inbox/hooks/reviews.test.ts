@@ -18,11 +18,13 @@ import {
   lastRequestedAt,
   linesText,
   localPathOf,
+  mergeSearches,
   originMatches,
   parseConfig,
   parseReviewerJson,
   recoverOnStart,
   requestedArgs,
+  resolveClone,
   reviewFromSaved,
   reviewerPrompt,
   buildSearchArgv,
@@ -79,11 +81,12 @@ test('the fetch window is weekdays from 8:00 to 16:59', async () => {
   expect(isDue(jst(15, 10, 0), JST)).toBe(false)
 })
 
-test('the search asks for open, non-draft pull requests in the configured repositories only', async () => {
-  const argv = buildSearchArgv(['acme/widgets', 'acme/tools'])
+test('the search asks for open, non-draft pull requests in one source: a repository, or an owner', async () => {
+  const argv = buildSearchArgv('acme/widgets')
   expect(argv).toContain('--draft=false')
   expect(argv).toContain('--state=open')
-  expect(argv.filter((_, index) => argv[index - 1] === '--repo')).toEqual(['acme/widgets', 'acme/tools'])
+  expect(argv.slice(-2)).toEqual(['--repo', 'acme/widgets'])
+  expect(buildSearchArgv('acme').slice(-2)).toEqual(['--owner', 'acme'])
 })
 
 test('a pull request is queued when it is new or its head moved', async () => {
@@ -286,11 +289,19 @@ test('the config file gives the clones and the criteria, with ~ expanded', () =>
 })
 
 test('a config file that does not read leaves no repository at all', () => {
-  const empty = { repos: {}, criteria: {} }
+  const nothing = (text: string | undefined) => {
+    const { repos, criteria, sources } = parseConfig(text, '/Users/me')
 
-  expect(parseConfig(undefined, '/Users/me')).toEqual(empty)
-  expect(parseConfig('not json', '/Users/me')).toEqual(empty)
-  expect(parseConfig(JSON.stringify({ repos: ['acme/widgets'] }), '/Users/me')).toEqual(empty)
+    return { repos, criteria, sources }
+  }
+  const empty = { repos: {}, criteria: {}, sources: [] }
+
+  expect(nothing(undefined)).toEqual(empty)
+  expect(nothing('not json')).toEqual(empty)
+  expect(nothing(JSON.stringify({ repos: ['acme/widgets'] }))).toEqual(empty)
+  // Neither repos nor sources to read: no repository, whatever else is there.
+  expect(nothing(JSON.stringify({ clonePath: '~/src/{repo}', criteria: CONFIG.criteria }))).toEqual(empty)
+  expect(nothing(JSON.stringify({ sources: ['../etc'] }))).toEqual(empty)
 })
 
 test('a config entry that does not read is dropped, and only that one', () => {
@@ -372,15 +383,11 @@ test('a place leads with the file name and line, and keeps two levels of directo
   expect(splitPlace(undefined, undefined)).toEqual({ name: '', dir: '' })
 })
 
-test('the owner is shown only when more than one is configured', async () => {
-  expect(shortName('acme/widgets#41', { 'acme/widgets': '/a', 'acme/tools': '/b' })).toEqual({
-    number: '#41',
-    repo: 'widgets',
-  })
-  expect(shortName('acme/widgets#41', { 'acme/widgets': '/a', 'other/tools': '/b' })).toEqual({
-    number: '#41',
-    repo: 'acme/widgets',
-  })
+test('the owner is shown only when more than one is searched', async () => {
+  expect(shortName('acme/widgets#41', ['acme/widgets', 'acme/tools'])).toEqual({ number: '#41', repo: 'widgets' })
+  expect(shortName('acme/widgets#41', ['acme'])).toEqual({ number: '#41', repo: 'widgets' })
+  expect(shortName('acme/widgets#41', ['acme/widgets', 'other/tools'])).toEqual({ number: '#41', repo: 'acme/widgets' })
+  expect(shortName('acme/widgets#41', ['acme', 'other'])).toEqual({ number: '#41', repo: 'acme/widgets' })
 })
 
 test('a sent review says how and when on its row', async () => {
@@ -790,4 +797,116 @@ test('reviewerPrompt without the testable-design files still names what to judge
   const prompt = promptWith({})
 
   expect(prompt).toContain('No testable-design files: judge by separation of concerns and test quality.')
+})
+
+// ---- the repositories a config file names ----
+
+test('a config file with repos alone searches those repositories, as before', () => {
+  const config = parseConfig(JSON.stringify(CONFIG), '/Users/me')
+
+  expect(config.sources).toEqual(['acme/widgets'])
+  expect(config.sources.map(buildSearchArgv).map(argv => argv.slice(-2))).toEqual([['--repo', 'acme/widgets']])
+  expect(config.warnings).toEqual([])
+})
+
+test('sources may name an owner and a repository side by side, one search each', () => {
+  const config = parseConfig(JSON.stringify({ sources: ['acme', 'other/tools'], clonePath: '~/src/{owner}/{repo}' }), '/Users/me')
+
+  expect(config.repos).toEqual({})
+  expect(config.clonePath).toBe('/Users/me/src/{owner}/{repo}')
+  expect(config.sources.map(buildSearchArgv).map(argv => argv.slice(-2))).toEqual([
+    ['--owner', 'acme'],
+    ['--repo', 'other/tools'],
+  ])
+})
+
+test('a source that is not an owner or owner/repo is dropped and named', () => {
+  const config = parseConfig(JSON.stringify({ sources: ['acme', '..', 'a/b/c', 7] }), '/Users/me')
+
+  expect(config.sources).toEqual(['acme'])
+  expect(config.warnings.length).toBe(1)
+})
+
+test('a clone comes from repos first, then from clonePath, and a climbing name gets none', () => {
+  const config = { repos: { 'acme/widgets': '/named/widgets' }, clonePath: '/src/{owner}/{repo}' }
+
+  expect(resolveClone(config, 'acme/widgets')).toBe('/named/widgets')
+  expect(resolveClone(config, 'acme/tools')).toBe('/src/acme/tools')
+  expect(resolveClone(config, 'acme/..')).toBe(undefined)
+  expect(resolveClone(config, '../tools')).toBe(undefined)
+  expect(resolveClone({ repos: {} }, 'acme/tools')).toBe(undefined)
+})
+
+test('a clonePath without {repo} is not used, and is named', () => {
+  const config = parseConfig(JSON.stringify({ sources: ['acme'], clonePath: '~/src/one' }), '/Users/me')
+
+  expect(config.clonePath).toBe(undefined)
+  expect(config.warnings.length).toBe(1)
+})
+
+const searchRow = (name: string, number: number) => ({ number, title: `t${number}`, url: 'u', repository: { nameWithOwner: name } })
+const searchOk = (...rows: object[]) => ({ exitCode: 0, stdout: JSON.stringify(rows), stderr: '' })
+
+test('the searches of every source merge into one, each pull request once', () => {
+  const merged = mergeSearches([
+    searchOk(searchRow('acme/widgets', 1), searchRow('acme/tools', 2)),
+    searchOk(searchRow('acme/widgets', 1), searchRow('other/x', 3)),
+  ])
+
+  expect(merged.exitCode).toBe(0)
+  expect((JSON.parse(merged.stdout) as { number: number }[]).map(row => row.number)).toEqual([1, 2, 3])
+})
+
+test('one search that failed fails the merge, with its message', () => {
+  const failed = mergeSearches([searchOk(searchRow('acme/widgets', 1)), { exitCode: 1, stdout: '', stderr: 'HTTP 502' }])
+  expect(failed.exitCode).not.toBe(0)
+  expect(failed.stderr).toBe('HTTP 502')
+  expect(mergeSearches([searchOk(searchRow('acme/widgets', 1)), { exitCode: 0, stdout: 'not json' }]).exitCode).not.toBe(0)
+})
+
+// ---- what the prompt takes from the config ----
+
+test('reviewerPrompt with the default checks listed reads exactly as with nothing set', () => {
+  const outputs = [
+    { name: 'oxlint', files: ['oxlint.json'] },
+    { name: 'testable-scan', files: ['candidates.json', 'ir.json'] },
+  ]
+
+  expect(promptWith({ scanDir: '/scan', skillFiles: ['/s/SKILL.md'], guide: { kind: 'testable-design' }, checkOutputs: outputs })).toBe(
+    promptWith({ scanDir: '/scan', skillFiles: ['/s/SKILL.md'] }),
+  )
+})
+
+test('reviewerPrompt lists only the check outputs it is given', () => {
+  const prompt = promptWith({ scanDir: '/scan', checkOutputs: [{ name: 'oxlint', files: ['oxlint.json'] }] })
+
+  expect(prompt).toContain('Mechanical check output: /scan (oxlint.json).')
+})
+
+test('reviewerPrompt with viewpoint files and no guide names no testable-design section', () => {
+  const prompt = promptWith({ skillFiles: ['/team/viewpoints.md'], guide: { kind: 'generic' }, scanDir: '/scan', checkOutputs: [] })
+
+  expect(prompt).toContain('- /team/viewpoints.md')
+  expect(prompt).not.toContain('レビューするとき')
+  expect(prompt).not.toContain('L1: Oxlint のルール')
+  expect(prompt).not.toContain('観点 3')
+  expect(prompt).not.toContain('testable-design viewpoints')
+  // The mod's own contract stays.
+  expect(prompt).toContain('Every finding sets source: "criteria" only when it follows the criteria file')
+  expect(prompt).toContain('- blocker: merging as is breaks something for a user or an operator')
+})
+
+test('a guide and a comment style from the config replace those parts and leave the contract', () => {
+  const prompt = promptWith({
+    skillFiles: ['/team/viewpoints.md'],
+    guide: { kind: 'text', text: 'TEAM GUIDE: apply rule X first.' },
+    commentStyle: 'TEAM STYLE: write in English.',
+  })
+
+  expect(prompt).toContain('TEAM GUIDE: apply rule X first.')
+  expect(prompt).toContain('TEAM STYLE: write in English.')
+  expect(prompt).not.toContain('相談形')
+  expect(prompt).not.toContain('「[関心の分離 観点 3] 」')
+  expect(prompt).toContain('reason names the path that breaks: which input or state, and what comes out instead')
+  expect(prompt).toContain('Write the result as JSON to exactly this path and nowhere else: /r.json')
 })
