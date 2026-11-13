@@ -961,21 +961,20 @@ export function reviewerPrompt(input: {
     `Diff against the base branch: ${input.diffPath}`,
     input.scanDir
       ? [
-          `Mechanical check output: ${input.scanDir} (oxlint.json, candidates.json, ir.json).`,
+          `Mechanical check output: ${input.scanDir}${outputFiles.length > 0 ? ` (${outputFiles.join(', ')})` : ''}.`,
           'These are candidates that narrow what to read, not findings: read the flagged files and judge them by',
-          'the testable-design viewpoints. Look at candidates touching the changed files; never cite the output alone.',
+          `${judgedBy}. Look at candidates touching the changed files; never cite the output alone.`,
         ].join('\n')
       : 'No mechanical check output for this pull request.',
     input.criteriaPath
-      ? `Review criteria to follow strictly, read it first; where it differs from testable-design, it wins: ${input.criteriaPath}`
+      ? `Review criteria to follow strictly, read it first; where it differs from ${isTestable ? 'testable-design' : 'the viewpoints'}, it wins: ${input.criteriaPath}`
       : 'No project criteria file.',
-    testableDesignGuide(input.skillFiles ?? []),
-    TESTABLE_FINDING,
+    ...viewpointSections,
     `Changed files:\n${input.files.slice(0, 200).map(file => `- ${file}`).join('\n')}`,
     SEVERITY_GUIDE,
     'Set isUnsure to true when the finding depends on a spec you cannot see, or on something you could only\n' +
       'settle by running a command.',
-    COMMENT_STYLE,
+    input.commentStyle?.trim() || COMMENT_STYLE,
     `Write the result as JSON to exactly this path and nowhere else: ${input.resultPath}`,
     'If that write is refused, do not try another path: end with the same JSON in a ```json block.',
     `The JSON has this shape:\n${JSON.stringify(shape, null, 2)}`,
