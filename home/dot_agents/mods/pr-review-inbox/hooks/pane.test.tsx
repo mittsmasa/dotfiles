@@ -570,7 +570,7 @@ test('the pane lists a review, opens its findings, and offers what it can send',
   await ui.press({ key: 'open:f1' })
   await clock.settle()
   expect((await ui.find({ type: 'Text', text: /丸めを/ }))?.text).toBe('丸めを 1 か所に寄せるのはどうでしょうか')
-  expect((await ui.find({ type: 'Text', text: /components\/orders/ }))?.text).toBe('…/components/orders')
+  expect((await ui.find({ type: 'Text', text: /components\/orders/ }))?.text).toBe('…/components/orders · R-1')
 
   // Taken out: nothing left to comment on, and the approval is offered.
   await ui.press({ key: 'toggle:f1' })
@@ -595,10 +595,10 @@ test('送るボタンを押すと、一覧と詳細を残したまま確認が�
   await clock.settle()
 
   expect(await ui.find({ type: 'Text', text: /送信の確認/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /COMMENT レビューを送ります/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /コメントとして送ります/ })).toBeDefined()
   expect(await ui.find({ key: 'send' })).toBeDefined()
-  // Nothing was swapped out: the list, the description and the findings are still drawn.
-  expect(await ui.find({ key: `row:${KEY}` })).toBeDefined()
+  // Nothing was swapped out: the way back, the description and the findings are still drawn.
+  expect(await ui.find({ key: 'back-to-list' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^概要$/ })).toBeDefined()
   expect(await ui.find({ key: 'body' })).toBeDefined()
   expect(await ui.find({ key: 'open:f1' })).toBeDefined()
@@ -631,13 +631,13 @@ test('確認中、各指摘に送り先が出て、行に付く数はインラ�
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   await ui.press({ key: `row:${KEY}` })
   await clock.settle()
-  expect(await ui.find({ type: 'Text', text: /行に付く|本文へ|送らない/ })).toBe(undefined)
+  expect(await ui.find({ type: 'Text', text: /^(行に付く|本文へ)$/ })).toBe(undefined)
   await ui.press({ key: 'comment' })
   await clock.settle()
 
   expect(await ui.findAll({ type: 'Text', text: /^行に付く$/ })).toHaveLength(1)
   expect(await ui.findAll({ type: 'Text', text: /^本文へ$/ })).toHaveLength(1)
-  expect(await ui.findAll({ type: 'Text', text: /^送らない$/ })).toHaveLength(1)
+  expect(await ui.findAll({ type: 'Text', text: /^外した$/ })).toHaveLength(1)
   expect(await ui.find({ type: 'Text', text: /インライン 1 件 · 本文あり/ })).toBeDefined()
   // What goes into the body is drawn as it will be sent.
   expect(await ui.find({ type: 'Text', text: /^\[recommended\] docs\/guide\.md:3 丸めを/ })).toBeDefined()
@@ -678,8 +678,9 @@ test('送信に失敗すると、確認の中に理由が出て、もう一度�
   expect((await ui.find({ type: 'Text', text: /送信できませんでした/ }))?.text).toBe('送信できませんでした: HTTP 422')
   expect(await ui.find({ type: 'Text', text: /送信の確認/ })).toBeDefined()
   expect(await ui.find({ key: 'send' })).toBeDefined()
-  // Not sent: the review stays on the list, and no note says it went.
-  expect(await ui.find({ key: `row:${KEY}` })).toBeDefined()
+  // Not sent: the review stays open, and no note says it went.
+  expect(await ui.find({ key: 'back-to-list' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^#12$/ })).toBeDefined()
   expect(calls.writes.filter(path => path.endsWith('.posted.json'))).toEqual([])
   await ui.unmount()
 })
@@ -837,7 +838,7 @@ test('an accepted copy without its diff is not reused', async ($, on) => {
   expect(calls.spawn).toBe(1)
 })
 
-test('やり直す forgets the saved results before reviewing again', async ($, on) => {
+test('a failed review reviewed again forgets the saved results first', async ($, on) => {
   const failed = review({ status: 'failed', failReason: 'タイムアウト', findings: [], verdict: undefined })
   const { clock, calls } = world(on, [failed], {}, { [`${SAVED}.accepted.json`]: result(), [DIFF_PATH]: DIFF })
   await begin($, clock)
@@ -847,6 +848,7 @@ test('やり直す forgets the saved results before reviewing again', async ($, 
   const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
   await pane.press({ key: `row:${KEY}` })
   await clock.settle()
+  expect((await pane.find({ key: 'retry' }))?.props.label).toBe('もう一度レビューする')
   await pane.press({ key: 'retry' })
   await clock.settle()
   await pane.unmount()
@@ -856,8 +858,8 @@ test('やり直す forgets the saved results before reviewing again', async ($, 
   expect(calls.spawn).toBe(1)
 })
 
-test('再レビュー forgets the saved results before reviewing again', async ($, on) => {
-  // Done, with the diff gone: the pane offers 再レビュー in place of sending.
+test('a review without its diff reviewed again forgets the saved results first', async ($, on) => {
+  // Done, with the diff gone: the pane offers to review again in place of sending.
   const { clock, calls } = world(on, [review()], {}, { [`${SAVED}.accepted.json`]: result() })
   await begin($, clock)
   await clock.settle()
@@ -865,6 +867,7 @@ test('再レビュー forgets the saved results before reviewing again', async (
   const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
   await pane.press({ key: `row:${KEY}` })
   await clock.settle()
+  expect((await pane.find({ key: 'rereview' }))?.props.label).toBe('もう一度レビューする')
   await pane.press({ key: 'rereview' })
   await clock.settle()
   await pane.unmount()
@@ -940,31 +943,85 @@ test('COMMENT 送信後、その PR が一覧に出ない', async ($, on) => {
 const OTHER = 'acme/widgets#13'
 const lines = (count: number) => Array.from({ length: count }, (_, index) => `行 ${index + 1}`).join('\n')
 
-/** What the cell before a row's edge draws: the selection mark, or a blank. */
-async function markOf(ui: { find: (query: { key: string }) => Promise<{ children: unknown[] } | undefined> }, key: string) {
-  return JSON.stringify((await ui.find({ key: `mark:${key}` }))?.children ?? [])
-}
-
-test('選択しても行に枠は付かず、選択行にだけ印が出る', async ($, on) => {
+test('選ぶと一覧が畳まれて一覧へ戻る行だけになり、戻ると全行が出る', async ($, on) => {
   const { clock } = world(on, [review(), review({ key: OTHER, url: 'https://github.com/acme/widgets/pull/13' })])
   await begin($, clock)
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  expect(await ui.findAll({ type: 'Text', text: /▸/ })).toHaveLength(0)
+  expect(await ui.find({ key: 'back-to-list' })).toBe(undefined)
   await ui.press({ key: `row:${KEY}` })
   await clock.settle()
 
-  // A border would add rows around the selected row and move the ones below it.
-  expect((await ui.find({ key: `row-box:${KEY}` }))?.props.borderStyle).toBe(undefined)
-  expect((await ui.find({ key: `row-box:${OTHER}` }))?.props.borderStyle).toBe(undefined)
-  expect(await ui.findAll({ type: 'Text', text: /▸/ })).toHaveLength(1)
-  expect(await markOf(ui, KEY)).toContain('▸')
+  expect(await ui.find({ key: `row:${KEY}` })).toBe(undefined)
+  expect(await ui.find({ key: `row:${OTHER}` })).toBe(undefined)
+  expect((await ui.find({ key: 'back-to-list' }))?.props.label).toBe('← 一覧 (2)')
+  expect(await ui.find({ type: 'Text', text: /^#12$/ })).toBeDefined()
 
-  await ui.press({ key: `row:${OTHER}` })
+  await ui.press({ key: 'back-to-list' })
   await clock.settle()
-  expect(await ui.findAll({ type: 'Text', text: /▸/ })).toHaveLength(1)
-  expect(await markOf(ui, OTHER)).toContain('▸')
+  expect(await ui.find({ key: 'back-to-list' })).toBe(undefined)
+  expect(await ui.find({ key: `row:${KEY}` })).toBeDefined()
+  expect(await ui.find({ key: `row:${OTHER}` })).toBeDefined()
   await ui.unmount()
+})
+
+test('詳細の先頭に、まだ送る指摘の重さを添えた判定が出る', async ($, on) => {
+  const { clock } = world(on, [
+    review({ findings: [finding(), finding({ id: 'f2', severity: 'recommended', isAdopted: false })] }),
+  ])
+  await begin($, clock)
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: `row:${KEY}` })
+  await clock.settle()
+
+  expect((await ui.find({ type: 'Text', text: /^要修正 ·/ }))?.text).toBe('要修正 · blocker 1')
+  await ui.unmount()
+})
+
+test('PR へのリンクと片付けるは判定の上にあり、送るボタンの下には並ばない', async ($, on) => {
+  const { clock } = world(on, [review({ findings: [finding({ severity: 'recommended' })] })])
+  await begin($, clock)
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: `row:${KEY}` })
+  await clock.settle()
+
+  expect((await ui.find({ key: 'read' }))?.props.label).toBe('片付ける')
+  const order = (await ui.findAll({ type: 'Button' })).map(one => one.key)
+  expect(order.indexOf('read')).toBeGreaterThan(order.indexOf('deep-dive'))
+  expect(order.indexOf('read')).toBeLessThan(order.indexOf('open:f1'))
+  expect(order.indexOf('comment')).toBe(order.length - 1)
+  await ui.unmount()
+})
+
+test('送る前に見るところが送るボタンのすぐ上に出て、ボタンは日本語の動作名で出る', async ($, on) => {
+  const { clock } = world(on, [review({ findings: [finding({ severity: 'recommended' })] })])
+  await begin($, clock)
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: `row:${KEY}` })
+  await clock.settle()
+
+  expect(await ui.find({ type: 'Text', text: /^送る前に見るところ$/ })).toBeDefined()
+  expect((await ui.find({ key: 'comment' }))?.props.label).toBe('コメントで送る (1)')
+  expect((await ui.find({ key: 'approve' }))?.props.label).toBe('承認して送る')
+  await ui.unmount()
+})
+
+test('時間外は、自動取得が平日 8–17 時だけだと見出しに出る', async ($, on) => {
+  const { clock } = world(on, [review()])
+  await begin($, clock)
+
+  const during = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect(await during.find({ type: 'Text', text: /時間外/ })).toBe(undefined)
+  await during.unmount()
+
+  // Monday 11:00 JST to 18:00 JST.
+  await clock.advance(7 * HOUR)
+  const after = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect(await after.find({ type: 'Text', text: /時間外 · 平日 8–17 時だけ自動取得/ })).toBeDefined()
+  await after.unmount()
 })
 
 // ---- the diff under an open finding ----
@@ -1093,6 +1150,8 @@ test('別の PR を選ぶと、開いていた指摘の差分は持ち越され�
   await clock.settle()
   expect(await ui.find({ type: 'Code' })).toBeDefined()
 
+  await ui.press({ key: 'back-to-list' })
+  await clock.settle()
   await ui.press({ key: `row:${OTHER}` })
   await clock.settle()
   expect(await ui.find({ key: 'open:f1' })).toBeDefined()
@@ -1100,7 +1159,7 @@ test('別の PR を選ぶと、開いていた指摘の差分は持ち越され�
   await ui.unmount()
 })
 
-test('選んだ PR の概要の見出しに、変更行数とファイル数が出る', async ($, on) => {
+test('選んだ PR の見出しに、変更行数とファイル数が出る', async ($, on) => {
   const { clock } = world(on, [review({ lines: { added: 120, removed: 34, files: 5 } })])
   await begin($, clock)
 
@@ -1108,11 +1167,12 @@ test('選んだ PR の概要の見出しに、変更行数とファイル数が�
   await ui.press({ key: `row:${KEY}` })
   await clock.settle()
 
-  expect((await ui.find({ type: 'Text', text: /^概要/ }))?.text).toBe('概要 · +120 −34 · 5 ファイル')
+  expect((await ui.find({ type: 'Text', text: /ファイル$/ }))?.text).toBe('widgets · +120 −34 · 5 ファイル')
+  expect((await ui.find({ type: 'Text', text: /^概要/ }))?.text).toBe('概要')
   await ui.unmount()
 })
 
-test('行数を持たない PR では、概要の見出しは「概要」だけになる', async ($, on) => {
+test('行数を持たない PR では、見出しはリポジトリ名だけになる', async ($, on) => {
   const { clock } = world(on, [review()])
   await begin($, clock)
 
@@ -1120,7 +1180,8 @@ test('行数を持たない PR では、概要の見出しは「概要」だけ�
   await ui.press({ key: `row:${KEY}` })
   await clock.settle()
 
-  expect((await ui.find({ type: 'Text', text: /^概要/ }))?.text).toBe('概要')
+  expect((await ui.find({ type: 'Text', text: /^widgets/ }))?.text).toBe('widgets')
+  expect(await ui.find({ type: 'Text', text: /ファイル$/ })).toBe(undefined)
   await ui.unmount()
 })
 
@@ -1140,25 +1201,37 @@ test('選択時に概要 Markdown が出る', async ($, on) => {
   await ui.unmount()
 })
 
-test('13 行の本文で『続きを表示』が出て、押すと全文が出る', async ($, on) => {
-  const { clock } = world(on, [review({ body: lines(13) })])
+test('3 行の本文は折りたたまない', async ($, on) => {
+  const { clock } = world(on, [review({ body: lines(3) })])
   await begin($, clock)
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   await ui.press({ key: `row:${KEY}` })
   await clock.settle()
-  expect((await ui.find({ key: 'body' }))?.props.text).toBe(lines(12))
+  expect((await ui.find({ key: 'body' }))?.props.text).toBe(lines(3))
+  expect(await ui.find({ key: 'more-body' })).toBe(undefined)
+  await ui.unmount()
+})
+
+test('4 行の本文で『続きを表示』が出て、押すと全文が出る', async ($, on) => {
+  const { clock } = world(on, [review({ body: lines(4) })])
+  await begin($, clock)
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: `row:${KEY}` })
+  await clock.settle()
+  expect((await ui.find({ key: 'body' }))?.props.text).toBe(lines(3))
 
   await ui.press({ key: 'more-body' })
   await clock.settle()
-  expect((await ui.find({ key: 'body' }))?.props.text).toBe(lines(13))
+  expect((await ui.find({ key: 'body' }))?.props.text).toBe(lines(4))
   expect(await ui.find({ key: 'more-body' })).toBe(undefined)
   await ui.unmount()
 })
 
 test('展開後に別の PR を選ぶと折りたたみに戻る', async ($, on) => {
   const { clock } = world(on, [
-    review({ body: lines(13) }),
+    review({ body: lines(5) }),
     review({ key: OTHER, url: 'https://github.com/acme/widgets/pull/13', body: lines(20) }),
   ])
   await begin($, clock)
@@ -1168,10 +1241,12 @@ test('展開後に別の PR を選ぶと折りたたみに戻る', async ($, on)
   await clock.settle()
   await ui.press({ key: 'more-body' })
   await clock.settle()
+  await ui.press({ key: 'back-to-list' })
+  await clock.settle()
   await ui.press({ key: `row:${OTHER}` })
   await clock.settle()
 
-  expect((await ui.find({ key: 'body' }))?.props.text).toBe(lines(12))
+  expect((await ui.find({ key: 'body' }))?.props.text).toBe(lines(3))
   expect(await ui.find({ key: 'more-body' })).toBeDefined()
   await ui.unmount()
 })
@@ -1189,15 +1264,24 @@ test('body が無い PR で『本文なし』が出る', async ($, on) => {
   await ui.unmount()
 })
 
-test('指摘行のタグに blocker 等の severity が出る', async ($, on) => {
-  const { clock } = world(on, [review()])
+test('指摘行のタグに書く severity は blocker だけで、基準の ID は開いたときに出る', async ($, on) => {
+  const { clock } = world(on, [
+    review({ findings: [finding(), finding({ id: 'f2', severity: 'recommended', line: 10, isUnsure: true })] }),
+  ])
   await begin($, clock)
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   await ui.press({ key: `row:${KEY}` })
   await clock.settle()
 
-  expect((await ui.find({ type: 'Text', text: /^blocker/ }))?.text).toBe('blocker · R-1')
+  expect(await ui.findAll({ type: 'Text', text: /^blocker$/ })).toHaveLength(1)
+  expect((await ui.find({ type: 'Text', text: /^要確認$/ }))?.text).toBe('要確認')
+  expect(await ui.find({ type: 'Text', text: /recommended/ })).toBe(undefined)
+  expect(await ui.find({ type: 'Text', text: /R-1/ })).toBe(undefined)
+
+  await ui.press({ key: 'open:f1' })
+  await clock.settle()
+  expect((await ui.find({ type: 'Text', text: /R-1/ }))?.text).toBe('…/components/orders · R-1')
   await ui.unmount()
 })
 
