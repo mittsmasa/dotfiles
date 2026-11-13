@@ -50,7 +50,7 @@ org 内の依頼をすべて拾い、clone は `~/work/repo/<リポジトリ名>
 |---|---|---|
 | `viewpoints` | reviewer に読ませる観点ファイルの配列（読む順）。ファイルだけで、ディレクトリは無視されます | testable-design の 4 ファイル |
 | `guide` | 観点ファイルの使い方と、観点由来の指摘の書き方を書いたファイル。中身が prompt に入ります | `viewpoints` も無ければ testable-design 用の指示、あれば汎用の短い指示 |
-| `commentStyle` | コメント下書きの口調を書いたファイル。中身が prompt に入ります | 相談形の口調（「〜はどうでしょうか」） |
+| `commentStyle` | コメント下書きの口調を書いたファイル。中身が prompt に入ります | です・ます調で、問題、理由、直し方の案を 1〜3 文で書く |
 | `checks` | 機械チェックの配列。`[]` にすると機械チェックをしません | oxlint と testable-scan |
 
 `checks` の各項目は次の形です。
