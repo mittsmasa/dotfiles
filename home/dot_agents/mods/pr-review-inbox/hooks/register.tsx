@@ -436,33 +436,33 @@ export const register: Register = (on, options) => {
               pending.kind === 'confirm' ? pending.error : undefined,
             )}
           {pending === undefined && (
-          <Box flexDirection="row" gap="md" marginTop="md" alignItems="center" flexWrap="wrap">
-            {actions.includes('comment') && (
-              <Button
-                key="comment"
-                variant={primary === 'comment' ? 'primary' : 'secondary'}
-                label={`COMMENT で送る (${adopted})`}
-                onPress={() => void openConfirm($, ready, review.key, 'COMMENT')}
-              />
-            )}
-            {actions.includes('approve') && (
-              <Button
-                key="approve"
-                variant={primary === 'approve' ? 'primary' : 'secondary'}
-                label="Approve で送る"
-                onPress={() => void openConfirm($, ready, review.key, 'APPROVE')}
-              />
-            )}
-            {actions.includes('rereview') && (
-              <Button key="rereview" label="再レビュー" onPress={() => void requeue($, ready, review.key)} />
-            )}
-            {review.status === 'failed' && (
-              <Button key="retry" label="やり直す" onPress={() => void retry($, ready, review.key)} />
-            )}
-            {review.postedUrl !== undefined && review.postedUrl.startsWith('https://github.com/') && (
-              <Link href={review.postedUrl} label="送ったレビューを開く" />
-            )}
-          </Box>
+            <Box flexDirection="row" gap="md" marginTop="md" alignItems="center" flexWrap="wrap">
+              {actions.includes('comment') && (
+                <Button
+                  key="comment"
+                  variant={primary === 'comment' ? 'primary' : 'secondary'}
+                  label={`COMMENT で送る (${adopted})`}
+                  onPress={() => void openConfirm($, ready, review.key, 'COMMENT')}
+                />
+              )}
+              {actions.includes('approve') && (
+                <Button
+                  key="approve"
+                  variant={primary === 'approve' ? 'primary' : 'secondary'}
+                  label="Approve で送る"
+                  onPress={() => void openConfirm($, ready, review.key, 'APPROVE')}
+                />
+              )}
+              {actions.includes('rereview') && (
+                <Button key="rereview" label="再レビュー" onPress={() => void requeue($, ready, review.key)} />
+              )}
+              {review.status === 'failed' && (
+                <Button key="retry" label="やり直す" onPress={() => void retry($, ready, review.key)} />
+              )}
+              {review.postedUrl !== undefined && review.postedUrl.startsWith('https://github.com/') && (
+                <Link href={review.postedUrl} label="送ったレビューを開く" />
+              )}
+            </Box>
           )}
           <Box flexDirection="row" gap="md" marginTop="sm" alignItems="center" flexWrap="wrap">
             {isGithubUrl(review.url) && <Link href={review.url} label="GitHub で開く" />}
