@@ -155,7 +155,7 @@ export const register: Register = (on, options) => {
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    const { Box, Text, Button, Link, Input, Markdown } = $.ui.resolve(e)
+    const { Box, Text, Button, Link, Input, Markdown, Code } = $.ui.resolve(e)
     const state = await read($, inboxAtom)
     const ready = config
     if (!ready || !(await read($, activeAtom))) {
