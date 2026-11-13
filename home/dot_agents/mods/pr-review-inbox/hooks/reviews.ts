@@ -914,11 +914,28 @@ export function reviewerPrompt(input: {
   diffPath: string
   scanDir?: string
   criteriaPath?: string
-  /** Real paths of the testable-design files, in reading order. */
+  /** Real paths of the viewpoint files, in reading order. */
   skillFiles?: readonly string[]
+  /** How the viewpoint files are explained: the testable-design sections when left out. */
+  guide?: { kind: 'testable-design' } | { kind: 'generic' } | { kind: 'text'; text: string }
+  /** The text of the comment style file; the built-in style when left out. */
+  commentStyle?: string
+  /** The checks that ran and the files each wrote; the default three files when left out. */
+  checkOutputs?: readonly { name: string; files: readonly string[] }[]
   resultPath: string
   files: readonly string[]
 }): string {
+  const guide = input.guide ?? { kind: 'testable-design' }
+  const viewpoints = input.skillFiles ?? []
+  const isTestable = guide.kind === 'testable-design'
+  const judgedBy = isTestable ? 'the testable-design viewpoints' : 'the viewpoints'
+  const outputFiles = input.checkOutputs?.flatMap(one => one.files) ?? ['oxlint.json', 'candidates.json', 'ir.json']
+  const viewpointSections =
+    guide.kind === 'testable-design'
+      ? [testableDesignGuide(viewpoints), `${FINDING_CONTRACT}\n${TESTABLE_FINDING}`]
+      : guide.kind === 'generic'
+        ? [genericGuide(viewpoints), `${FINDING_CONTRACT}\n${GENERIC_FINDING}`]
+        : [listedViewpoints(viewpoints), `${FINDING_CONTRACT}\n${guide.text.trim()}`]
   const shape = {
     key: input.key,
     headSha: input.headSha,
