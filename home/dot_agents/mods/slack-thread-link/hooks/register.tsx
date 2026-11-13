@@ -16,8 +16,8 @@ import {
 import type { Reply } from './slack'
 
 // この環境の Slack コネクタ（ツール名 mcp__<server>__slack_* の <server> 部分）。
-const SLACK_SERVER = 'a329a196-37db-4b84-96fa-57e31701b03d'
-const SEND_TOOL = 'mcp__a329a196-37db-4b84-96fa-57e31701b03d__slack_send_message'
+const SLACK_SERVER = 'e2035da9-9be2-4b7c-8dc1-74f495a22577'
+const SEND_TOOL = `mcp__${SLACK_SERVER}__slack_send_message`
 const POLL_MS = 60_000
 const SELF_TS_LIMIT = 50
 
