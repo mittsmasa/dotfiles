@@ -383,6 +383,8 @@ export function verdictOf(findings: readonly Pick<Finding, 'severity'>[]): Verdi
 }
 
 const SEVERITIES: readonly Severity[] = ['blocker', 'recommended', 'suggestion']
+/** What a reviewer may name besides `criteria`, which anything else reads as. */
+const REVIEWER_SOURCES = ['behavior', 'testable-design'] as const
 const text = (value: unknown, max: number) => (typeof value === 'string' ? value.slice(0, max) : '')
 const texts = (value: unknown, max: number) =>
   Array.isArray(value) ? value.slice(0, 10).map(item => text(item, max)).filter(Boolean) : []
@@ -403,7 +405,7 @@ function toFinding(raw: unknown, index: number): Finding | undefined {
     line: file ? line : undefined,
     reason,
     comment: text(raw.comment, 2000) || reason,
-    source: raw.source === 'testable-design' ? 'testable-design' : 'criteria',
+    source: REVIEWER_SOURCES.find(one => one === raw.source) ?? 'criteria',
     criteriaId: text(raw.criteriaId, 20) || undefined,
     isAdopted: true,
   }
@@ -760,9 +762,17 @@ function testableDesignGuide(skillFiles: readonly string[]): string {
   ].join('\n')
 }
 
-/** What a finding from testable-design must carry. */
+/** Where a finding comes from, and what one from behavior or testable-design must carry. */
 const TESTABLE_FINDING = [
-  'Every finding sets source: "criteria" only when it follows the criteria file, "testable-design" otherwise.',
+  'A finding sets source: "criteria" only when it follows the criteria file; "behavior" when the change',
+  'introduces a defect you traced in the code (wrong result, crash, lost or leaked data, a check that no',
+  'longer checks); "testable-design" otherwise.',
+  'A finding with source "behavior":',
+  '- reason names the path that breaks: which input or state, and what comes out instead',
+  '- only for a defect this change introduces or makes reachable; an existing one goes under humanReview',
+  '- no viewpoint in brackets',
+  'Before judging design and tests, read each changed function once for what it now does, and compare it',
+  'with what it did before and with what its name, comment and callers expect.',
   'A finding with source "testable-design":',
   '- reason starts with the viewpoint in brackets, as 「[関心の分離 観点 3] 」 or 「[テスト品質: 実装詳細への結合] 」',
   '- comment names the concrete case that breaks: whose change request, and what changes or breaks with it',
@@ -772,6 +782,29 @@ const TESTABLE_FINDING = [
   '- no finding on a viewpoint name alone, or on line or file counts alone',
   '- a problem this change did not make worse goes under humanReview as an existing one, not as a finding',
   'A criteria finding that also meets a testable-design viewpoint may carry the viewpoint the same way.',
+].join('\n')
+
+/**
+ * What each severity means, by what merging the change does. A finding that
+ * could not be traced stays below blocker: a blocker stops an approval.
+ */
+const SEVERITY_GUIDE = [
+  'severity is about what happens if the change is merged as it is, not about how sure you are or how',
+  'the comment is worded.',
+  '- blocker: merging as is breaks something for a user or an operator, and you traced it in the code.',
+  '  Examples: a condition inverted so valid input is rejected; an await dropped so a function returns',
+  '  before its work is done; a secret or personal data written where others can read it; a guard that',
+  '  passes silently when its precondition is missing; a rule the criteria file marks [blocker].',
+  '- recommended: works as merged, but leaves a cost someone pays later (a case not handled that the',
+  '  default path does not reach, a missing test for a branch the change adds, an inconsistency with the',
+  '  rest of the code).',
+  '- suggestion: optional; taste, wording, a possible later improvement.',
+  'Not a blocker: a design or naming preference, missing tests alone, a defect only a non-default',
+  'configuration reaches, anything you could not trace to a wrong result.',
+  'If you cannot trace the path but the finding, if true, must be fixed before merging, use recommended',
+  'with isUnsure: true, and end reason with 「確かめられれば blocker 相当」.',
+  'Where the criteria file gives a severity for a rule, that wins.',
+  'When no finding is a blocker, that is the normal case: do not raise one to have one.',
 ].join('\n')
 
 export function reviewerPrompt(input: {
@@ -795,9 +828,9 @@ export function reviewerPrompt(input: {
         isUnsure: false,
         file: 'path relative to the repository root',
         line: 1,
-        reason: 'なぜ問題か、1〜2 文。testable-design なら先頭に [観点]',
+        reason: 'なぜ問題か、1〜2 文。behavior なら壊れる経路。testable-design なら先頭に [観点]',
         comment: 'PR に書くコメントの下書き、1〜3 文。何が問題かと直し方。testable-design なら壊れる具体シナリオ',
-        source: 'criteria | testable-design',
+        source: 'criteria | behavior | testable-design',
         criteriaId: 'A-1 (only with a criteria file)',
       },
     ],
@@ -822,8 +855,9 @@ export function reviewerPrompt(input: {
     testableDesignGuide(input.skillFiles ?? []),
     TESTABLE_FINDING,
     `Changed files:\n${input.files.slice(0, 200).map(file => `- ${file}`).join('\n')}`,
-    'severity: blocker = must fix before merge; recommended = better fixed; suggestion = optional.',
-    'Set isUnsure to true when the finding depends on a spec you cannot see.',
+    SEVERITY_GUIDE,
+    'Set isUnsure to true when the finding depends on a spec you cannot see, or on something you could only',
+    'settle by running a command.',
     COMMENT_STYLE,
     `Write the result as JSON to exactly this path and nowhere else: ${input.resultPath}`,
     'If that write is refused, do not try another path: end with the same JSON in a ```json block.',
