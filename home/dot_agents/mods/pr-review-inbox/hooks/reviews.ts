@@ -203,7 +203,7 @@ export function toBodyMarkdown(raw: string): string {
 }
 
 type CommandOutput = { exitCode: number; stdout: string }
-type Fetched = Pick<Review, 'key' | 'title' | 'url' | 'body' | 'headSha' | 'baseRefName' | 'files'>
+type Fetched = Pick<Review, 'key' | 'title' | 'url' | 'body' | 'headSha' | 'baseRefName' | 'files' | 'lines'>
 
 function parseJson(text: string): unknown {
   try {
@@ -230,6 +230,23 @@ export function searchedKeys(search: CommandOutput): string[] | undefined {
   }
 
   return keys
+}
+
+const countOf = (value: unknown) =>
+  typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : undefined
+
+/** The pull request's size as GitHub counts it, or nothing unless all three counts came. */
+function linesOf(detail: Record<string, unknown>): Review['lines'] {
+  const added = countOf(detail.additions)
+  const removed = countOf(detail.deletions)
+  const files = countOf(detail.changedFiles)
+
+  return added === undefined || removed === undefined || files === undefined ? undefined : { added, removed, files }
+}
+
+/** A pull request's size on one line, as the detail's heading carries it. */
+export function linesText(lines: Review['lines']): string | undefined {
+  return lines ? `+${lines.added} −${lines.removed} · ${lines.files} ファイル` : undefined
 }
 
 function toFetched(
@@ -260,6 +277,8 @@ function toFetched(
       files: Array.isArray(files)
         ? files.flatMap(file => (isRecord(file) && typeof file.path === 'string' ? [file.path] : []))
         : [],
+      // Missing counts are no failed fetch either: the heading goes without them.
+      lines: linesOf(detail),
     })
   }
 
@@ -283,7 +302,7 @@ export function selectQueued(
     const existing = stored.find(review => review.key === one.key)
     if (existing?.status === 'reviewing') return existing
     if (existing && existing.headSha === one.headSha && !reRequested.has(one.key)) {
-      return { ...existing, title: one.title, body: one.body }
+      return { ...existing, title: one.title, body: one.body, lines: one.lines ?? existing.lines }
     }
 
     return {
