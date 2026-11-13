@@ -12,7 +12,8 @@ export type Finding = {
   /** The text to post on the pull request; a person may edit it. */
   comment: string
   /** `behavior`: a defect the change introduces, traced in the code. */
-  source: 'criteria' | 'behavior' | 'testable-design' | 'human'
+  /** `viewpoint`: one the configured viewpoint files support. */
+  source: 'criteria' | 'behavior' | 'viewpoint' | 'human'
   criteriaId?: string
   isAdopted: boolean
 }
