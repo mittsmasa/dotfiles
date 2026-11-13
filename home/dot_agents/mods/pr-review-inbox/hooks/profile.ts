@@ -13,20 +13,19 @@ export type Check = {
 }
 
 /**
- * How the viewpoint files are explained to the reviewer: the testable-design
- * sections by default, a short generic note for files set without a guide, or
- * the text of the guide file the config names.
+ * How the viewpoint files are explained to the reviewer: a short generic note
+ * by default, or the text of the guide file the config names.
  */
-export type GuideSource = { kind: 'testable-design' } | { kind: 'generic' } | { kind: 'file'; path: string }
+export type GuideSource = { kind: 'generic' } | { kind: 'file'; path: string }
 
 export type Profile = {
-  /** Viewpoint files, `~` expanded, not yet resolved; read in this order. */
+  /** Viewpoint files, `~` expanded, not yet resolved; read in this order. None by default. */
   viewpoints: string[]
   guide: GuideSource
   /** The file whose text replaces the comment style; the built-in one without. */
   commentStyle?: string
-  /** The checks to run; undefined runs the default testable-design ones. */
-  checks?: Check[]
+  /** The checks to run; none by default. */
+  checks: Check[]
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -102,18 +101,14 @@ export function parseProfile(raw: unknown, home: string): { profile: Profile; wa
     }
   }
 
-  const guide: GuideSource = guidePath
-    ? { kind: 'file', path: guidePath }
-    : viewpoints
-      ? { kind: 'generic' }
-      : { kind: 'testable-design' }
+  const guide: GuideSource = guidePath ? { kind: 'file', path: guidePath } : { kind: 'generic' }
 
   return {
     profile: {
-      viewpoints: viewpoints ?? SKILL_FILES.map(file => `${skillDirOf(home)}/${file}`),
+      viewpoints: viewpoints ?? [],
       guide,
       ...(commentStyle ? { commentStyle } : {}),
-      ...(checks ? { checks } : {}),
+      checks: checks ?? [],
     },
     warnings,
   }
@@ -124,7 +119,7 @@ export type ViewpointStat = { path: string; kind?: 'file' | 'dir' | 'other' }
 
 /**
  * Only plain files are kept: a reviewer may read what was named and nothing
- * beside it. A missing file is left out quietly, as the default skill may be absent.
+ * beside it. A missing file is left out quietly.
  */
 export function pickViewpointFiles(stats: readonly ViewpointStat[]): { files: string[]; warnings: string[] } {
   const files: string[] = []
@@ -135,25 +130,6 @@ export function pickViewpointFiles(stats: readonly ViewpointStat[]): { files: st
   }
 
   return { files, warnings }
-}
-
-/** The default checks: oxlint and testable-scan from the skill, with the binaries already resolved. */
-export function defaultChecks(tools: { oxlint: string; node: string }, skillDir: string): Check[] {
-  const dir = `${skillDir}/tools`
-
-  return [
-    {
-      name: 'oxlint',
-      argv: [tools.oxlint, '-c', `${dir}/oxlintrc.json`, '-f', 'json', '{files}'],
-      stdout: 'oxlint.json',
-      outputs: [],
-    },
-    {
-      name: 'testable-scan',
-      argv: [tools.node, `${dir}/bin/testable-scan.ts`, '{worktree}', '{relativeFiles}', '--out', '{outDir}'],
-      outputs: ['candidates.json', 'ir.json'],
-    },
-  ]
 }
 
 export type ArgvVars = {
