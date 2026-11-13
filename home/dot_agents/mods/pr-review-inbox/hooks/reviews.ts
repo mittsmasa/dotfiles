@@ -83,12 +83,36 @@ export function parseConfig(text: string | undefined, home: string): RepoConfig 
     }),
   )
 
-  return { repos, criteria }
+  return {
+    repos,
+    criteria,
+    sources,
+    ...(clonePath ? { clonePath } : {}),
+    profile,
+    warnings: [...warnings, ...profileWarnings],
+  }
 }
 
 /** Looked up by the full `owner/repo` only: a same-named repo elsewhere has no clone. */
 export function localPathOf(repos: Record<string, string>, fullName: string): string | undefined {
   return Object.hasOwn(repos, fullName) ? repos[fullName] : undefined
+}
+
+/**
+ * The clone of `owner/repo`: the one `repos` names, else the `clonePath`
+ * template filled in. A name that could climb out of the template gets none.
+ */
+export function resolveClone(
+  config: Pick<RepoConfig, 'repos' | 'clonePath'>,
+  fullName: string,
+): string | undefined {
+  const named = localPathOf(config.repos, fullName)
+  if (named !== undefined) return named
+  const [owner, repo, ...rest] = fullName.split('/')
+  if (!config.clonePath || owner === undefined || repo === undefined || rest.length > 0) return undefined
+  if (!isNameSegment(owner) || !isNameSegment(repo)) return undefined
+
+  return config.clonePath.replaceAll('{owner}', owner).replaceAll('{repo}', repo)
 }
 
 export function originMatches(originUrl: string, fullName: string): boolean {
