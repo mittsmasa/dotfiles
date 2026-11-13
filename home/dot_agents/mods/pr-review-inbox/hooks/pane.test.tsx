@@ -69,7 +69,7 @@ const DIFF = [
   'diff --git a/x b/x',
   '--- a/web/src/components/orders/order-list.tsx',
   '+++ b/web/src/components/orders/order-list.tsx',
-  '@@ -10,2 +10,2 @@',
+  '@@ -10,1 +10,2 @@',
   ' const a = 1',
   '+const b = 2',
 ].join('\n')
@@ -929,6 +929,11 @@ test('COMMENT 送信後、その PR が一覧に出ない', async ($, on) => {
 const OTHER = 'acme/widgets#13'
 const lines = (count: number) => Array.from({ length: count }, (_, index) => `行 ${index + 1}`).join('\n')
 
+/** What the cell before a row's edge draws: the selection mark, or a blank. */
+async function markOf(ui: { find: (query: { key: string }) => Promise<{ children: unknown[] } | undefined> }, key: string) {
+  return JSON.stringify((await ui.find({ key: `mark:${key}` }))?.children ?? [])
+}
+
 test('選択しても行に枠は付かず、選択行にだけ印が出る', async ($, on) => {
   const { clock } = world(on, [review(), review({ key: OTHER, url: 'https://github.com/acme/widgets/pull/13' })])
   await begin($, clock)
@@ -942,19 +947,19 @@ test('選択しても行に枠は付かず、選択行にだけ印が出る', as
   expect((await ui.find({ key: `row-box:${KEY}` }))?.props.borderStyle).toBe(undefined)
   expect((await ui.find({ key: `row-box:${OTHER}` }))?.props.borderStyle).toBe(undefined)
   expect(await ui.findAll({ type: 'Text', text: /▸/ })).toHaveLength(1)
-  expect(await ui.find({ type: 'Text', text: /▸/, in: `row-box:${KEY}` })).toBeDefined()
+  expect(await markOf(ui, KEY)).toContain('▸')
 
   await ui.press({ key: `row:${OTHER}` })
   await clock.settle()
   expect(await ui.findAll({ type: 'Text', text: /▸/ })).toHaveLength(1)
-  expect(await ui.find({ type: 'Text', text: /▸/, in: `row-box:${OTHER}` })).toBeDefined()
+  expect(await markOf(ui, OTHER)).toContain('▸')
   await ui.unmount()
 })
 
 // ---- the diff under an open finding ----
 
 // Two files, one hunk each: order-list.tsx shows right-side lines 10-11, filter.ts lines 40-41.
-const HUNK_ORDERS = ['@@ -10,2 +10,2 @@', ' const a = 1', '+const b = 2'].join('\n')
+const HUNK_ORDERS = ['@@ -10,1 +10,2 @@', ' const a = 1', '+const b = 2'].join('\n')
 const HUNK_FILTER = ['@@ -40,1 +40,2 @@', ' const z = 3', '+const w = 4'].join('\n')
 const TWO_FILES = [
   'diff --git a/x b/x',
