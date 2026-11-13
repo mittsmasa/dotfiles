@@ -5,7 +5,7 @@ type On = Parameters<TestBody>[1]
 
 import { oneLine, parseParentText, parsePermalink, parseReplies, parseUserId, tsAfter } from '../hooks/slack'
 
-const SERVER = 'a329a196-37db-4b84-96fa-57e31701b03d'
+const SERVER = 'e2035da9-9be2-4b7c-8dc1-74f495a22577'
 const URL = 'https://x.slack.com/archives/C07QD6X30Q2/p1794214480861519?thread_ts=1793849534.425339'
 const OWNER = 'U04DPHUN275'
 const OTHER = 'U03A6KQJH8D'
