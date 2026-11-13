@@ -55,11 +55,9 @@ const PANE = 'review-inbox'
 const TITLE = 'PR レビュー'
 // The left edge of a row: its colour alone says how heavy the row is.
 const EDGE = '▍'
-// Stands before the selected row's edge, in a cell every row keeps.
-const SELECTED_MARK = '▸'
 const HUMAN_REVIEW_SHOWN = 2
 // A description longer than this many lines is folded until asked for.
-const BODY_SHOWN_LINES = 12
+const BODY_SHOWN_LINES = 3
 
 /**
  * Puts the deep-dive request in the prompt box. A surface that draws its own
