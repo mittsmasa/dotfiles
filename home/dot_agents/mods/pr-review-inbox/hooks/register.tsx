@@ -201,8 +201,8 @@ export const register: Register = (on, options) => {
         >
           <Text weight="medium">送信の確認</Text>
           <Text>
-            <Text mono>{name.number}</Text> {name.repo} に {payload.event} レビューを送ります。
-            {payload.event === 'APPROVE' ? 'この PR を承認します。' : ''}
+            <Text mono>{name.number}</Text> {name.repo} に{payload.event === 'APPROVE' ? '承認' : 'コメント'}
+            として送ります。
           </Text>
           <Text size="caption" dimColor>
             インライン {payload.comments.length} 件 · {payload.body === undefined ? '本文なし' : '本文あり'}
