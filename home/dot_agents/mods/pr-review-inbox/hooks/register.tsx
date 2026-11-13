@@ -11,6 +11,7 @@ import {
   deepDivePrompt,
   isDue,
   isGithubUrl,
+  linesText,
   rowLabel,
   shortName,
   splitPlace,
