@@ -27,7 +27,19 @@ export type RepoConfig = {
   repos: Record<string, string>
   /** `owner/repo` to the criteria file in that clone, and the changed paths it covers. */
   criteria: Record<string, Criteria>
+  /** What is searched: `owner` for all its repositories, `owner/repo` for one. */
+  sources: string[]
+  /** Where a clone is when `repos` does not say: `{owner}` and `{repo}` filled in. */
+  clonePath?: string
+  profile: Profile
+  /** What in the file was dropped, for the pane to show. */
+  warnings: string[]
 }
+
+/** One name segment of `owner/repo`: never `.` or `..`, which would climb in a path. */
+const isNameSegment = (name: string) => /^[\w.-]+$/.test(name) && name !== '.' && name !== '..'
+const isSource = (value: unknown): value is string =>
+  typeof value === 'string' && value.split('/').length <= 2 && value.split('/').every(isNameSegment)
 
 function toRegExp(source: unknown): RegExp | undefined {
   if (typeof source !== 'string') return undefined
