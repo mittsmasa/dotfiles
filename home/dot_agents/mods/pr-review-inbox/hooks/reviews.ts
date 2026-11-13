@@ -97,7 +97,7 @@ export function viewArgs(key: string): string[] | undefined {
 
   return [
     'gh', 'pr', 'view', String(parsed.number), '-R', parsed.fullName,
-    '--json', 'headRefOid,baseRefName,files,body',
+    '--json', 'headRefOid,baseRefName,files,body,additions,deletions,changedFiles',
   ]
 }
 
