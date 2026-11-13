@@ -102,7 +102,7 @@ function world(
   }
   // What GitHub says of the review requests: when each named me, and whether it answers at all.
   const github = { requestedAt: [] as string[], isDown: false, isRefusingReviews: false }
-  // Set, a read of the saved diff waits for it: what was opened meanwhile is decided first.
+  // Set, the next read of the saved diff waits for it, so a later read can come back first.
   const disk = { hold: undefined as Promise<void> | undefined }
   // This session's agents as `$.agent.list()` reports them.
   const agents: { id: string; status: string }[] = []
@@ -1031,9 +1031,11 @@ test('差分を読んでいる間に別の指摘へ切り替えても、先の�
   disk.hold = new Promise<void>(resolve => {
     release = resolve
   })
-  // Both reads wait; f1's comes back first, after f2 has been opened.
+  // f1's read waits; f2 is opened and its read comes back; only then does f1's.
   await ui.press({ key: 'open:f1' })
+  await clock.settle()
   await ui.press({ key: 'open:f2' })
+  await clock.settle()
   release()
   await clock.settle()
 
