@@ -110,3 +110,19 @@ export function formatPrompt(url: string, replies: readonly Reply[], ownerId: st
     ...lines,
   ].join('\n')
 }
+
+/** セッションが紐付け先に投稿するときのツール名。サーバー名はコネクタをつなぎ直すと変わるので固定しない。 */
+export const SEND_TOOL_PATTERN = /^mcp__.+__slack_send_message$/
+
+/**
+ * MCP ツール名（`mcp__<server>__slack_read_thread`）から、Slack コネクタのサーバー名を取り出す。
+ * サーバー名にも `__` が入りうるので、末尾のツール名で切る。
+ */
+export function findSlackServer(toolNames: readonly string[]): string | undefined {
+  for (const name of toolNames) {
+    const server = name.match(/^mcp__(.+)__slack_read_thread$/)?.[1]
+    if (server) return server
+  }
+
+  return undefined
+}
