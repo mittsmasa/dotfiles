@@ -101,7 +101,9 @@ function world(
     argv: [] as (readonly string[])[],
   }
   // What GitHub says of the review requests: when each named me, and whether it answers at all.
-  const github = { requestedAt: [] as string[], isDown: false }
+  const github = { requestedAt: [] as string[], isDown: false, isRefusingReviews: false }
+  // Set, a read of the saved diff waits for it: what was opened meanwhile is decided first.
+  const disk = { hold: undefined as Promise<void> | undefined }
   // This session's agents as `$.agent.list()` reports them.
   const agents: { id: string; status: string }[] = []
   const clock = mock.clock(on, { now: Date.UTC(2026, 10, 9, 2, 0) })
