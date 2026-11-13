@@ -720,11 +720,11 @@ export function splitPlace(file: string | undefined, line: number | undefined): 
   }
 }
 
-/** `#12` and the repository; the owner is dropped while only one is configured. */
-export function shortName(key: string, repos: Readonly<Record<string, string>>): { number: string; repo: string } {
+/** `#12` and the repository; the owner is dropped while only one is searched. */
+export function shortName(key: string, sources: readonly string[]): { number: string; repo: string } {
   const parsed = parseKey(key)
   if (!parsed) return { number: key, repo: '' }
-  const owners = new Set(Object.keys(repos).map(name => name.split('/')[0]))
+  const owners = new Set(sources.map(source => source.split('/')[0]))
 
   return {
     number: `#${parsed.number}`,
