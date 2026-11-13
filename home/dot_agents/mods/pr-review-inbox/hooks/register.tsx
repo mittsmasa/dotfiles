@@ -490,7 +490,7 @@ export const register: Register = (on, options) => {
       return (
         <Box key={`row-box:${review.key}`} flexDirection="row" gap="sm" marginTop="sm">
           <Box flexDirection="row" flexShrink={0}>
-            <Box width={1} flexShrink={0}>
+            <Box key={`mark:${review.key}`} width={1} flexShrink={0}>
               <Text color="suggestion">{isSelected ? SELECTED_MARK : ' '}</Text>
             </Box>
             {bar(tone)}
