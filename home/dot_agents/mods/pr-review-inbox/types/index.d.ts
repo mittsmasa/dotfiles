@@ -77,6 +77,8 @@ export type Inbox = {
   mode?: Mode
   /** The one finding of the selected review drawn open. */
   openFindingId?: string
+  /** The diff hunk the open finding sits in; drawn only while `id` is the open finding. */
+  openDiff?: { id: string; source: string }
   isHumanReviewOpen?: boolean
   /** Whether the selected review's description is drawn in full. */
   isBodyOpen?: boolean
