@@ -50,8 +50,15 @@ export type ReviewEvent = 'COMMENT' | 'APPROVE'
 export type Mode =
   | { kind: 'edit'; id: string }
   | { kind: 'add'; place: string; error?: string }
-  | { kind: 'confirm'; payload: ReviewPayload; error?: string }
-  | { kind: 'sending'; payload: ReviewPayload }
+  | { kind: 'confirm'; payload: ReviewPayload; placement: Placement; error?: string }
+  | { kind: 'sending'; payload: ReviewPayload; placement: Placement }
+
+/**
+ * Where each adopted finding of a request goes, by finding id: on a line of
+ * the diff, or into the review body. A finding not named here is not sent.
+ * Made from the same split as the payload, so the two cannot disagree.
+ */
+export type Placement = Record<string, 'inline' | 'body'>
 
 /** The request body of one review: what the confirm screen shows is what is sent. */
 export type ReviewPayload = {
