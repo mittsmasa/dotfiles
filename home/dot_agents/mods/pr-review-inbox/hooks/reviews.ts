@@ -764,7 +764,7 @@ function testableDesignGuide(skillFiles: readonly string[]): string {
 
 /** Where a finding comes from, and what one from behavior or testable-design must carry. */
 const TESTABLE_FINDING = [
-  'A finding sets source: "criteria" only when it follows the criteria file; "behavior" when the change',
+  'Every finding sets source: "criteria" only when it follows the criteria file; "behavior" when the change',
   'introduces a defect you traced in the code (wrong result, crash, lost or leaked data, a check that no',
   'longer checks); "testable-design" otherwise.',
   'A finding with source "behavior":',
