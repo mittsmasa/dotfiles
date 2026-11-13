@@ -40,6 +40,7 @@ async function setUp($: Engine, on: On, initial: string[]) {
     submitted: [] as string[],
     toasts: [] as string[],
     isSubmitFailing: false,
+    calledServers: [] as string[],
     mcpTools: [`mcp__other__search`, `mcp__${SERVER}__slack_read_thread`, `mcp__${SERVER}__slack_send_message`],
   }
   // セッションが持つ MCP ツールの一覧。mod が読むのは名前だけなので、ほかの値は埋めない。
@@ -126,17 +127,13 @@ test('MCP ツール名から Slack コネクタのサーバー名を取り出す
 test('コネクタをつなぎ直してサーバー名が変わっても、新しい名前で読みにいく', async ($, on) => {
   const { world, checkNow } = await setUp($, on, [])
   const RECONNECTED = '99999999-8888-7777-6666-555555555555'
-  const called: string[] = []
-  on('mcp.call', (_, e) => {
-    called.push(e.server)
-    return { value: thread(world.replies) }
-  })
+  expect(world.calledServers.at(-1)).toBe(SERVER)
 
   world.mcpTools = [`mcp__${RECONNECTED}__slack_read_thread`]
   world.replies = [reply('1794214600.000001', OWNER, 'mitsuhashi', 'つなぎ直したあとの依頼')]
   await checkNow()
 
-  expect(called).toEqual([RECONNECTED])
+  expect(world.calledServers.at(-1)).toBe(RECONNECTED)
   expect(world.submitted[0]).toContain('つなぎ直したあとの依頼')
 })
 
