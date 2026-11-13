@@ -11,7 +11,8 @@ export type Finding = {
   reason: string
   /** The text to post on the pull request; a person may edit it. */
   comment: string
-  source: 'criteria' | 'testable-design' | 'human'
+  /** `behavior`: a defect the change introduces, traced in the code. */
+  source: 'criteria' | 'behavior' | 'testable-design' | 'human'
   criteriaId?: string
   isAdopted: boolean
 }
