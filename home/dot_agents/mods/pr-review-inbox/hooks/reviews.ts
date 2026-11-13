@@ -809,14 +809,6 @@ export const COMMENT_STYLE = [
   '- 避ける例: 「null チェックがありません。早期 return を追加してください」',
 ].join('\n')
 
-/** The testable-design files a reviewer may read, relative to the skill, in reading order. */
-export const SKILL_FILES = [
-  'SKILL.md',
-  'references/separation-of-concerns.md',
-  'references/test-quality.md',
-  'references/mechanical-checks.md',
-] as const
-
 /**
  * How to use the testable-design files. Section names are pointed at, not
  * copied, so checks the skill adds later (c7 and on, new rules) reach the
