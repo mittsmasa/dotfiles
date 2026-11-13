@@ -907,7 +907,7 @@ test('a guide and a comment style from the config replace those parts and leave 
 
   expect(prompt).toContain('TEAM GUIDE: apply rule X first.')
   expect(prompt).toContain('TEAM STYLE: write in English.')
-  expect(prompt).not.toContain('相談形')
+  expect(prompt).not.toContain('です・ます調で書く')
   expect(prompt).not.toContain('「[関心の分離 観点 3] 」')
   expect(prompt).toContain('reason names the path that breaks: which input or state, and what comes out instead')
   expect(prompt).toContain('Write the result as JSON to exactly this path and nowhere else: /r.json')
