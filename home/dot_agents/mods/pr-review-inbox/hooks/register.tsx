@@ -242,7 +242,7 @@ export const register: Register = (on, options) => {
       if (!placement) return undefined
       const place = Object.hasOwn(placement, id) ? placement[id] : undefined
 
-      return place ? PLACED[place] : '送らない'
+      return place ? PLACED[place] : '外した'
     }
 
     // ---- one finding: a line when closed; its text and controls when open ----
@@ -252,17 +252,19 @@ export const register: Register = (on, options) => {
       const isEditing = isEditable && mode?.kind === 'edit' && mode.id === one.id
       const placed = placedTag(one.id)
       // While a request is pending the row says where the finding goes, in place of what it is.
+      // The edge's colour already tells the severity; only a blocker is also written.
       const tags =
         placed !== undefined
           ? [placed]
           : [
-              one.source === 'human' ? undefined : one.severity,
-              one.criteriaId,
+              one.source !== 'human' && one.severity === 'blocker' ? one.severity : undefined,
               one.isUnsure ? '要確認' : undefined,
               one.source === 'human' ? '自分' : undefined,
               one.isAdopted ? undefined : '外した',
             ].filter(Boolean)
       const hunk = isShown && state.openDiff?.id === one.id ? state.openDiff.source : undefined
+      // The criterion's id is the reviewer's reference: drawn only once the finding is open.
+      const where = [place.dir, one.criteriaId].filter(Boolean).join(' · ')
 
       return (
         <Box flexDirection="row" gap="sm" marginTop="sm">
@@ -279,9 +281,9 @@ export const register: Register = (on, options) => {
               </Text>
             </Box>
             <Text dimColor={!one.isAdopted}>{one.reason}</Text>
-            {isShown && place.dir !== '' && (
+            {isShown && where !== '' && (
               <Text mono size="caption" dimColor>
-                {place.dir}
+                {where}
               </Text>
             )}
             {isShown && one.isAdopted && !isEditing && (
