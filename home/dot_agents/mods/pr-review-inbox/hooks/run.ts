@@ -95,7 +95,6 @@ let inbox: Inbox = EMPTY
 let reviewerAgentIds: string[] = []
 let running: Running | undefined
 let spawning: Promise<void> | undefined
-let tools: { oxlint: string; node: string } | undefined
 // Store writes go through one line: two hooks merging at once lose a write.
 let line: Promise<unknown> = Promise.resolve()
 
@@ -470,30 +469,12 @@ export async function retry($: EngineInterface, config: Config, key: string) {
   await pump($, config)
 }
 
-async function resolveTools($: EngineInterface, config: Config) {
-  if (tools) return tools
-  // The real binaries, not shims that would read a checkout's tool versions.
-  const oxlint = await must($, ['mise', 'which', 'oxlint'], config, 'oxlint が見つからない')
-  const node = await must($, ['mise', 'which', 'node'], config, 'node が見つからない')
-  tools = { oxlint: oxlint.stdout.trim(), node: node.stdout.trim() }
-
-  return tools
-}
-
-/** The checks the config sets, or the default ones with their binaries found. */
-async function checksOf($: EngineInterface, config: Config): Promise<Check[]> {
-  if (config.profile.checks) return config.profile.checks
-  const skillDir = skillDirOf(config.home)
-  if (!(await $.fs.exists(`${skillDir}/tools`))) throw new Error('testable-design の tools が無い')
-
-  return defaultChecks(await resolveTools($, config), skillDir)
-}
-
 /**
- * Runs the checks over the changed scripts. A check fails only when it cannot
- * start, times out, or leaves an output it names missing: a lint that finds
- * something exits non-zero and its output is the point. `outputs` is absent
- * when nothing could run at all; the reviewer then gets no output directory.
+ * Runs the checks the config sets over the changed scripts; with none set,
+ * nothing runs and nothing is reported as left out. A check fails only when it
+ * cannot start, times out, or leaves an output it names missing: a lint that
+ * finds something exits non-zero and its output is the point. `outputs` is
+ * absent when nothing ran at all; the reviewer then gets no output directory.
  */
 async function mechanicalChecks(
   $: EngineInterface,
@@ -502,6 +483,8 @@ async function mechanicalChecks(
   worktreeReal: string,
   scanDir: string,
 ): Promise<{ skipped: string[]; outputs?: { name: string; files: string[] }[] }> {
+  const { checks } = config.profile
+  if (checks.length === 0) return { skipped: [] }
   const targets: string[] = []
   for (const file of review.files.filter(isScript).slice(0, 200)) {
     const stat = await $.fs.stat(`${worktreeReal}/${file}`, { resolve: true }).catch(() => undefined)
@@ -510,13 +493,6 @@ async function mechanicalChecks(
     if (stat && stat.kind === 'file' && !stat.isLink && isInside) targets.push(stat.realPath as string)
   }
   if (targets.length === 0) return { skipped: ['機械チェック（対象の JS / TS ファイルなし）'] }
-  let checks: Check[]
-  try {
-    checks = await checksOf($, config)
-  } catch (error) {
-    return { skipped: [`機械チェック（${firstLine(String(error instanceof Error ? error.message : error))}）`] }
-  }
-  if (checks.length === 0) return { skipped: [] }
   const results: CheckResult[] = []
   for (const check of checks) {
     const written = outputsOf(check).map(name => `${scanDir}/${name}`)
@@ -635,12 +611,7 @@ async function startReview($: EngineInterface, config: Config, review: Review) {
     const { guide: guideSource, commentStyle: stylePath } = config.profile
     const guideText = await readNamed($, guideSource.kind === 'file' ? guideSource.path : undefined, 'review.guide', skipped)
     const commentStyle = await readNamed($, stylePath, 'review.commentStyle', skipped)
-    const guide =
-      guideText !== undefined
-        ? { kind: 'text' as const, text: guideText }
-        : guideSource.kind === 'testable-design'
-          ? { kind: 'testable-design' as const }
-          : { kind: 'generic' as const }
+    const guide = guideText !== undefined ? { kind: 'text' as const, text: guideText } : { kind: 'generic' as const }
     const allowedRoots = [
       worktreeReal,
       await realPath($, scanDir),
