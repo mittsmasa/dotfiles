@@ -481,27 +481,15 @@ export const register: Register = (on, options) => {
 
     const row = (review: Review) => {
       const name = shortName(review.key, ready.sources)
-      const isSelected = review.key === selected?.key
       const tone = toneOf(review)
 
-      // The selected row is told by a mark in a cell every row keeps, and by
-      // weight: nothing that adds a row or a column, so selecting moves no row.
       return (
         <Box key={`row-box:${review.key}`} flexDirection="row" gap="sm" marginTop="sm">
-          <Box flexDirection="row" flexShrink={0}>
-            <Box key={`mark:${review.key}`} width={1} flexShrink={0}>
-              <Text color="suggestion">{isSelected ? SELECTED_MARK : ' '}</Text>
-            </Box>
-            {bar(tone)}
-          </Box>
+          {bar(tone)}
           <Box flexDirection="column" flexGrow={1}>
             <Box flexDirection="row" justifyContent="space-between" gap="sm">
-              <Button
-                key={`row:${review.key}`}
-                plain
-                onPress={() => void select($, isSelected ? undefined : review.key)}
-              >
-                <Text mono weight={isSelected ? 'bold' : 'medium'}>
+              <Button key={`row:${review.key}`} plain onPress={() => void select($, review.key)}>
+                <Text mono weight="medium">
                   {name.number}
                 </Text>{' '}
                 <Text size="caption" dimColor>
@@ -512,10 +500,24 @@ export const register: Register = (on, options) => {
                 {rowLabel(review, offset)}
               </Text>
             </Box>
-            <Text wrap="truncate-end" dimColor={selected !== undefined && !isSelected}>
-              {review.title}
-            </Text>
+            <Text wrap="truncate-end">{review.title}</Text>
           </Box>
+        </Box>
+      )
+    }
+
+    // A selected review takes the whole pane; the list folds to the line that leads back to it.
+    if (selected) {
+      return (
+        <Box flexDirection="column">
+          <Button
+            key="back-to-list"
+            plain
+            label={`← 一覧 (${visible.length})`}
+            onPress={() => void select($, undefined)}
+          />
+          {state.fetchError !== undefined && <Text color="error">取得に失敗しました: {state.fetchError}</Text>}
+          {detail(selected)}
         </Box>
       )
     }
@@ -529,7 +531,7 @@ export const register: Register = (on, options) => {
               : state.lastFetchedAt
                 ? `最終取得 ${clockText(state.lastFetchedAt, offset)}`
                 : 'まだ取得していません'}
-            {isOpen ? '' : ' · 時間外'}
+            {isOpen ? '' : ' · 時間外 · 平日 8–17 時だけ自動取得'}
           </Text>
           <Button key="fetch" plain label="更新" onPress={() => void fetchNow($, ready)} />
         </Box>
@@ -540,7 +542,6 @@ export const register: Register = (on, options) => {
           </Box>
         )}
         {visible.map(row)}
-        {selected && detail(selected)}
       </Box>
     )
   })
