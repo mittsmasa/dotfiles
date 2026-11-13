@@ -17,9 +17,6 @@ import {
 } from './slack'
 import type { Reply } from './slack'
 
-// この環境の Slack コネクタ（ツール名 mcp__<server>__slack_* の <server> 部分）。
-const SLACK_SERVER = 'e2035da9-9be2-4b7c-8dc1-74f495a22577'
-const SEND_TOOL = `mcp__${SLACK_SERVER}__slack_send_message`
 const POLL_MS = 60_000
 const SELF_TS_LIMIT = 50
 
@@ -29,8 +26,21 @@ const link = atom({ plugin: 'slack-thread-link', key: 'link' } as const, null as
 
 type $ = EngineInterface
 
+/**
+ * Slack コネクタのサーバー名（ツール名 mcp__<server>__slack_* の <server> 部分）。
+ * コネクタをつなぎ直すと変わるので、セッションが持つ MCP ツールの一覧から毎回引く。
+ * 一覧は遅延ロード中のツールも含み、summary はローカルの見積もりだけで済む。
+ */
+async function slackServer($: $): Promise<string> {
+  const usage = await $.session.usage({ breakdown: 'summary' })
+  const server = findSlackServer((usage.context.breakdown?.mcpTools ?? []).map(t => t.name))
+  if (!server) throw new Error('Slack コネクタが見つかりませんでした。接続されているか確かめてください')
+
+  return server
+}
+
 async function fetchThread($: $, l: SlackLink): Promise<{ title?: string; replies: Reply[] }> {
-  const result = await $.mcp.call(SLACK_SERVER, 'slack_read_thread', {
+  const result = await $.mcp.call(await slackServer($), 'slack_read_thread', {
     channel_id: l.channel,
     message_ts: l.threadTs,
     oldest: l.lastTs,
@@ -45,7 +55,7 @@ async function fetchThread($: $, l: SlackLink): Promise<{ title?: string; replie
 }
 
 async function fetchOwnerId($: $): Promise<string> {
-  const result = await $.mcp.call(SLACK_SERVER, 'slack_read_user_profile', {})
+  const result = await $.mcp.call(await slackServer($), 'slack_read_user_profile', {})
   const text = messagesText(result.content as { type: string; text?: string }[])
   const id = result.isError ? undefined : parseUserId(text)
   if (!id) throw new Error('ログイン中の Slack ユーザーがわかりませんでした')
@@ -199,7 +209,7 @@ export const register: Register = on => {
   })
 
   // このセッションが紐付け先に投稿したら、その返信を既読扱いにして自分で拾わないようにする。
-  on('tool.call', { tool: SEND_TOOL }, async ($, e, next) => {
+  on('tool.call', { tool: SEND_TOOL_PATTERN }, async ($, e, next) => {
     const ran = await next(e)
     try {
       const l = await read($, link)
