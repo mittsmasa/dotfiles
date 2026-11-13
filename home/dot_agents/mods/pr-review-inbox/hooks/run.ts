@@ -3,7 +3,8 @@
 import { atom, update } from 'claude-code'
 import type { EngineInterface } from 'claude-code'
 
-import type { Inbox, Mode, Review, ReviewEvent } from '../types'
+import type { Inbox, Mode, Placement, Review, ReviewEvent } from '../types'
+import { hunkAt } from './diff'
 import type { RepoConfig } from './reviews'
 import {
   addHumanComment,
@@ -17,6 +18,7 @@ import {
   setAllAdopted,
   postArgs,
   postedUrlOf,
+  splitForReview,
   toggleAdopted,
 } from './posting'
 import {
@@ -199,6 +201,7 @@ export function select($: EngineInterface, key: string | undefined) {
           selectedKey: key,
           mode: undefined,
           openFindingId: undefined,
+          openDiff: undefined,
           isHumanReviewOpen: false,
           isBodyOpen: false,
         },
@@ -209,10 +212,37 @@ export function showBody($: EngineInterface) {
   return mutate($, state => ({ ...state, isBodyOpen: true }))
 }
 
-/** Opens one finding of the selected review, closing the one that was open. */
-export function openFinding($: EngineInterface, id: string) {
-  return mutate($, state =>
-    isSending ? state : { ...state, mode: undefined, openFindingId: state.openFindingId === id ? undefined : id },
+// A hunk longer than this is not drawn: one drawing holds 100,000 characters in all.
+const HUNK_MAX_CHARS = 50_000
+
+/**
+ * Opens one finding of the selected review, closing the one that was open,
+ * and reads the diff hunk it sits in. A request being confirmed or sent stays
+ * up: its findings can be read against the diff before it goes.
+ */
+export async function openFinding($: EngineInterface, config: Config, id: string) {
+  await mutate($, state => {
+    const isConfirming = state.mode?.kind === 'confirm' || state.mode?.kind === 'sending'
+
+    return {
+      ...state,
+      mode: isConfirming ? state.mode : undefined,
+      openFindingId: state.openFindingId === id ? undefined : id,
+      openDiff: undefined,
+    }
+  })
+  const key = inbox.selectedKey
+  const review = inbox.reviews.find(one => one.key === key)
+  const finding = review?.findings.find(one => one.id === id)
+  const path = review && diffPathOf(config, review)
+  if (inbox.openFindingId !== id || !path || finding?.file === undefined || finding.line === undefined) return
+  const { file, line } = finding
+  const diff = await $.fs.read(path).then(String, () => undefined)
+  const source = diff === undefined ? undefined : hunkAt(diff, file, line)
+  if (source === undefined || source.length > HUNK_MAX_CHARS) return
+  // The read took a while: only the finding still open, of the review still selected, gets it.
+  await mutate($, state =>
+    state.selectedKey === key && state.openFindingId === id ? { ...state, openDiff: { id, source } } : state,
   )
 }
 
@@ -228,6 +258,7 @@ export function markRead($: EngineInterface, key: string) {
   return mutate($, state => ({
     ...state,
     selectedKey: undefined,
+    openDiff: undefined,
     reviews: state.reviews.map(review => (review.key === key ? { ...review, isRead: true } : review)),
   }))
 }
@@ -721,7 +752,14 @@ export async function openConfirm($: EngineInterface, config: Config, key: strin
   if (event === 'COMMENT' ? !canComment(review) : !canApprove(review)) return
   const diff = await $.fs.read(path).then(String, () => undefined)
   if (diff === undefined) return refreshWithDiff($, config)
-  await setMode($, { kind: 'confirm', payload: buildReviewPayload(review, parseDiffLines(diff), event) })
+  const diffLines = parseDiffLines(diff)
+  // The same split the payload is built from, so each finding's tag matches what is sent.
+  const { inline, inBody } = splitForReview(review, diffLines)
+  const placement: Placement = Object.fromEntries([
+    ...inline.map(finding => [finding.id, 'inline'] as const),
+    ...inBody.map(finding => [finding.id, 'body'] as const),
+  ])
+  await setMode($, { kind: 'confirm', payload: buildReviewPayload(review, diffLines, event), placement })
 }
 
 // Set and cleared synchronously: two presses of 送信する must not both pass.
@@ -738,12 +776,12 @@ export async function send($: EngineInterface, config: Config, key: string) {
   const head = headArgs(key)
   if (!review || !slot || !head || !isOpen(review)) return
   if (mode?.kind !== 'confirm' || inbox.selectedKey !== key || isSending) return
-  const { payload } = mode
+  const { payload, placement } = mode
   if (payload.commit_id !== review.headSha) return
   isSending = true
   let error: string | undefined
   try {
-    await mutate($, state => ({ ...state, mode: { kind: 'sending', payload } }))
+    await mutate($, state => ({ ...state, mode: { kind: 'sending', payload, placement } }))
     const current = await run($, head, config)
     if (current.exitCode !== 0) throw new Error(firstLine(current.stderr) || 'PR の状態を確認できません')
     if (headOf(current.stdout) !== review.headSha) {
@@ -777,7 +815,7 @@ export async function send($: EngineInterface, config: Config, key: string) {
   const isDone = error === undefined
   await mutate($, state => ({
     ...state,
-    mode: error === undefined ? undefined : { kind: 'confirm', payload, error },
+    mode: error === undefined ? undefined : { kind: 'confirm', payload, placement, error },
     ...(isDone
       ? {
           selectedKey: undefined,
