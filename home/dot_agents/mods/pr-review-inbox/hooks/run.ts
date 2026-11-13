@@ -6,6 +6,8 @@ import type { EngineInterface } from 'claude-code'
 import type { Inbox, Mode, Placement, Review, ReviewEvent } from '../types'
 import { hunkAt } from './diff'
 import type { RepoConfig } from './reviews'
+import { defaultChecks, expandArgv, outputsOf, pickViewpointFiles, skillDirOf, summarizeChecks, warningLine } from './profile'
+import type { Check, CheckResult, ViewpointStat } from './profile'
 import {
   addHumanComment,
   buildReviewPayload,
@@ -23,7 +25,6 @@ import {
 } from './posting'
 import {
   REVIEWER_SYSTEM,
-  SKILL_FILES,
   guardOf,
   acceptReviewerOutput,
   acceptedCopyOf,
@@ -36,13 +37,14 @@ import {
   isDue,
   isScript,
   lastRequestedAt,
-  localPathOf,
+  mergeSearches,
   originMatches,
   parseConfig,
   parseKey,
   parseReviewerJson,
   recoverOnStart,
   requestedArgs,
+  resolveClone,
   reviewerPrompt,
   reviewFromSaved,
   buildSearchArgv,
@@ -64,6 +66,13 @@ const inboxAtom = atom({ plugin: 'pr-review-inbox', key: 'inbox' } as const, EMP
 export type Config = {
   repos: Record<string, string>
   criteria: RepoConfig['criteria']
+  sources: string[]
+  clonePath?: string
+  profile: RepoConfig['profile']
+  /** The viewpoint files that are plain files, in reading order; not yet resolved. */
+  viewpoints: string[]
+  /** What the config file had wrong, shown after a fetch. */
+  warnings: string[]
   utcOffsetMinutes: number
   home: string
   dataDir: string
@@ -293,12 +302,24 @@ export async function makeConfig($: EngineInterface, options: Readonly<Record<st
   const home = (await $.env.get('HOME')) ?? ''
   const offset = Number(options.utcOffsetMinutes)
   const text = await $.fs.read(`${home}/${CONFIG_FILE}`).then(String, () => undefined)
-  const { repos, criteria } = parseConfig(text, home)
+  const { repos, criteria, sources, clonePath, profile, warnings } = parseConfig(text, home)
+  const stats: ViewpointStat[] = []
+  for (const path of profile.viewpoints) {
+    const stat = await $.fs.stat(path, { resolve: true }).catch(() => undefined)
+    const kind = stat === undefined ? undefined : stat.kind === 'file' || stat.kind === 'directory' ? stat.kind : 'other'
+    stats.push(kind === undefined ? { path } : { path, kind })
+  }
+  const picked = pickViewpointFiles(stats)
 
   return {
     home,
     repos,
     criteria,
+    sources,
+    ...(clonePath ? { clonePath } : {}),
+    profile,
+    viewpoints: picked.files,
+    warnings: [...warnings, ...picked.warnings],
     utcOffsetMinutes: Number.isFinite(offset) ? offset : 0,
     dataDir: `${home}/.cache/pr-review-inbox`,
   }
