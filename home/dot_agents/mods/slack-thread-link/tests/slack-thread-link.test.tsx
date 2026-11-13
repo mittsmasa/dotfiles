@@ -3,9 +3,18 @@ import type { Engine, TestBody } from 'claude-code/testing'
 
 type On = Parameters<TestBody>[1]
 
-import { oneLine, parseParentText, parsePermalink, parseReplies, parseUserId, tsAfter } from '../hooks/slack'
+import {
+  findSlackServer,
+  oneLine,
+  parseParentText,
+  parsePermalink,
+  parseReplies,
+  parseUserId,
+  tsAfter,
+} from '../hooks/slack'
 
-const SERVER = 'e2035da9-9be2-4b7c-8dc1-74f495a22577'
+// コネクタをつなぎ直すと変わる値。mod はセッションの MCP ツール一覧から引く。
+const SERVER = '11111111-2222-3333-4444-555555555555'
 const URL = 'https://x.slack.com/archives/C07QD6X30Q2/p1794214480861519?thread_ts=1793849534.425339'
 const OWNER = 'U04DPHUN275'
 const OTHER = 'U03A6KQJH8D'
@@ -26,7 +35,17 @@ const thread = (replies: readonly string[]) =>
 
 /** Slack とエンジンの代わりを立て、紐付けまで済ませる。 */
 async function setUp($: Engine, on: On, initial: string[]) {
-  const world = { replies: initial, submitted: [] as string[], toasts: [] as string[], isSubmitFailing: false }
+  const world = {
+    replies: initial,
+    submitted: [] as string[],
+    toasts: [] as string[],
+    isSubmitFailing: false,
+    mcpTools: [`mcp__other__search`, `mcp__${SERVER}__slack_read_thread`, `mcp__${SERVER}__slack_send_message`],
+  }
+  // セッションが持つ MCP ツールの一覧。mod が読むのは名前だけなので、ほかの値は埋めない。
+  on('session.usage', () => ({
+    value: { context: { window: 0, breakdown: { mcpTools: world.mcpTools.map(name => ({ name })) } } },
+  }) as never)
   on('ui.toast', (_, e) => {
     world.toasts.push(e.text)
     return { value: undefined }
@@ -95,6 +114,42 @@ test('返信から投稿者の ID と表示名を分けて取り出す', async (
     { ts: '1.000001', userId: OWNER, name: 'mitsuhashi', text: '本文' },
   ])
   expect(parseUserId(`User ID: ${OWNER}\nUsername: m`)).toBe(OWNER)
+})
+
+test('MCP ツール名から Slack コネクタのサーバー名を取り出す', async () => {
+  expect(findSlackServer(['mcp__gmail__send', 'mcp__abc-123__slack_read_thread'])).toBe('abc-123')
+  // サーバー名に区切りと同じ `__` が入っていても、末尾のツール名で切る。
+  expect(findSlackServer(['mcp__plugin__slack__slack_read_thread'])).toBe('plugin__slack')
+  expect(findSlackServer(['mcp__abc__slack_send_message', 'Bash'])).toBe(undefined)
+})
+
+test('コネクタをつなぎ直してサーバー名が変わっても、新しい名前で読みにいく', async ($, on) => {
+  const { world, checkNow } = await setUp($, on, [])
+  const RECONNECTED = '99999999-8888-7777-6666-555555555555'
+  const called: string[] = []
+  on('mcp.call', (_, e) => {
+    called.push(e.server)
+    return { value: thread(world.replies) }
+  })
+
+  world.mcpTools = [`mcp__${RECONNECTED}__slack_read_thread`]
+  world.replies = [reply('1794214600.000001', OWNER, 'mitsuhashi', 'つなぎ直したあとの依頼')]
+  await checkNow()
+
+  expect(called).toEqual([RECONNECTED])
+  expect(world.submitted[0]).toContain('つなぎ直したあとの依頼')
+})
+
+test('Slack コネクタがつながっていなければ、紐付けずに理由を返す', async ($, on) => {
+  const { world, run } = await setUp($, on, [])
+  await run('off')
+
+  world.mcpTools = ['mcp__other__search']
+
+  expect((await run(URL)).text).toBe(
+    '失敗しました: Slack コネクタが見つかりませんでした。接続されているか確かめてください',
+  )
+  expect((await run('')).text).toBe('紐付けている Slack スレッドはありません。')
 })
 
 test('他の人の返信だけでは渡さず、本人が書いたら溜まった分ごと時系列で渡す', async ($, on) => {
