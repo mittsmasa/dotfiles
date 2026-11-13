@@ -51,17 +51,29 @@ function toRegExp(source: unknown): RegExp | undefined {
 }
 
 /**
- * The config file, read fail-closed: anything unreadable leaves the inbox with
- * no repository. Where a criteria path lands is checked later, on the real path.
+ * The config file, read fail-closed: with neither `repos` nor `sources` to
+ * read, the inbox has no repository. Where a criteria path lands is checked
+ * later, on the real path.
  */
 export function parseConfig(text: string | undefined, home: string): RepoConfig {
-  const empty: RepoConfig = { repos: {}, criteria: {} }
+  const empty: RepoConfig = { repos: {}, criteria: {}, sources: [], profile: parseProfile(undefined, home).profile, warnings: [] }
   const raw = text === undefined ? undefined : parseJson(text)
-  if (!isRecord(raw) || !isRecord(raw.repos)) return empty
-  const expand = (path: string) => (path === '~' || path.startsWith('~/') ? home + path.slice(1) : path)
+  if (!isRecord(raw) || (!isRecord(raw.repos) && !Array.isArray(raw.sources))) return empty
+  const expand = (path: string) => expandHome(path, home)
   const repos = Object.fromEntries(
-    Object.entries(raw.repos).flatMap(([name, path]) => (typeof path === 'string' && path ? [[name, expand(path)]] : [])),
+    Object.entries(isRecord(raw.repos) ? raw.repos : {}).flatMap(([name, path]) =>
+      typeof path === 'string' && path ? [[name, expand(path)]] : [],
+    ),
   )
+  const warnings: string[] = []
+  const listed = Array.isArray(raw.sources) ? raw.sources : undefined
+  const sources = listed ? listed.filter(isSource) : Object.keys(repos)
+  if (listed && sources.length < listed.length) warnings.push('sources に owner か owner/repo でない項目がある')
+  if (sources.length === 0) return empty
+  let clonePath: string | undefined
+  if (typeof raw.clonePath === 'string' && raw.clonePath.includes('{repo}')) clonePath = expand(raw.clonePath)
+  else if (raw.clonePath !== undefined) warnings.push('clonePath に {repo} が無い')
+  const { profile, warnings: profileWarnings } = parseProfile(raw.review, home)
   const criteria = Object.fromEntries(
     Object.entries(isRecord(raw.criteria) ? raw.criteria : {}).flatMap(([name, entry]) => {
       if (!isRecord(entry) || typeof entry.path !== 'string' || !entry.path) return []
