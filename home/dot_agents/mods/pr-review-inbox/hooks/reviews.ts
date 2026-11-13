@@ -856,8 +856,8 @@ export function reviewerPrompt(input: {
     TESTABLE_FINDING,
     `Changed files:\n${input.files.slice(0, 200).map(file => `- ${file}`).join('\n')}`,
     SEVERITY_GUIDE,
-    'Set isUnsure to true when the finding depends on a spec you cannot see, or on something you could only',
-    'settle by running a command.',
+    'Set isUnsure to true when the finding depends on a spec you cannot see, or on something you could only\n' +
+      'settle by running a command.',
     COMMENT_STYLE,
     `Write the result as JSON to exactly this path and nowhere else: ${input.resultPath}`,
     'If that write is refused, do not try another path: end with the same JSON in a ```json block.',
