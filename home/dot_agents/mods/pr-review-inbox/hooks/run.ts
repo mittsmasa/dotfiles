@@ -618,8 +618,9 @@ async function startReview($: EngineInterface, config: Config, review: Review) {
     await $.fs.write(diffPath, diff.stdout.slice(0, 3_000_000))
     const skipped = [
       ...(diff.isStdoutTruncated || diff.stdout.length > 3_000_000 ? ['diff の一部（大きすぎる）'] : []),
-      ...[await mechanicalChecks($, config, review, worktreeReal, scanDir)].flatMap(one => one ?? []),
     ]
+    const checked = await mechanicalChecks($, config, review, worktreeReal, scanDir)
+    skipped.push(...checked.skipped)
 
     // The criteria file is read only where it really lies inside the clone.
     const criteria = criteriaFor(parsed.fullName, review.files, config.criteria)
