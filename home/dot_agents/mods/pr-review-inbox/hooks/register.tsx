@@ -345,21 +345,43 @@ export const register: Register = (on, options) => {
       const hidden = review.humanReview.length - points.length
       const bodyLines = (review.body ?? '').trim() === '' ? [] : (review.body as string).split('\n')
       const isBodyFolded = !state.isBodyOpen && bodyLines.length > BODY_SHOWN_LINES
+      const name = shortName(review.key, ready.sources)
+      const tone = toneOf(review)
+      // The verdict and the weight of what is still adopted: the line the whole detail hangs from.
+      const counts = review.status === 'done' ? countsText(review.findings.filter(one => one.isAdopted)) : ''
+      const verdict = [rowLabel(review, offset), counts].filter(Boolean).join(' · ')
 
       return (
         <Box flexDirection="column">
-          {heading(['概要', linesText(review.lines)].filter(Boolean).join(' · '))}
-          {bodyLines.length === 0 ? (
-            <Text dimColor>本文なし</Text>
-          ) : (
-            <Markdown
-              key="body"
-              text={isBodyFolded ? bodyLines.slice(0, BODY_SHOWN_LINES).join('\n') : bodyLines.join('\n')}
-            />
-          )}
-          {isBodyFolded && (
-            <Button key="more-body" plain label="続きを表示" onPress={() => void showBody($)} />
-          )}
+          <Box flexDirection="column" marginTop="sm">
+            <Text>
+              <Text mono weight="bold">
+                {name.number}
+              </Text>{' '}
+              <Text size="caption" dimColor>
+                {[name.repo, linesText(review.lines)].filter(Boolean).join(' · ')}
+              </Text>
+            </Text>
+            <Text>{review.title}</Text>
+            <Box flexDirection="row" gap="md" alignItems="center" flexWrap="wrap">
+              {isGithubUrl(review.url) && <Link href={review.url} label="GitHub で開く" />}
+              {isGithubUrl(review.url) && (
+                <Button
+                  key="deep-dive"
+                  plain
+                  label="深掘りする"
+                  onPress={press => void deepDive($, review.url, press.surface)}
+                />
+              )}
+              <Button key="read" plain label="片付ける" onPress={() => void markRead($, review.key)} />
+            </Box>
+            <Box key="verdict" flexDirection="row" gap="sm" marginTop="xs">
+              {bar(tone)}
+              <Text color={tone} weight="medium">
+                {verdict}
+              </Text>
+            </Box>
+          </Box>
           {review.status === 'done' &&
             heading(
               total === 0 ? '指摘' : isSendable ? `指摘 · ${total} 件中 ${adopted} 件を送る` : `指摘 · ${total} 件`,
