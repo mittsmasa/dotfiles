@@ -156,7 +156,13 @@ function world(
     if (!files) return { value: DIFF }
     const text = files[e.path]
     if (text === undefined) throw new Error('ENOENT')
-    if (disk.hold && e.path === DIFF_PATH) return disk.hold.then(() => ({ value: text }))
+    if (disk.hold && e.path === DIFF_PATH) {
+      // Only the next read waits: the one after it overtakes.
+      const hold = disk.hold
+      disk.hold = undefined
+
+      return hold.then(() => ({ value: text }))
+    }
 
     return { value: text }
   })
