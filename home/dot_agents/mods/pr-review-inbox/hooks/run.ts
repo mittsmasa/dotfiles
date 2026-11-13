@@ -516,7 +516,7 @@ async function mechanicalChecks(
   } catch (error) {
     return { skipped: [`機械チェック（${firstLine(String(error instanceof Error ? error.message : error))}）`] }
   }
-  if (checks.length === 0) return { skipped: [] , outputs: [] }
+  if (checks.length === 0) return { skipped: [], outputs: [] }
   const results: CheckResult[] = []
   for (const check of checks) {
     const written = outputsOf(check).map(name => `${scanDir}/${name}`)
@@ -627,12 +627,21 @@ async function startReview($: EngineInterface, config: Config, review: Review) {
     const repoReal = await realPath($, repo)
     const criteriaReal = criteria ? await realPath($, `${repo}/${criteria}`) : undefined
     const criteriaPath = repoReal && criteriaReal ? criteriaRoot(repoReal, criteriaReal) : undefined
-    // The skill's viewpoints, opened file by file: the reviewer cannot load a skill.
+    // The viewpoints, opened file by file: the reviewer cannot load a skill.
     const skillFiles: string[] = []
-    for (const file of SKILL_FILES) {
-      const real = await realPath($, `${config.home}/.agents/skills/testable-design/${file}`)
+    for (const file of config.viewpoints) {
+      const real = await realPath($, file)
       if (real) skillFiles.push(real)
     }
+    const { guide: guideSource, commentStyle: stylePath } = config.profile
+    const guideText = await readNamed($, guideSource.kind === 'file' ? guideSource.path : undefined, 'review.guide', skipped)
+    const commentStyle = await readNamed($, stylePath, 'review.commentStyle', skipped)
+    const guide =
+      guideText !== undefined
+        ? { kind: 'text' as const, text: guideText }
+        : guideSource.kind === 'testable-design'
+          ? { kind: 'testable-design' as const }
+          : { kind: 'generic' as const }
     const allowedRoots = [
       worktreeReal,
       await realPath($, scanDir),
@@ -649,9 +658,11 @@ async function startReview($: EngineInterface, config: Config, review: Review) {
         headSha: review.headSha,
         worktree: worktreeReal,
         diffPath,
-        scanDir: skipped.some(one => one.startsWith('機械チェック')) ? undefined : scanDir,
+        ...(checked.outputs ? { scanDir, checkOutputs: checked.outputs } : {}),
         criteriaPath,
         skillFiles,
+        guide,
+        ...(commentStyle === undefined ? {} : { commentStyle }),
         resultPath,
         files: review.files,
       }),
