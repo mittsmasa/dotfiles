@@ -713,7 +713,7 @@ test('linesText は行数を 1 行にし、行数が無ければ何も返さな�
   expect(linesText(undefined)).toBe(undefined)
 })
 
-test('reviewerPrompt asks for comments written as a suggestion, with a reason, not a verdict', () => {
+test('reviewerPrompt by default asks for plain, polite comments with a reason and no personal habits', () => {
   const prompt = reviewerPrompt({
     key: KEY,
     headSha: SHA_A,
@@ -723,12 +723,14 @@ test('reviewerPrompt asks for comments written as a suggestion, with a reason, n
     files: [],
   })
 
-  expect(prompt).toContain('相談形')
-  expect(prompt).toContain('〜はどうでしょうか')
-  expect(prompt).toContain('理由を「〜なので」で添える')
-  expect(prompt).toContain('「〜すべき」「〜してください」')
+  expect(prompt).toContain('です・ます調で書く。命令形は使わない')
+  expect(prompt).toContain('問題だと考える理由を一文で添える')
   expect(prompt).toContain('良い例:')
   expect(prompt).toContain('避ける例:')
+  // The habits of one reviewer stay out of the default.
+  expect(prompt).not.toContain('かもです')
+  expect(prompt).not.toContain('（対応不要です')
+  expect(prompt).not.toContain('細かいですが')
 })
 
 const promptWith = (over: Partial<Parameters<typeof reviewerPrompt>[0]>) =>
