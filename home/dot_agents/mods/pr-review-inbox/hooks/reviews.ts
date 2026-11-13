@@ -459,7 +459,7 @@ export function verdictOf(findings: readonly Pick<Finding, 'severity'>[]): Verdi
 
 const SEVERITIES: readonly Severity[] = ['blocker', 'recommended', 'suggestion']
 /** What a reviewer may name besides `criteria`, which anything else reads as. */
-const REVIEWER_SOURCES = ['behavior', 'testable-design'] as const
+const REVIEWER_SOURCES = ['behavior', 'viewpoint'] as const
 const text = (value: unknown, max: number) => (typeof value === 'string' ? value.slice(0, max) : '')
 const texts = (value: unknown, max: number) =>
   Array.isArray(value) ? value.slice(0, 10).map(item => text(item, max)).filter(Boolean) : []
