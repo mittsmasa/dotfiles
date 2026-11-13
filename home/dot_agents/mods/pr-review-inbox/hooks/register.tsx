@@ -54,6 +54,8 @@ const PANE = 'review-inbox'
 const TITLE = 'PR レビュー'
 // The left edge of a row: its colour alone says how heavy the row is.
 const EDGE = '▍'
+// Stands before the selected row's edge, in a cell every row keeps.
+const SELECTED_MARK = '▸'
 const HUMAN_REVIEW_SHOWN = 2
 // A description longer than this many lines is folded until asked for.
 const BODY_SHOWN_LINES = 12
@@ -169,6 +171,8 @@ export const register: Register = (on, options) => {
     const visible = state.reviews.filter(review => !review.isRead)
     const selected = visible.find(review => review.key === state.selectedKey)
     const mode = selected ? state.mode : undefined
+    // The request being confirmed or sent, if any: the detail stays as it is around it.
+    const pending = mode?.kind === 'confirm' || mode?.kind === 'sending' ? mode : undefined
     const isOpen = isDue(new Date(await $.clock.now()), offset)
 
     // The left edge of a block: one cell wide, as tall as what stands beside it.
@@ -182,39 +186,47 @@ export const register: Register = (on, options) => {
       </Box>
     )
 
-    // ---- the confirm screen: the whole request, exactly as it will be sent ----
+    // ---- the confirm block: stands where the send controls were, so nothing above it moves ----
+    // Which finding goes where is on each finding's own row (`placement`); here, the request as a whole.
     const confirm = (review: Review, payload: ReviewPayload, isSending: boolean, error?: string) => {
       const name = shortName(review.key, ready.repos)
 
       return (
-        <Box flexDirection="column">
+        <Box
+          key="confirm"
+          flexDirection="column"
+          borderStyle="round"
+          borderColor="suggestion"
+          paddingX="sm"
+          marginTop="md"
+        >
           <Text weight="medium">送信の確認</Text>
           <Text>
             <Text mono>{name.number}</Text> {name.repo} に {payload.event} レビューを送ります。
             {payload.event === 'APPROVE' ? 'この PR を承認します。' : ''}
           </Text>
-          {heading(`インライン ${payload.comments.length} 件`)}
-          {payload.comments.map(comment => (
-            <Box flexDirection="column" marginTop="sm">
-              <Text mono size="caption" dimColor>
-                {comment.path}:{comment.line}
+          <Text size="caption" dimColor>
+            インライン {payload.comments.length} 件 · {payload.body === undefined ? '本文なし' : '本文あり'}
+          </Text>
+          {payload.body !== undefined && (
+            <Box flexDirection="column" marginTop="xs">
+              <Text size="caption" dimColor>
+                本文
               </Text>
-              <Text>{comment.body}</Text>
+              <Text>{payload.body}</Text>
             </Box>
-          ))}
-          {heading(payload.body === undefined ? '本文（なし）' : '本文')}
-          {payload.body !== undefined && <Text>{payload.body}</Text>}
+          )}
           {error !== undefined && (
-            <Box marginTop="md">
+            <Box marginTop="xs">
               <Text color="error">送信できませんでした: {error}</Text>
             </Box>
           )}
           {isSending ? (
-            <Box marginTop="md">
+            <Box marginTop="xs">
               <Text dimColor>送信しています…</Text>
             </Box>
           ) : (
-            <Box flexDirection="row" gap="md" marginTop="md" alignItems="center">
+            <Box flexDirection="row" gap="md" marginTop="xs" alignItems="center">
               <Button key="send" variant="primary" label="送信する" onPress={() => void send($, ready, review.key)} />
               <Button key="back" plain label="戻る" onPress={() => void setMode($, undefined)} />
             </Box>
@@ -223,25 +235,42 @@ export const register: Register = (on, options) => {
       )
     }
 
+    // Where a finding of the pending request goes. A request kept from before
+    // placements existed has none: no tag is better than a wrong one.
+    const PLACED = { inline: '行に付く', body: '本文へ' } as const
+    const placedTag = (id: string) => {
+      const placement = pending?.placement
+      if (!placement) return undefined
+      const place = Object.hasOwn(placement, id) ? placement[id] : undefined
+
+      return place ? PLACED[place] : '送らない'
+    }
+
     // ---- one finding: a line when closed; its text and controls when open ----
     const finding = (review: Review, one: Finding, isEditable: boolean) => {
       const place = splitPlace(one.file, one.line)
       const isShown = state.openFindingId === one.id
       const isEditing = isEditable && mode?.kind === 'edit' && mode.id === one.id
-      const tags = [
-        one.source === 'human' ? undefined : one.severity,
-        one.criteriaId,
-        one.isUnsure ? '要確認' : undefined,
-        one.source === 'human' ? '自分' : undefined,
-        one.isAdopted ? undefined : '外した',
-      ].filter(Boolean)
+      const placed = placedTag(one.id)
+      // While a request is pending the row says where the finding goes, in place of what it is.
+      const tags =
+        placed !== undefined
+          ? [placed]
+          : [
+              one.source === 'human' ? undefined : one.severity,
+              one.criteriaId,
+              one.isUnsure ? '要確認' : undefined,
+              one.source === 'human' ? '自分' : undefined,
+              one.isAdopted ? undefined : '外した',
+            ].filter(Boolean)
+      const hunk = isShown && state.openDiff?.id === one.id ? state.openDiff.source : undefined
 
       return (
         <Box flexDirection="row" gap="sm" marginTop="sm">
           {bar(one.isAdopted ? SEVERITY_TONE[one.severity] : 'inactive')}
           <Box flexDirection="column" flexGrow={1}>
             <Box flexDirection="row" justifyContent="space-between" gap="sm">
-              <Button key={`open:${one.id}`} plain onPress={() => void openFinding($, one.id)}>
+              <Button key={`open:${one.id}`} plain onPress={() => void openFinding($, ready, one.id)}>
                 <Text mono weight="medium" strikethrough={!one.isAdopted} dimColor={!one.isAdopted}>
                   {place.name || '場所なし'}
                 </Text>
@@ -259,6 +288,11 @@ export const register: Register = (on, options) => {
             {isShown && one.isAdopted && !isEditing && (
               <Box borderStyle="single" borderDimColor paddingX="sm" marginTop="xs">
                 <Text>{one.comment}</Text>
+              </Box>
+            )}
+            {hunk !== undefined && (
+              <Box marginTop="xs">
+                <Code format="diff" source={hunk} {...(one.file === undefined ? {} : { path: one.file })} />
               </Box>
             )}
             {isShown && isEditing && (
@@ -301,7 +335,9 @@ export const register: Register = (on, options) => {
     const detail = (review: Review) => {
       const actions = actionsOf(review, state.withDiff.includes(review.key))
       const primary = primaryOf(actions)
-      const isEditable = review.status === 'done' && review.postedAt === undefined
+      const isSendable = review.status === 'done' && review.postedAt === undefined
+      // A pending request shows what was built: its findings are not changed under it.
+      const isEditable = isSendable && pending === undefined
       const adopted = review.findings.filter(one => one.isAdopted).length
       const total = review.findings.length
       const points = state.isHumanReviewOpen ? review.humanReview : review.humanReview.slice(0, HUMAN_REVIEW_SHOWN)
@@ -325,7 +361,7 @@ export const register: Register = (on, options) => {
           )}
           {review.status === 'done' &&
             heading(
-              total === 0 ? '指摘' : isEditable ? `指摘 · ${total} 件中 ${adopted} 件を送る` : `指摘 · ${total} 件`,
+              total === 0 ? '指摘' : isSendable ? `指摘 · ${total} 件中 ${adopted} 件を送る` : `指摘 · ${total} 件`,
             )}
           {review.status === 'done' && total === 0 && (
             <Text dimColor>機械チェックと基準の範囲では指摘なし。</Text>
@@ -370,6 +406,14 @@ export const register: Register = (on, options) => {
               )}
             </Box>
           )}
+          {isSendable && pending !== undefined && (
+            // Holds the row the editing controls had, so what is below does not move.
+            <Box marginTop="sm">
+              <Text size="caption" dimColor>
+                確認中は編集できません。直すときは「戻る」を押してください。
+              </Text>
+            </Box>
+          )}
           {review.status === 'done' && review.skipped.length > 0 && (
             <Box marginTop="sm">
               <Text size="caption" dimColor>
@@ -384,6 +428,14 @@ export const register: Register = (on, options) => {
           {hidden > 0 && (
             <Button key="more-points" plain label={`ほか ${hidden} 件`} onPress={() => void showHumanReview($)} />
           )}
+          {pending !== undefined &&
+            confirm(
+              review,
+              pending.payload,
+              pending.kind === 'sending',
+              pending.kind === 'confirm' ? pending.error : undefined,
+            )}
+          {pending === undefined && (
           <Box flexDirection="row" gap="md" marginTop="md" alignItems="center" flexWrap="wrap">
             {actions.includes('comment') && (
               <Button
@@ -411,6 +463,7 @@ export const register: Register = (on, options) => {
               <Link href={review.postedUrl} label="送ったレビューを開く" />
             )}
           </Box>
+          )}
           <Box flexDirection="row" gap="md" marginTop="sm" alignItems="center" flexWrap="wrap">
             {isGithubUrl(review.url) && <Link href={review.url} label="GitHub で開く" />}
             {isGithubUrl(review.url) && (
@@ -427,24 +480,21 @@ export const register: Register = (on, options) => {
       )
     }
 
-    if (selected && (mode?.kind === 'confirm' || mode?.kind === 'sending')) {
-      return confirm(selected, mode.payload, mode.kind === 'sending', mode.kind === 'confirm' ? mode.error : undefined)
-    }
-
     const row = (review: Review) => {
       const name = shortName(review.key, ready.repos)
       const isSelected = review.key === selected?.key
       const tone = toneOf(review)
 
+      // The selected row is told by a mark in a cell every row keeps, and by
+      // weight: nothing that adds a row or a column, so selecting moves no row.
       return (
-        <Box
-          key={`row-box:${review.key}`}
-          flexDirection="row"
-          gap="sm"
-          marginTop="sm"
-          {...(isSelected ? { borderStyle: 'round', borderColor: 'suggestion', paddingRight: 'sm' } : {})}
-        >
-          {bar(tone)}
+        <Box key={`row-box:${review.key}`} flexDirection="row" gap="sm" marginTop="sm">
+          <Box flexDirection="row" flexShrink={0}>
+            <Box width={1} flexShrink={0}>
+              <Text color="suggestion">{isSelected ? SELECTED_MARK : ' '}</Text>
+            </Box>
+            {bar(tone)}
+          </Box>
           <Box flexDirection="column" flexGrow={1}>
             <Box flexDirection="row" justifyContent="space-between" gap="sm">
               <Button
