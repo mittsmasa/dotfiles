@@ -645,6 +645,67 @@ test('selectQueued updates only body on same headSha', () => {
   expect(next).toEqual({ ...stored, body: '新しい本文' })
 })
 
+// ---- the pull request's size ----
+
+const SEARCH_12 = {
+  exitCode: 0,
+  stdout: JSON.stringify([{ number: 12, title: 't', url: 'u', repository: { nameWithOwner: 'acme/widgets' } }]),
+}
+const viewOf = (detail: Record<string, unknown>) => ({
+  key: KEY,
+  exitCode: 0,
+  stdout: JSON.stringify({ headRefOid: SHA_A, baseRefName: 'main', files: [], ...detail }),
+})
+
+test('viewArgs は追加行数・削除行数・変更ファイル数も gh に頼む', () => {
+  const fields = (viewArgs(KEY) ?? []).at(-1)?.split(',') ?? []
+
+  expect(fields).toContain('additions')
+  expect(fields).toContain('deletions')
+  expect(fields).toContain('changedFiles')
+})
+
+test('取得した PR は、GitHub の数えた行数とファイル数を持つ', () => {
+  const [next] = applyFetchResult({ search: SEARCH_12, views: [viewOf({ additions: 120, deletions: 34, changedFiles: 5 })] }, [])
+
+  expect(next?.status).toBe('queued')
+  expect(next?.lines).toEqual({ added: 120, removed: 34, files: 5 })
+})
+
+test('行数が 0 の PR も、行数を持つ', () => {
+  const [next] = applyFetchResult({ search: SEARCH_12, views: [viewOf({ additions: 0, deletions: 0, changedFiles: 0 })] }, [])
+
+  expect(next?.lines).toEqual({ added: 0, removed: 0, files: 0 })
+})
+
+test('行数のどれかが欠けていても取得は成功し、行数は持たない', () => {
+  for (const detail of [{}, { additions: 120, deletions: 34 }, { additions: '120', deletions: 34, changedFiles: 5 }]) {
+    const [next] = applyFetchResult({ search: SEARCH_12, views: [viewOf(detail)] }, [])
+
+    expect(next?.status).toBe('queued')
+    expect(next?.lines).toBe(undefined)
+  }
+})
+
+test('head が同じ PR を取り直すと、行数は新しい値になり、レビュー結果は残る', () => {
+  const stored = review({ status: 'done', verdict: 'clean', lines: { added: 1, removed: 1, files: 1 } })
+  const [next] = selectQueued([{ ...fetched(SHA_A), lines: { added: 120, removed: 34, files: 5 } }], [stored])
+
+  expect(next).toEqual({ ...stored, lines: { added: 120, removed: 34, files: 5 } })
+})
+
+test('head が同じ PR を取り直して行数が来なくても、持っていた行数は残る', () => {
+  const stored = review({ status: 'done', lines: { added: 120, removed: 34, files: 5 } })
+  const [next] = selectQueued([fetched(SHA_A)], [stored])
+
+  expect(next?.lines).toEqual({ added: 120, removed: 34, files: 5 })
+})
+
+test('linesText は行数を 1 行にし、行数が無ければ何も返さない', () => {
+  expect(linesText({ added: 120, removed: 34, files: 5 })).toBe('+120 −34 · 5 ファイル')
+  expect(linesText(undefined)).toBe(undefined)
+})
+
 test('reviewerPrompt asks for comments written as a suggestion, with a reason, not a verdict', () => {
   const prompt = reviewerPrompt({
     key: KEY,
