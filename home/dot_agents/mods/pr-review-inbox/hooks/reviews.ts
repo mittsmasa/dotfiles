@@ -797,16 +797,19 @@ export const REVIEWER_SYSTEM = [
   'Write reason, comment, humanReview and skipped in Japanese.',
 ].join('\n')
 
-/** How `comment` is written: a colleague's suggestion, not a verdict. */
+/**
+ * How `comment` is written by default: plain and polite, with no one's
+ * personal habits. `review.commentStyle` in the config replaces it.
+ */
 export const COMMENT_STYLE = [
   'comment は PR の作者に向けたレビューコメントの下書き。次の書き方で書く:',
   '- 1〜3 文。何が問題かを先に書く',
-  '- 断定や命令を避け、相談形で書く（「〜はどうでしょうか」「〜とよさそうです」「〜かもです」）',
-  '- 理由を「〜なので」で添える',
-  '- 丁寧語どまり。「〜すべき」「〜してください」「〜は問題です」のような言い切りは使わない',
-  '- suggestion は「細かいですが」で始めるか、末尾に「（対応不要です」を付ける',
-  '- 良い例: 「ここ user が null のとき落ちるかもです。早期 return を入れるのはどうでしょうか」',
-  '- 避ける例: 「null チェックがありません。早期 return を追加してください」',
+  '- です・ます調で書く。命令形は使わない',
+  '- 問題だと考える理由を一文で添える',
+  '- 直し方の案があれば添える',
+  '- suggestion は、対応が任意だとわかるように書く',
+  '- 良い例: 「user が null のとき、この行で例外になります。早期 return を入れると防げます」',
+  '- 避ける例: 「null チェックがない。直して」',
 ].join('\n')
 
 /**
