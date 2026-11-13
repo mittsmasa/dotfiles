@@ -853,7 +853,7 @@ export async function send($: EngineInterface, config: Config, key: string) {
     const current = await run($, head, config)
     if (current.exitCode !== 0) throw new Error(firstLine(current.stderr) || 'PR の状態を確認できません')
     if (headOf(current.stdout) !== review.headSha) {
-      throw new Error('PR が更新されています。再レビューしてから送ってください')
+      throw new Error('PR が更新されています。もう一度レビューしてから送ってください')
     }
     const dir = `${config.dataDir}/payloads/${slot}`
     const payloadPath = `${dir}/${review.headSha}.json`
