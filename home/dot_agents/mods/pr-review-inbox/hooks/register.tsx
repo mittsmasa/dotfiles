@@ -348,7 +348,7 @@ export const register: Register = (on, options) => {
 
       return (
         <Box flexDirection="column">
-          {heading('概要')}
+          {heading(['概要', linesText(review.lines)].filter(Boolean).join(' · '))}
           {bodyLines.length === 0 ? (
             <Text dimColor>本文なし</Text>
           ) : (
