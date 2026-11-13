@@ -376,7 +376,7 @@ async function aliveAgentIds($: EngineInterface): Promise<string[]> {
 
 function worktreeOf(config: Config, key: string) {
   const parsed = parseKey(key)
-  const repo = parsed && localPathOf(config.repos, parsed.fullName)
+  const repo = parsed && resolveClone(config, parsed.fullName)
 
   return parsed && repo ? { repo, worktree: `${repo}/.claude/worktrees/review-${parsed.number}` } : undefined
 }
@@ -396,9 +396,10 @@ export async function fetchNow($: EngineInterface, config: Config) {
   await mutate($, state => ({ ...state, isFetching: true, fetchError: undefined }))
   let fetchError: string | undefined
   try {
-    const names = Object.keys(config.repos)
-    if (names.length === 0) throw new Error(`~/${CONFIG_FILE} にリポジトリを設定してください`)
-    const search = await run($, buildSearchArgv(names), config)
+    if (config.sources.length === 0) throw new Error(`~/${CONFIG_FILE} にリポジトリを設定してください`)
+    const searches = []
+    for (const source of config.sources) searches.push(await run($, buildSearchArgv(source), config))
+    const search = mergeSearches(searches)
     const views = []
     for (const key of searchedKeys(search) ?? []) {
       const argv = viewArgs(key)
@@ -427,7 +428,9 @@ export async function fetchNow($: EngineInterface, config: Config) {
   } catch (error) {
     fetchError = firstLine(String(error instanceof Error ? error.message : error))
   }
-  await mutate($, state => ({ ...state, isFetching: false, fetchError }))
+  // A fetch that went well still says what the config file had wrong.
+  const shown = fetchError ?? warningLine(config.warnings)
+  await mutate($, state => ({ ...state, isFetching: false, fetchError: shown }))
   await pump($, config)
 }
 
