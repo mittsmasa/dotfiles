@@ -74,6 +74,10 @@ const DIFF = [
   '+const b = 2',
 ].join('\n')
 
+/** A stored review's size as gh reports it; nothing for a review that holds none. */
+const sizeOf = (one: Review | undefined) =>
+  one?.lines ? { additions: one.lines.added, deletions: one.lines.removed, changedFiles: one.lines.files } : {}
+
 /**
  * The engine beneath the mod: a Monday 11:00 JST, a store holding `reviews`,
  * and a gh whose search lists every stored review at its stored head.
@@ -193,8 +197,9 @@ function world(
             headRefOid: SHA,
             baseRefName: 'main',
             files: [],
-            // Each pull request's own description, as stored.
+            // Each pull request's own description and size, as stored.
             body: reviews.find(one => one.key === `${argv[5]}#${argv[3]}`)?.body ?? null,
+            ...sizeOf(reviews.find(one => one.key === `${argv[5]}#${argv[3]}`)),
           })
         : argv.includes('get-url')
           ? 'git@github.com:acme/widgets.git'
@@ -1092,6 +1097,30 @@ test('別の PR を選ぶと、開いていた指摘の差分は持ち越され�
   await clock.settle()
   expect(await ui.find({ key: 'open:f1' })).toBeDefined()
   expect(await ui.find({ type: 'Code' })).toBe(undefined)
+  await ui.unmount()
+})
+
+test('選んだ PR の概要の見出しに、変更行数とファイル数が出る', async ($, on) => {
+  const { clock } = world(on, [review({ lines: { added: 120, removed: 34, files: 5 } })])
+  await begin($, clock)
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: `row:${KEY}` })
+  await clock.settle()
+
+  expect((await ui.find({ type: 'Text', text: /^概要/ }))?.text).toBe('概要 · +120 −34 · 5 ファイル')
+  await ui.unmount()
+})
+
+test('行数を持たない PR では、概要の見出しは「概要」だけになる', async ($, on) => {
+  const { clock } = world(on, [review()])
+  await begin($, clock)
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: `row:${KEY}` })
+  await clock.settle()
+
+  expect((await ui.find({ type: 'Text', text: /^概要/ }))?.text).toBe('概要')
   await ui.unmount()
 })
 
