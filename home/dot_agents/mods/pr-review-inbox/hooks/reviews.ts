@@ -813,27 +813,7 @@ export const COMMENT_STYLE = [
 ].join('\n')
 
 /**
- * How to use the testable-design files. Section names are pointed at, not
- * copied, so checks the skill adds later (c7 and on, new rules) reach the
- * reviewer without a change here.
- */
-function testableDesignGuide(skillFiles: readonly string[]): string {
-  if (skillFiles.length === 0) return 'No testable-design files: judge by separation of concerns and test quality.'
-
-  return [
-    'testable-design: the viewpoints to judge separation of concerns and test quality by. Read these files, in this order:',
-    ...skillFiles.map(file => `- ${file}`),
-    'Read only these; skip other files they link to (frontend-testing.md, sources.md, tools/), which you cannot open.',
-    'In SKILL.md, the section 「レビューするとき」 is the order to apply. separation-of-concerns.md 「観点」 numbers the',
-    'viewpoints 1 to 8; test-quality.md 「レビューの出し方」 is the order for tests.',
-    'mechanical-checks.md tells what the mechanical check output means: the table under 「L1: Oxlint のルール」 for',
-    'each rule in oxlint.json, and the table under 「`candidates.json` の読み方」 for each key (c1, c2, ...) of',
-    'candidates.json. The checks were already run: run no command from these files.',
-  ].join('\n')
-}
-
-/**
- * Viewpoint files set without a guide: no section of any skill is named, as
+ * Viewpoint files with no guide file: no section of any file is named, as
  * the files may be anyone's.
  */
 function genericGuide(files: readonly string[]): string {
@@ -857,7 +837,7 @@ function listedViewpoints(files: readonly string[]): string {
 const FINDING_CONTRACT = [
   'Every finding sets source: "criteria" only when it follows the criteria file; "behavior" when the change',
   'introduces a defect you traced in the code (wrong result, crash, lost or leaked data, a check that no',
-  'longer checks); "testable-design" otherwise.',
+  'longer checks); "viewpoint" otherwise.',
   'A finding with source "behavior":',
   '- reason names the path that breaks: which input or state, and what comes out instead',
   '- only for a defect this change introduces or makes reachable; an existing one goes under humanReview',
@@ -868,23 +848,10 @@ const FINDING_CONTRACT = [
 
 /** A viewpoint finding under the generic guide: what any viewpoint file's finding carries. */
 const GENERIC_FINDING = [
-  'A finding with source "testable-design" (one the viewpoint files support):',
+  'A finding with source "viewpoint" (one the viewpoint files support):',
   '- reason starts with the viewpoint in brackets, as the files name it',
   '- comment names the concrete case that breaks, in plain words, without viewpoint names or numbers',
   '- a problem this change did not make worse goes under humanReview as an existing one, not as a finding',
-].join('\n')
-
-/** What one from testable-design must carry. */
-const TESTABLE_FINDING = [
-  'A finding with source "testable-design":',
-  '- reason starts with the viewpoint in brackets, as 「[関心の分離 観点 3] 」 or 「[テスト品質: 実装詳細への結合] 」',
-  '- comment names the concrete case that breaks: whose change request, and what changes or breaks with it',
-  '  (「管理画面だけ email を出したい要望で showEmail を足すと、生徒画面の表示条件も一緒に変わります」),',
-  '  or for a test, which refactor fails it while behaviour stays the same. Say it in plain words: the author',
-  '  does not know the viewpoint numbers, so leave them out of comment',
-  '- no finding on a viewpoint name alone, or on line or file counts alone',
-  '- a problem this change did not make worse goes under humanReview as an existing one, not as a finding',
-  'A criteria finding that also meets a testable-design viewpoint may carry the viewpoint the same way.',
 ].join('\n')
 
 /**
@@ -919,26 +886,22 @@ export function reviewerPrompt(input: {
   criteriaPath?: string
   /** Real paths of the viewpoint files, in reading order. */
   skillFiles?: readonly string[]
-  /** How the viewpoint files are explained: the testable-design sections when left out. */
-  guide?: { kind: 'testable-design' } | { kind: 'generic' } | { kind: 'text'; text: string }
+  /** How the viewpoint files are explained: the generic note when left out. */
+  guide?: { kind: 'generic' } | { kind: 'text'; text: string }
   /** The text of the comment style file; the built-in style when left out. */
   commentStyle?: string
-  /** The checks that ran and the files each wrote; the default three files when left out. */
+  /** The checks that ran and the files each wrote. */
   checkOutputs?: readonly { name: string; files: readonly string[] }[]
   resultPath: string
   files: readonly string[]
 }): string {
-  const guide = input.guide ?? { kind: 'testable-design' }
+  const guide = input.guide ?? { kind: 'generic' }
   const viewpoints = input.skillFiles ?? []
-  const isTestable = guide.kind === 'testable-design'
-  const judgedBy = isTestable ? 'the testable-design viewpoints' : 'the viewpoints'
-  const outputFiles = input.checkOutputs?.flatMap(one => one.files) ?? ['oxlint.json', 'candidates.json', 'ir.json']
+  const outputFiles = input.checkOutputs?.flatMap(one => one.files) ?? []
   const viewpointSections =
-    guide.kind === 'testable-design'
-      ? [testableDesignGuide(viewpoints), `${FINDING_CONTRACT}\n${TESTABLE_FINDING}`]
-      : guide.kind === 'generic'
-        ? [genericGuide(viewpoints), `${FINDING_CONTRACT}\n${GENERIC_FINDING}`]
-        : [listedViewpoints(viewpoints), `${FINDING_CONTRACT}\n${guide.text.trim()}`]
+    guide.kind === 'generic'
+      ? [genericGuide(viewpoints), `${FINDING_CONTRACT}\n${GENERIC_FINDING}`]
+      : [listedViewpoints(viewpoints), `${FINDING_CONTRACT}\n${guide.text.trim()}`]
   const shape = {
     key: input.key,
     headSha: input.headSha,
@@ -948,9 +911,9 @@ export function reviewerPrompt(input: {
         isUnsure: false,
         file: 'path relative to the repository root',
         line: 1,
-        reason: 'なぜ問題か、1〜2 文。behavior なら壊れる経路。testable-design なら先頭に [観点]',
-        comment: 'PR に書くコメントの下書き、1〜3 文。何が問題かと直し方。testable-design なら壊れる具体シナリオ',
-        source: 'criteria | behavior | testable-design',
+        reason: 'なぜ問題か、1〜2 文。behavior なら壊れる経路。viewpoint なら先頭に [観点]',
+        comment: 'PR に書くコメントの下書き、1〜3 文。何が問題かと直し方。viewpoint なら壊れる具体シナリオ',
+        source: 'criteria | behavior | viewpoint',
         criteriaId: 'A-1 (only with a criteria file)',
       },
     ],
@@ -966,11 +929,11 @@ export function reviewerPrompt(input: {
       ? [
           `Mechanical check output: ${input.scanDir}${outputFiles.length > 0 ? ` (${outputFiles.join(', ')})` : ''}.`,
           'These are candidates that narrow what to read, not findings: read the flagged files and judge them by',
-          `${judgedBy}. Look at candidates touching the changed files; never cite the output alone.`,
+          'the viewpoints. Look at candidates touching the changed files; never cite the output alone.',
         ].join('\n')
       : 'No mechanical check output for this pull request.',
     input.criteriaPath
-      ? `Review criteria to follow strictly, read it first; where it differs from ${isTestable ? 'testable-design' : 'the viewpoints'}, it wins: ${input.criteriaPath}`
+      ? `Review criteria to follow strictly, read it first; where it differs from the viewpoints, it wins: ${input.criteriaPath}`
       : 'No project criteria file.',
     ...viewpointSections,
     `Changed files:\n${input.files.slice(0, 200).map(file => `- ${file}`).join('\n')}`,
