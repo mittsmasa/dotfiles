@@ -482,19 +482,23 @@ test('the session running the inbox refuses every subagent that is not its revie
 // The kit gives a hook-answered spawn no agentId, so the review fails right
 // after the spawn and the guard cannot be reached here: whether the reviewer
 // may read these files is seen on a real pull request (denied.log).
-test("a reviewer's prompt names the testable-design files by their real paths", async ($, on) => {
-  const { clock, calls } = world(on, [review({ status: 'queued', findings: [], verdict: undefined })])
+test("a reviewer's prompt names the viewpoint files the config sets by their real paths", async ($, on) => {
+  const config = JSON.stringify({
+    repos: { 'acme/widgets': '~/src/widgets' },
+    review: { viewpoints: ['~/team/a.md', '~/team/b.md'] },
+  })
+  const { clock, calls } = world(on, [review({ status: 'queued', findings: [], verdict: undefined })], {}, undefined, config)
   await begin($, clock)
-  const skill = '/Users/me/.agents/skills/testable-design'
 
-  expect(calls.prompts[0]).toContain(
-    [
-      `- ${skill}/SKILL.md`,
-      `- ${skill}/references/separation-of-concerns.md`,
-      `- ${skill}/references/test-quality.md`,
-      `- ${skill}/references/mechanical-checks.md`,
-    ].join('\n'),
-  )
+  expect(calls.prompts[0]).toContain('- /Users/me/team/a.md\n- /Users/me/team/b.md')
+})
+
+test('with no checks set, a review of changed scripts runs nothing but gh, git and its own folders', async ($, on) => {
+  const { clock, calls } = world(on, [review({ status: 'queued', findings: [], verdict: undefined, files: ['src/a.ts'] })])
+  await begin($, clock)
+
+  expect(calls.prompts[0]).toContain('No mechanical check output for this pull request.')
+  expect(calls.argv.map(argv => argv[0]).filter(command => !['gh', 'git', 'mkdir', 'rm'].includes(command ?? ''))).toEqual([])
 })
 
 // ---- 深掘りする ----

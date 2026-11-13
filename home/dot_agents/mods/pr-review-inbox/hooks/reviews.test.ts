@@ -736,22 +736,19 @@ test('reviewerPrompt by default asks for plain, polite comments with a reason an
 const promptWith = (over: Partial<Parameters<typeof reviewerPrompt>[0]>) =>
   reviewerPrompt({ key: KEY, headSha: SHA_A, worktree: '/w', diffPath: '/d.diff', resultPath: '/r.json', files: [], ...over })
 
-test('reviewerPrompt points the reviewer at the testable-design files and the sections that explain the check output', () => {
-  const prompt = promptWith({ skillFiles: ['/s/SKILL.md', '/s/references/mechanical-checks.md'], scanDir: '/scan' })
+test('reviewerPrompt lists the viewpoint files in reading order and treats check output as candidates', () => {
+  const prompt = promptWith({ skillFiles: ['/team/a.md', '/team/b.md'], scanDir: '/scan' })
 
-  expect(prompt).toContain('- /s/SKILL.md\n- /s/references/mechanical-checks.md')
-  // The sections are named, not copied: c7 and later rules reach the reviewer from the skill.
-  expect(prompt).toContain('「L1: Oxlint のルール」')
-  expect(prompt).toContain('「`candidates.json` の読み方」')
-  expect(prompt).toContain('run no command')
+  expect(prompt).toContain('- /team/a.md\n- /team/b.md')
+  expect(prompt).toContain('Run no command')
   expect(prompt).toContain('not findings')
 })
 
-test('reviewerPrompt asks a testable-design finding for its viewpoint in reason and the case that breaks in comment', () => {
-  const prompt = promptWith({ skillFiles: ['/s/SKILL.md'] })
+test('reviewerPrompt asks a viewpoint finding for its viewpoint in reason and the case that breaks in comment', () => {
+  const prompt = promptWith({ skillFiles: ['/team/a.md'] })
 
-  expect(prompt).toContain('reason starts with the viewpoint in brackets, as 「[関心の分離 観点 3] 」')
-  expect(prompt).toContain('comment names the concrete case that breaks: whose change request')
+  expect(prompt).toContain('reason starts with the viewpoint in brackets, as the files name it')
+  expect(prompt).toContain('comment names the concrete case that breaks, in plain words')
   // Left out, source reads as "criteria" even with no criteria file.
   expect(prompt).toContain('Every finding sets source: "criteria" only when it follows the criteria file')
   expect(prompt).toContain('a problem this change did not make worse goes under humanReview')
@@ -763,7 +760,7 @@ test('reviewerPrompt gives a defect the change introduces its own source, with t
   expect(prompt).toContain('"behavior" when the change\nintroduces a defect you traced in the code')
   expect(prompt).toContain('reason names the path that breaks: which input or state, and what comes out instead')
   expect(prompt).toContain('read each changed function once for what it now does')
-  expect(prompt).toContain('"source": "criteria | behavior | testable-design"')
+  expect(prompt).toContain('"source": "criteria | behavior | viewpoint"')
 })
 
 test('reviewerPrompt defines blocker by what merging breaks, with examples and what is not one', () => {
@@ -785,20 +782,20 @@ test('reviewerPrompt keeps a finding it could not trace below blocker, marked un
   expect(prompt).toContain('not about how sure you are or how\nthe comment is worded')
 })
 
-test('a reviewer finding keeps the source behavior; any other unknown source reads as criteria', () => {
+test('a reviewer finding keeps the sources behavior and viewpoint; any other reads as criteria', () => {
   const finding = (source: unknown) => ({ severity: 'blocker', reason: 'r', file: 'a.ts', line: 3, source })
-  const json = { key: KEY, headSha: SHA_A, findings: ['behavior', 'testable-design', 'criteria', 'human', undefined].map(finding) }
+  const json = { key: KEY, headSha: SHA_A, findings: ['behavior', 'viewpoint', 'criteria', 'human', undefined, 'unknown-source'].map(finding) }
   const accepted = acceptReviewerOutput(review({ status: 'reviewing', agentId: 'r1' }), { agentId: 'r1', json }, new Date('2026-11-09T01:05:00.000Z'))
 
   expect(accepted.kind).toBe('accept')
   if (accepted.kind !== 'accept') return
-  expect(accepted.review.findings.map(one => one.source)).toEqual(['behavior', 'testable-design', 'criteria', 'criteria', 'criteria'])
+  expect(accepted.review.findings.map(one => one.source)).toEqual(['behavior', 'viewpoint', 'criteria', 'criteria', 'criteria', 'criteria'])
 })
 
-test('reviewerPrompt without the testable-design files still names what to judge by', () => {
+test('reviewerPrompt without viewpoint files still names what to judge by', () => {
   const prompt = promptWith({})
 
-  expect(prompt).toContain('No testable-design files: judge by separation of concerns and test quality.')
+  expect(prompt).toContain('No viewpoint files: judge by the change itself.')
 })
 
 // ---- the repositories a config file names ----
@@ -868,34 +865,14 @@ test('one search that failed fails the merge, with its message', () => {
 
 // ---- what the prompt takes from the config ----
 
-test('reviewerPrompt with the default checks listed reads exactly as with nothing set', () => {
-  const outputs = [
-    { name: 'oxlint', files: ['oxlint.json'] },
-    { name: 'testable-scan', files: ['candidates.json', 'ir.json'] },
-  ]
-
-  expect(promptWith({ scanDir: '/scan', skillFiles: ['/s/SKILL.md'], guide: { kind: 'testable-design' }, checkOutputs: outputs })).toBe(
-    promptWith({ scanDir: '/scan', skillFiles: ['/s/SKILL.md'] }),
-  )
+test('reviewerPrompt with nothing set says there is no check output', () => {
+  expect(promptWith({})).toContain('No mechanical check output for this pull request.')
 })
 
 test('reviewerPrompt lists only the check outputs it is given', () => {
   const prompt = promptWith({ scanDir: '/scan', checkOutputs: [{ name: 'oxlint', files: ['oxlint.json'] }] })
 
   expect(prompt).toContain('Mechanical check output: /scan (oxlint.json).')
-})
-
-test('reviewerPrompt with viewpoint files and no guide names no testable-design section', () => {
-  const prompt = promptWith({ skillFiles: ['/team/viewpoints.md'], guide: { kind: 'generic' }, scanDir: '/scan', checkOutputs: [] })
-
-  expect(prompt).toContain('- /team/viewpoints.md')
-  expect(prompt).not.toContain('レビューするとき')
-  expect(prompt).not.toContain('L1: Oxlint のルール')
-  expect(prompt).not.toContain('観点 3')
-  expect(prompt).not.toContain('testable-design viewpoints')
-  // The mod's own contract stays.
-  expect(prompt).toContain('Every finding sets source: "criteria" only when it follows the criteria file')
-  expect(prompt).toContain('- blocker: merging as is breaks something for a user or an operator')
 })
 
 test('a guide and a comment style from the config replace those parts and leave the contract', () => {

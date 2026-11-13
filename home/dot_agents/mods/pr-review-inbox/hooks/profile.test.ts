@@ -1,25 +1,16 @@
 import { expect, test } from 'claude-code/testing'
 
-import {
-  defaultChecks,
-  expandArgv,
-  failureOf,
-  parseProfile,
-  pickViewpointFiles,
-  SKILL_FILES,
-  summarizeChecks,
-  warningLine,
-} from './profile'
+import { expandArgv, failureOf, parseProfile, pickViewpointFiles, summarizeChecks, warningLine } from './profile'
 import type { Check } from './profile'
 
 const HOME = '/Users/me'
 
-test('with no review section, the reviewer reads the testable-design files and runs the default checks', () => {
+test('with no review section, the reviewer gets no viewpoint files, the generic guide and no checks', () => {
   const { profile, warnings } = parseProfile(undefined, HOME)
 
-  expect(profile.viewpoints).toEqual(SKILL_FILES.map(file => `${HOME}/.agents/skills/testable-design/${file}`))
-  expect(profile.guide).toEqual({ kind: 'testable-design' })
-  expect(profile.checks).toBe(undefined)
+  expect(profile.viewpoints).toEqual([])
+  expect(profile.guide).toEqual({ kind: 'generic' })
+  expect(profile.checks).toEqual([])
   expect(profile.commentStyle).toBe(undefined)
   expect(warnings).toEqual([])
 })
@@ -66,10 +57,10 @@ test('a check may only write plain file names into the output directory', () => 
 test('an item of the review section that does not read falls back to its default', () => {
   const { profile, warnings } = parseProfile({ viewpoints: 'SKILL.md', commentStyle: 3, checks: {} }, HOME)
 
-  expect(profile.guide).toEqual({ kind: 'testable-design' })
-  expect(profile.viewpoints.length).toBe(SKILL_FILES.length)
+  expect(profile.guide).toEqual({ kind: 'generic' })
+  expect(profile.viewpoints).toEqual([])
   expect(profile.commentStyle).toBe(undefined)
-  expect(profile.checks).toBe(undefined)
+  expect(profile.checks).toEqual([])
   expect(warnings.length).toBe(3)
 })
 
@@ -98,19 +89,6 @@ test('{relativeFiles} start with ./, so a file named like an option stays a file
   const argv = expandArgv(['scan', '{worktree}', '{relativeFiles}'], { files: ['/w/-x.ts', '/w/src/a.ts'], worktree: '/w', outDir: '/o' })
 
   expect(argv).toEqual(['scan', '/w', './-x.ts', './src/a.ts'])
-})
-
-test('the default checks run oxlint and testable-scan from the skill with the binaries given', () => {
-  const [oxlint, scan] = defaultChecks({ oxlint: '/bin/oxlint', node: '/bin/node' }, '/skill')
-
-  expect(oxlint).toEqual({
-    name: 'oxlint',
-    argv: ['/bin/oxlint', '-c', '/skill/tools/oxlintrc.json', '-f', 'json', '{files}'],
-    stdout: 'oxlint.json',
-    outputs: [],
-  })
-  expect(scan?.argv).toEqual(['/bin/node', '/skill/tools/bin/testable-scan.ts', '{worktree}', '{relativeFiles}', '--out', '{outDir}'])
-  expect(scan?.outputs).toEqual(['candidates.json', 'ir.json'])
 })
 
 const lint: Check = { name: 'oxlint', argv: ['oxlint'], stdout: 'oxlint.json', outputs: [] }

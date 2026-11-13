@@ -9,7 +9,6 @@
 
 - `gh`（ログイン済み）と `git`
 - 下読みする PR のリポジトリの clone（clone が無い PR は「clone なし」と表示されます）
-- 既定の機械チェックと観点を使う場合だけ、`mise`（oxlint と node）と `~/.agents/skills/testable-design`。無ければ機械チェックは省かれ、観点は汎用の指示になります
 
 ## 設定ファイル
 
@@ -21,7 +20,7 @@ org 内の依頼をすべて拾い、clone は `~/work/repo/<リポジトリ名>
 
 ```json
 {
-  "sources": ["dwango-zane"],
+  "sources": ["your-org"],
   "clonePath": "~/work/repo/{repo}"
 }
 ```
@@ -34,13 +33,13 @@ org 内の依頼をすべて拾い、clone は `~/work/repo/<リポジトリ名>
 | `clonePath` | clone の場所。`{owner}` と `{repo}` を差し込みます。`{repo}` は必須です | `repos` に無いリポジトリは「clone なし」 |
 | `repos` | `owner/repo` ごとの clone の場所。`clonePath` より優先します | なし |
 | `criteria` | リポジトリごとのレビュー基準ファイル（clone 内のパス）と、対象にする変更パスの正規表現 | なし |
-| `review` | 下読みの中身（次の節） | testable-design の構成 |
+| `review` | 下読みの中身（次の節） | 観点ファイルなし、機械チェックなし |
 
 `criteria` の例です。
 
 ```json
 "criteria": {
-  "dwango-zane/heimdall": { "path": ".agents/skills/review-frontend/criteria/frontend.md", "applies": "^frontend/" }
+  "your-org/your-repo": { "path": "docs/review-criteria.md", "applies": "^frontend/" }
 }
 ```
 
@@ -48,10 +47,10 @@ org 内の依頼をすべて拾い、clone は `~/work/repo/<リポジトリ名>
 
 | キー | 意味 | 書かなかったとき |
 |---|---|---|
-| `viewpoints` | reviewer に読ませる観点ファイルの配列（読む順）。ファイルだけで、ディレクトリは無視されます | testable-design の 4 ファイル |
-| `guide` | 観点ファイルの使い方と、観点由来の指摘の書き方を書いたファイル。中身が prompt に入ります | `viewpoints` も無ければ testable-design 用の指示、あれば汎用の短い指示 |
+| `viewpoints` | reviewer に読ませる観点ファイルの配列（読む順）。ファイルだけで、ディレクトリは無視されます | なし。差分と `criteria` だけで下読みします |
+| `guide` | 観点ファイルの使い方と、観点由来の指摘の書き方を書いたファイル。中身が prompt に入ります。観点由来の指摘の `source` は `"viewpoint"` です | 汎用の短い指示 |
 | `commentStyle` | コメント下書きの口調を書いたファイル。中身が prompt に入ります | です・ます調で、問題、理由、直し方の案を 1〜3 文で書く |
-| `checks` | 機械チェックの配列。`[]` にすると機械チェックをしません | oxlint と testable-scan |
+| `checks` | 機械チェックの配列 | なし。機械チェックをしません |
 
 `checks` の各項目は次の形です。
 
