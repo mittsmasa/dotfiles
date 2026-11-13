@@ -3,7 +3,9 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import type { SlackLink } from '../types'
 import {
+  SEND_TOOL_PATTERN,
   findPermalink,
+  findSlackServer,
   formatPrompt,
   messagesText,
   oneLine,
