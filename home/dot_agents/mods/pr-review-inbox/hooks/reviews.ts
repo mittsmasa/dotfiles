@@ -1,6 +1,8 @@
 // Pure logic of the inbox: no `$`, no clock, no file system. Everything that
 // reaches outside lives in run.ts and register.tsx.
 import type { Finding, Review, ReviewEvent, Severity, Verdict } from '../types'
+import { expandHome, parseProfile } from './profile'
+import type { Profile } from './profile'
 
 export const REVIEW_TIMEOUT_MS = 15 * 60 * 1000
 const MAX_FINDINGS = 20
@@ -130,13 +132,38 @@ export function parseKey(key: string): { fullName: string; number: number } | un
 
 // ---- fetching ----
 
-/** Open pull requests waiting for my review; drafts are left out. */
-export function buildSearchArgv(fullNames: readonly string[]): string[] {
+/** Open pull requests waiting for my review in one source; drafts are left out. */
+export function buildSearchArgv(source: string): string[] {
   return [
     'gh', 'search', 'prs', '--review-requested=@me', '--state=open', '--draft=false', '--limit', '50',
     '--json', 'number,title,url,repository',
-    ...fullNames.flatMap(name => ['--repo', name]),
+    source.includes('/') ? '--repo' : '--owner', source,
   ]
+}
+
+/**
+ * The searches of every source as one: rows deduplicated by pull request. One
+ * search that failed or does not read fails them all, as one search would.
+ */
+export function mergeSearches(
+  outputs: readonly (CommandOutput & { stderr?: string })[],
+): CommandOutput & { stderr: string } {
+  const rows: unknown[] = []
+  const seen = new Set<string>()
+  for (const output of outputs) {
+    const keys = searchedKeys(output)
+    const parsed = parseJson(output.stdout)
+    if (!keys || !Array.isArray(parsed)) {
+      return { exitCode: output.exitCode === 0 ? 1 : output.exitCode, stdout: '', stderr: output.stderr ?? '' }
+    }
+    for (const [index, key] of keys.entries()) {
+      if (seen.has(key)) continue
+      seen.add(key)
+      rows.push(parsed[index])
+    }
+  }
+
+  return { exitCode: 0, stdout: JSON.stringify(rows), stderr: '' }
 }
 
 export function viewArgs(key: string): string[] | undefined {
