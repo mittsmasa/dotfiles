@@ -53,7 +53,7 @@ async function setUp($: Engine, on: On, initial: string[]) {
   on('command.register', () => ({ value: { command: 'slack-link' } }))
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('mcp.call', (_, e) => {
-    expect(e.server).toBe(SERVER)
+    world.calledServers.push(e.server)
     if (e.tool === 'slack_read_user_profile') {
       return { value: textResult(JSON.stringify({ result: `User ID: ${OWNER}\nUsername: m\n` })) }
     }
