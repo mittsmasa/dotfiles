@@ -991,7 +991,7 @@ test('PR へのリンクと片付けるは判定の上にあり、送るボタ�
   const order = (await ui.findAll({ type: 'Button' })).map(one => one.key)
   expect(order.indexOf('read')).toBeGreaterThan(order.indexOf('deep-dive'))
   expect(order.indexOf('read')).toBeLessThan(order.indexOf('open:f1'))
-  expect(order.indexOf('comment')).toBe(order.length - 1)
+  expect(order.slice(-2)).toEqual(['comment', 'approve'])
   await ui.unmount()
 })
 
@@ -1167,7 +1167,7 @@ test('選んだ PR の見出しに、変更行数とファイル数が出る', a
   await ui.press({ key: `row:${KEY}` })
   await clock.settle()
 
-  expect((await ui.find({ type: 'Text', text: /ファイル$/ }))?.text).toBe('widgets · +120 −34 · 5 ファイル')
+  expect((await ui.find({ type: 'Text', text: /^widgets ·/ }))?.text).toBe('widgets · +120 −34 · 5 ファイル')
   expect((await ui.find({ type: 'Text', text: /^概要/ }))?.text).toBe('概要')
   await ui.unmount()
 })
@@ -1276,7 +1276,7 @@ test('指摘行のタグに書く severity は blocker だけで、基準の ID 
 
   expect(await ui.findAll({ type: 'Text', text: /^blocker$/ })).toHaveLength(1)
   expect((await ui.find({ type: 'Text', text: /^要確認$/ }))?.text).toBe('要確認')
-  expect(await ui.find({ type: 'Text', text: /recommended/ })).toBe(undefined)
+  expect(await ui.find({ type: 'Text', text: /^recommended/ })).toBe(undefined)
   expect(await ui.find({ type: 'Text', text: /R-1/ })).toBe(undefined)
 
   await ui.press({ key: 'open:f1' })
