@@ -2,16 +2,6 @@
 // checks, the viewpoint files, and the files that replace the prompt's guide
 // and comment style. Pure: no `$`. run.ts runs what is decided here.
 
-/** The testable-design files a reviewer reads by default, relative to the skill, in reading order. */
-export const SKILL_FILES = [
-  'SKILL.md',
-  'references/separation-of-concerns.md',
-  'references/test-quality.md',
-  'references/mechanical-checks.md',
-] as const
-
-export const skillDirOf = (home: string) => `${home}/.agents/skills/testable-design`
-
 /** One mechanical check: an argument vector run with no shell, in the data directory. */
 export type Check = {
   name: string
