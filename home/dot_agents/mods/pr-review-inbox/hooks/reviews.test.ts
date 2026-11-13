@@ -744,7 +744,46 @@ test('reviewerPrompt asks a testable-design finding for its viewpoint in reason 
   expect(prompt).toContain('reason starts with the viewpoint in brackets, as 「[関心の分離 観点 3] 」')
   expect(prompt).toContain('comment names the concrete case that breaks: whose change request')
   // Left out, source reads as "criteria" even with no criteria file.
-  expect(prompt).toContain('Every finding sets source: "criteria" only when it follows the criteria file')
+  expect(prompt).toContain('A finding sets source: "criteria" only when it follows the criteria file')
+  expect(prompt).toContain('a problem this change did not make worse goes under humanReview')
+})
+
+test('reviewerPrompt gives a defect the change introduces its own source, with the path that breaks', () => {
+  const prompt = promptWith({})
+
+  expect(prompt).toContain('"behavior" when the change\nintroduces a defect you traced in the code')
+  expect(prompt).toContain('reason names the path that breaks: which input or state, and what comes out instead')
+  expect(prompt).toContain('read each changed function once for what it now does')
+  expect(prompt).toContain('"source": "criteria | behavior | testable-design"')
+})
+
+test('reviewerPrompt defines blocker by what merging breaks, with examples and what is not one', () => {
+  const prompt = promptWith({})
+
+  expect(prompt).toContain('- blocker: merging as is breaks something for a user or an operator, and you traced it in the code.')
+  expect(prompt).toContain('Examples: a condition inverted so valid input is rejected')
+  expect(prompt).toContain('Not a blocker: a design or naming preference, missing tests alone')
+  expect(prompt).toContain('Where the criteria file gives a severity for a rule, that wins.')
+  expect(prompt).toContain('do not raise one to have one')
+})
+
+test('reviewerPrompt keeps a finding it could not trace below blocker, marked unsure', () => {
+  const prompt = promptWith({})
+
+  expect(prompt).toContain('use recommended\nwith isUnsure: true, and end reason with 「確かめられれば blocker 相当」')
+  expect(prompt).toContain('or on something you could only\nsettle by running a command')
+  // Severity is settled apart from how sure the reviewer is and how the comment reads.
+  expect(prompt).toContain('not about how sure you are or how\nthe comment is worded')
+})
+
+test('a reviewer finding keeps the source behavior; any other unknown source reads as criteria', () => {
+  const finding = (source: unknown) => ({ severity: 'blocker', reason: 'r', file: 'a.ts', line: 3, source })
+  const json = { key: KEY, headSha: SHA_A, findings: ['behavior', 'testable-design', 'criteria', 'human', undefined].map(finding) }
+  const accepted = acceptReviewerOutput(review({ status: 'reviewing', agentId: 'r1' }), { agentId: 'r1', json }, new Date('2026-11-09T01:05:00.000Z'))
+
+  expect(accepted.kind).toBe('accept')
+  if (accepted.kind !== 'accept') return
+  expect(accepted.review.findings.map(one => one.source)).toEqual(['behavior', 'testable-design', 'criteria', 'criteria', 'criteria'])
 })
 
 test('reviewerPrompt without the testable-design files still names what to judge by', () => {
