@@ -52,6 +52,23 @@ org 内の依頼をすべて拾い、clone は `~/work/repo/<リポジトリ名>
 | `commentStyle` | コメント下書きの口調を書いたファイル。中身が prompt に入ります | です・ます調で、問題、理由、直し方の案を 1〜3 文で書く |
 | `checks` | 機械チェックの配列 | なし。機械チェックをしません |
 
+`viewpoints` は glob でも書けます。skill の `references/` までまとめて読ませたいときに使います。
+
+```json
+"viewpoints": [
+  "~/.agents/skills/testable-design/SKILL.md",
+  "~/.agents/skills/testable-design/references/*.md",
+  "~/.claude/skills/partner-prop-review/**/*.md"
+]
+```
+
+- `*` と `?` は 1 階層の中だけに合います。`**` は 0 階層以上のディレクトリに合います。`{a,b}` は a か b に合います
+- glob に合ったファイルはパス順に並べます。配列の順はそのまま保ちます。同じファイルが 2 回出たら、最初の位置だけに残します
+- `.` で始まる名前は、ファイルもディレクトリも拾いません。シンボリックリンクは辿ります
+- 1 つの glob で拾うのは 100 ファイル、辿るのは 8 階層・500 ディレクトリまでです。超えたときと、何にも合わなかったときは、設定の誤りとして pane に出ます
+- `tools/` のスクリプトを拾わないように、`*.md` などで拡張子を絞ってください。reviewer が読めるのは、展開して拾ったファイルだけです
+- 設定ファイルと同じく、展開はセッションの開始時と `/review-inbox` のときに 1 回だけです。あとから skill にファイルを足したら `/review-inbox` を打ち直します
+
 `checks` の各項目は次の形です。
 
 ```json
@@ -111,4 +128,4 @@ reviewer は Read / Grep / Glob と、結果ファイル 1 つへの Write だ�
 - PR の checkout
 - diff と機械チェックの出力
 - `criteria` のファイル（clone 内にある場合だけ）
-- `viewpoints` のファイル
+- `viewpoints` のファイル（glob は展開したあとのファイル）
