@@ -6,9 +6,10 @@ import type { EngineInterface } from 'claude-code'
 import type { Inbox, Mode, Placement, Review, ReviewEvent } from '../types'
 import { hunkAt } from './diff'
 import type { RepoConfig } from './reviews'
-import { expandArgv, failureOf, outputsOf, pickViewpointFiles, summarizeChecks, warningLine } from './profile'
-import type { CheckResult, ViewpointStat } from './profile'
+import { expandArgv, failureOf, outputsOf, resolveViewpoints, summarizeChecks, warningLine } from './profile'
+import type { CheckResult } from './profile'
 import {
+  DEFAULT_APPROVE_COMMENT,
   addHumanComment,
   buildReviewPayload,
   canApprove,
@@ -25,6 +26,7 @@ import {
 } from './posting'
 import {
   REVIEWER_SYSTEM,
+  isCheckoutSafe,
   guardOf,
   acceptReviewerOutput,
   acceptedCopyOf,
@@ -210,14 +212,18 @@ export function select($: EngineInterface, key: string | undefined) {
           mode: undefined,
           openFindingId: undefined,
           openDiff: undefined,
-          isHumanReviewOpen: false,
           isBodyOpen: false,
+          approveComment: undefined,
         },
   )
 }
 
-export function showBody($: EngineInterface) {
-  return mutate($, state => ({ ...state, isBodyOpen: true }))
+export function toggleBody($: EngineInterface) {
+  return mutate($, state => ({ ...state, isBodyOpen: !state.isBodyOpen }))
+}
+
+export function setApproveComment($: EngineInterface, text: string) {
+  return mutate($, state => (isSending ? state : { ...state, approveComment: text }))
 }
 
 // A hunk longer than this is not drawn: one drawing holds 100,000 characters in all.
@@ -254,21 +260,41 @@ export async function openFinding($: EngineInterface, config: Config, id: string
   )
 }
 
-export function showHumanReview($: EngineInterface) {
-  return mutate($, state => ({ ...state, isHumanReviewOpen: true }))
-}
-
 export function setMode($: EngineInterface, mode: Mode | undefined) {
   return mutate($, state => (isSending ? state : { ...state, mode }))
 }
 
-export function markRead($: EngineInterface, key: string) {
-  return mutate($, state => ({
+export async function markRead($: EngineInterface, config: Config, key: string) {
+  await mutate($, state => ({
     ...state,
     selectedKey: undefined,
     openDiff: undefined,
     reviews: state.reviews.map(review => (review.key === key ? { ...review, isRead: true } : review)),
   }))
+  // The checkout was kept for a deep dive; a reviewer still at work keeps its own.
+  if (running?.key !== key) await removeWorktree($, config, key)
+}
+
+/**
+ * What a deep dive of a finished review can start from: the checkout the
+ * pre-read left, and the result this mod accepted. Each only where it exists.
+ */
+export async function deepDiveContext(
+  $: EngineInterface,
+  config: Config,
+  key: string,
+): Promise<{ worktree?: string; resultPath?: string }> {
+  const review = inbox.reviews.find(one => one.key === key)
+  if (!review || review.status !== 'done') return {}
+  const place = worktreeOf(config, key)
+  const saved = savedPathsOf(config, review)
+  const hasWorktree = place !== undefined && isCheckoutSafe(review) && (await $.fs.exists(place.worktree))
+  const hasResult = saved !== undefined && (await $.fs.exists(saved.accepted))
+
+  return {
+    ...(hasWorktree ? { worktree: place.worktree } : {}),
+    ...(hasResult ? { resultPath: saved.accepted } : {}),
+  }
 }
 
 async function now($: EngineInterface) {
@@ -551,6 +577,8 @@ async function reuseSaved($: EngineInterface, config: Config, review: Review): P
 }
 
 async function startReview($: EngineInterface, config: Config, review: Review) {
+  // A checkout kept from an earlier commit must not outlive it, reused result or not.
+  await removeWorktree($, config, review.key)
   if (await reuseSaved($, config, review)) return pump($, config)
   const parsed = parseKey(review.key)
   const place = worktreeOf(config, review.key)
@@ -662,8 +690,9 @@ async function startReview($: EngineInterface, config: Config, review: Review) {
   if (!running) await pump($, config)
 }
 
-async function finish($: EngineInterface, config: Config, key: string) {
-  await removeWorktree($, config, key)
+/** `keepWorktree`: an accepted result leaves its checkout for a deep dive. */
+async function finish($: EngineInterface, config: Config, key: string, keepWorktree = false) {
+  if (!keepWorktree) await removeWorktree($, config, key)
   await setRunning($, undefined)
   await refreshWithDiff($, config)
   await pump($, config)
@@ -691,7 +720,7 @@ export async function onTurnComplete(
   await patch($, mine.key, one =>
     accepted.kind === 'accept' ? accepted.review : fail(one, accepted.reason),
   )
-  await finish($, config, mine.key)
+  await finish($, config, mine.key, accepted.kind === 'accept')
 }
 
 /**
@@ -777,8 +806,9 @@ export async function addComment($: EngineInterface, key: string, body: string) 
 export async function requeue($: EngineInterface, config: Config, key: string) {
   const open = inbox.reviews.find(review => review.key === key && isOpen(review))
   if (open) await dropSaved($, config, open)
+  if (open) await removeWorktree($, config, key)
   await patch($, key, review =>
-    isOpen(review) ? { ...review, status: 'queued', findings: [], humanReview: [], skipped: [] } : review,
+    isOpen(review) ? { ...review, status: 'queued', findings: [], humanReview: [], checked: [], skipped: [] } : review,
   )
   await pump($, config)
 }
@@ -798,7 +828,14 @@ export async function openConfirm($: EngineInterface, config: Config, key: strin
     ...inline.map(finding => [finding.id, 'inline'] as const),
     ...inBody.map(finding => [finding.id, 'body'] as const),
   ])
-  await setMode($, { kind: 'confirm', payload: buildReviewPayload(review, diffLines, event), placement })
+  const comment = inbox.approveComment ?? DEFAULT_APPROVE_COMMENT
+  await setMode($, { kind: 'confirm', payload: buildReviewPayload(review, diffLines, event, comment), placement })
+}
+
+/** The approval with the comment as typed: the confirm screen shows it before anything goes. */
+export async function approveWith($: EngineInterface, config: Config, key: string, comment: string) {
+  await setApproveComment($, comment)
+  await openConfirm($, config, key, 'APPROVE')
 }
 
 // Set and cleared synchronously: two presses of 送信する must not both pass.
@@ -845,6 +882,7 @@ export async function send($: EngineInterface, config: Config, key: string) {
       await $.process.run(['mkdir', '-p', saved.dir]).catch(() => undefined)
       await $.fs.write(saved.posted, JSON.stringify(sent)).catch(() => undefined)
     }
+    await removeWorktree($, config, key)
   } catch (failure) {
     error = firstLine(String(failure instanceof Error ? failure.message : failure))
   } finally {
