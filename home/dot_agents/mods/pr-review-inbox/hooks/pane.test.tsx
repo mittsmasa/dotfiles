@@ -1333,6 +1333,18 @@ test('選んだ PR の見出しに、変更行数とファイル数が出る', a
   await ui.unmount()
 })
 
+test('選んだ PR の見出しに、PR を出した人がリポジトリ名の次に出る', async ($, on) => {
+  const { clock } = world(on, [review({ author: 'octocat', lines: { added: 120, removed: 34, files: 5 } })])
+  await begin($, clock)
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: `row:${KEY}` })
+  await clock.settle()
+
+  expect((await ui.find({ type: 'Text', text: /^widgets ·/ }))?.text).toBe('widgets · @octocat · +120 −34 · 5 ファイル')
+  await ui.unmount()
+})
+
 test('行数を持たない PR では、見出しはリポジトリ名だけになる', async ($, on) => {
   const { clock } = world(on, [review()])
   await begin($, clock)
