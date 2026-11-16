@@ -723,6 +723,35 @@ test('viewArgs は追加行数・削除行数・変更ファイル数も gh に�
   expect(fields).toContain('additions')
   expect(fields).toContain('deletions')
   expect(fields).toContain('changedFiles')
+  expect(fields).toContain('author')
+})
+
+test('取得した PR は、出した人の login を持つ。bot は app/ を外した名前になる', () => {
+  const [person] = applyFetchResult({ search: SEARCH_12, views: [viewOf({ author: { login: 'octo-cat', name: 'Octo' } })] }, [])
+  const [bot] = applyFetchResult({ search: SEARCH_12, views: [viewOf({ author: { login: 'app/renovate', is_bot: true } })] }, [])
+
+  expect(person?.author).toBe('octo-cat')
+  expect(bot?.author).toBe('renovate')
+})
+
+test('login の形をしていない author でも取得は成功し、author は持たない', () => {
+  const odd = [undefined, 'octocat', { login: 7 }, { login: 'octo cat' }, { login: '<b>x</b>' }, { login: 'a'.repeat(61) }, { login: 'app/' }]
+  for (const author of odd) {
+    const [next] = applyFetchResult({ search: SEARCH_12, views: [viewOf({ author })] }, [])
+
+    expect(next?.status).toBe('queued')
+    expect(next?.author).toBe(undefined)
+  }
+})
+
+test('head が同じ PR は、取得に author が無ければ前の author を残し、あれば新しいものにする', () => {
+  const stored = review({ status: 'done', author: 'octocat' })
+  const [kept] = applyFetchResult({ search: SEARCH_12, views: [viewOf({})] }, [stored])
+  const [renamed] = applyFetchResult({ search: SEARCH_12, views: [viewOf({ author: { login: 'octodog' } })] }, [stored])
+
+  expect(kept?.status).toBe('done')
+  expect(kept?.author).toBe('octocat')
+  expect(renamed?.author).toBe('octodog')
 })
 
 test('取得した PR は、GitHub の数えた行数とファイル数を持つ', () => {
