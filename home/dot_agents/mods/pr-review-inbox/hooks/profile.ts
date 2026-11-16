@@ -132,6 +132,119 @@ export function pickViewpointFiles(stats: readonly ViewpointStat[]): { files: st
   return { files, warnings }
 }
 
+/** A viewpoint path is a glob when a segment holds `*`, `?` or `{a,b}`. */
+export const isGlob = (path: string) => /[*?{]/.test(path)
+
+/** The directory a glob is walked from: the segments before the first one holding a glob character. */
+export function globBase(pattern: string): string {
+  const segments = pattern.split('/')
+  const first = segments.findIndex(isGlob)
+  const base = segments.slice(0, first).join('/')
+
+  return base === '' ? '/' : base
+}
+
+/**
+ * `**` matches any number of directories (none included), `*` and `?` stay
+ * inside one segment, `{a,b}` is either. Every other character is literal.
+ */
+export function globToRegExp(pattern: string): RegExp {
+  let out = ''
+  for (let i = 0; i < pattern.length; i++) {
+    const char = pattern[i] as string
+    if (char === '*' && pattern[i + 1] === '*') {
+      const slash = pattern[i + 2] === '/'
+      out += slash ? '(?:[^/]+/)*' : '.*'
+      i += slash ? 2 : 1
+    } else if (char === '*') out += '[^/]*'
+    else if (char === '?') out += '[^/]'
+    else if (char === '{') {
+      const close = pattern.indexOf('}', i)
+      if (close < 0) out += '\\{'
+      else {
+        out += `(?:${pattern.slice(i + 1, close).split(',').map(escapeRegExp).join('|')})`
+        i = close
+      }
+    } else out += escapeRegExp(char)
+  }
+
+  return new RegExp(`^${out}$`)
+}
+
+const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')
+
+/** What expanding the viewpoints reads: `$.fs.list` and `$.fs.stat`, or a fake in a test. */
+export type ViewpointFs = {
+  list: (path: string) => Promise<readonly { name: string; kind: 'file' | 'dir' | 'other'; isLink: boolean }[]>
+  stat: (path: string) => Promise<{ kind: 'file' | 'dir' | 'other' }>
+}
+
+/** Bounds on one glob's walk: a link loop or a pattern rooted too high stops here. */
+const GLOB_MAX_DEPTH = 8
+const GLOB_MAX_FILES = 100
+const GLOB_MAX_DIRS = 500
+
+/**
+ * The files one glob matches, sorted by path. Names starting with `.` are
+ * not walked into or matched, as in a shell. A link is followed; the depth
+ * and directory bounds stop a loop.
+ */
+async function expandGlob(pattern: string, fs: ViewpointFs): Promise<{ files: string[]; warnings: string[] }> {
+  const matcher = globToRegExp(pattern)
+  const files: string[] = []
+  let dirs = 0
+  let isCut = false
+  const walk = async (dir: string, depth: number): Promise<void> => {
+    if (isCut || depth > GLOB_MAX_DEPTH || ++dirs > GLOB_MAX_DIRS) {
+      isCut = true
+
+      return
+    }
+    const entries = await fs.list(dir).catch(() => [])
+    for (const entry of [...entries].sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))) {
+      if (entry.name.startsWith('.')) continue
+      const path = `${dir === '/' ? '' : dir}/${entry.name}`
+      const kind = entry.isLink ? (await fs.stat(path).catch(() => undefined))?.kind : entry.kind
+      if (kind === 'dir') await walk(path, depth + 1)
+      else if (kind === 'file' && matcher.test(path)) {
+        if (files.length >= GLOB_MAX_FILES) {
+          isCut = true
+
+          return
+        }
+        files.push(path)
+      }
+    }
+  }
+  await walk(globBase(pattern), 0)
+  files.sort()
+  const warnings = [
+    ...(files.length === 0 ? [`review.viewpoints の ${pattern} に合うファイルが無い`] : []),
+    ...(isCut ? [`review.viewpoints の ${pattern} は広すぎるので途中までしか読まない`] : []),
+  ]
+
+  return { files, warnings }
+}
+
+/**
+ * The viewpoint files to give the reviewer, in the config's order: a plain
+ * path as `pickViewpointFiles` keeps it, a glob as the files it matches,
+ * sorted by path. A file named twice is kept where it first appears.
+ */
+export async function resolveViewpoints(paths: readonly string[], fs: ViewpointFs): Promise<{ files: string[]; warnings: string[] }> {
+  const files: string[] = []
+  const warnings: string[] = []
+  for (const path of paths) {
+    const found = isGlob(path)
+      ? await expandGlob(path, fs)
+      : pickViewpointFiles([{ path, ...(await fs.stat(path).then(one => ({ kind: one.kind }), () => ({}))) }])
+    for (const file of found.files) if (!files.includes(file)) files.push(file)
+    warnings.push(...found.warnings)
+  }
+
+  return { files, warnings }
+}
+
 export type ArgvVars = {
   /** Real paths of the files to check, inside the worktree. */
   files: readonly string[]
