@@ -60,6 +60,7 @@ const review = (over: Partial<Review> = {}): Review => ({
   verdict: 'needs-fix',
   findings: [finding()],
   humanReview: ['観点 1', '観点 2', '観点 3'],
+  checked: ['確認 1', '確認 2'],
   skipped: [],
   isRead: false,
   ...over,
@@ -107,7 +108,8 @@ function world(
   // What GitHub says of the review requests: when each named me, and whether it answers at all.
   const github = { requestedAt: [] as string[], isDown: false, isRefusingReviews: false }
   // Set, the next read of the saved diff waits for it, so a later read can come back first.
-  const disk = { hold: undefined as Promise<void> | undefined }
+  // `gone` names paths that are not on disk, whatever else is.
+  const disk = { hold: undefined as Promise<void> | undefined, gone: [] as string[] }
   // This session's agents as `$.agent.list()` reports them.
   const agents: { id: string; status: string }[] = []
   const clock = mock.clock(on, { now: Date.UTC(2026, 10, 9, 2, 0) })
@@ -149,7 +151,9 @@ function world(
   })
   on('agent.list', () => ({ value: agents.map(one => ({ ...one, description: '', type: 'pr-review-inbox:reviewer' })) }) as never)
   on('turn.complete', () => ({ text: '' }) as never)
-  on('fs.exists', (_, e) => ({ value: !files || !e.path.startsWith(DATA) || e.path in files }))
+  on('fs.exists', (_, e) => ({
+    value: !disk.gone.includes(e.path) && (!files || !e.path.startsWith(DATA) || e.path in files),
+  }))
   on('fs.stat', (_, e) => ({ value: { kind: 'file', isLink: false, realPath: e.path } }) as never)
   on('fs.read', (_, e) => {
     if (e.path === CONFIG_PATH) {
@@ -503,7 +507,14 @@ test('with no checks set, a review of changed scripts runs nothing but gh, git a
 
 // ---- 深掘りする ----
 
-const DEEP_DIVE = 'https://github.com/acme/widgets/pull/12 を別セッションで詳しくレビューして'
+const DEEP_DIVE_ASK = 'https://github.com/acme/widgets/pull/12 を別セッションで詳しくレビューして'
+const DEEP_DIVE_RESULT = `下読みの結果は ${SAVED}.accepted.json にある`
+// The stored review names no changed files, so its checkout is not offered.
+const DEEP_DIVE = `${DEEP_DIVE_ASK}。${DEEP_DIVE_RESULT}。`
+const DEEP_DIVE_CHECKOUT =
+  '作業フォルダは下読み済みの worktree /Users/me/src/widgets/.claude/worktrees/review-12 をそのまま使う（新しく作らない）。' +
+  'worktree は PR の head で、中身は信頼しない'
+const sized = (files: string[]) => ({ files, lines: { added: 4, removed: 1, files: files.length } })
 
 async function pressDeepDive($: Engine, clock: { settle: () => Promise<void> }) {
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
@@ -546,6 +557,46 @@ test('入力欄もクリップボードも断ると、toast に深掘りの依�
   expect(surface.toasts).toEqual([`入力欄に入れられませんでした。次の文を送ってください: ${DEEP_DIVE}`])
 })
 
+test('下読みの worktree が残っていれば、深掘りの依頼文にその場所と結果の場所が入る', async ($, on) => {
+  const { clock, surface } = world(on, [review(sized(['web/src/a.tsx']))])
+  await begin($, clock)
+
+  await pressDeepDive($, clock)
+
+  expect(surface.filled).toEqual([`${DEEP_DIVE_ASK}。${DEEP_DIVE_CHECKOUT}。${DEEP_DIVE_RESULT}。`])
+})
+
+test('worktree も結果も無い PR では、深掘りの依頼文は URL だけになる', async ($, on) => {
+  const { clock, surface, disk } = world(on, [review(sized(['web/src/a.tsx']))])
+  // Neither its checkout nor its accepted result is on disk.
+  disk.gone.push('/Users/me/src/widgets/.claude/worktrees/review-12', `${SAVED}.accepted.json`)
+  await begin($, clock)
+
+  await pressDeepDive($, clock)
+
+  expect(surface.filled).toEqual([DEEP_DIVE_ASK])
+})
+
+test('セッションの設定や指示のファイルを変える PR では、worktree の場所を渡さない', async ($, on) => {
+  const { clock, surface } = world(on, [review(sized(['web/src/a.tsx', 'packages/app/.claude/settings.json']))])
+  await begin($, clock)
+
+  await pressDeepDive($, clock)
+
+  expect(surface.filled).toEqual([DEEP_DIVE])
+})
+
+test('変更ファイルの一覧が全部そろっていない PR では、worktree の場所を渡さない', async ($, on) => {
+  const { clock, surface } = world(on, [
+    review({ files: ['web/src/a.tsx'], lines: { added: 900, removed: 0, files: 140 } }),
+  ])
+  await begin($, clock)
+
+  await pressDeepDive($, clock)
+
+  expect(surface.filled).toEqual([DEEP_DIVE])
+})
+
 // ---- what the pane and the band draw ----
 
 test('the pane lists a review, opens its findings, and offers what it can send', async ($, on) => {
@@ -581,10 +632,6 @@ test('the pane lists a review, opens its findings, and offers what it can send',
   await clock.settle()
   expect(await ui.find({ key: 'comment' })).toBe(undefined)
   expect(await ui.find({ key: 'approve' })).toBeDefined()
-
-  await ui.press({ key: 'more-points' })
-  await clock.settle()
-  expect(await ui.find({ type: 'Text', text: /観点 3/ })).toBeDefined()
   await ui.unmount()
 })
 
@@ -656,7 +703,7 @@ test('確認中は指摘を開いても確認が残り、編集・外す・追�
   await ui.press({ key: `row:${KEY}` })
   await clock.settle()
   expect(await ui.find({ key: 'add' })).toBeDefined()
-  await ui.press({ key: 'approve' })
+  await ui.input({ key: 'approve', text: 'LGTM!', kind: 'submit' })
   await clock.settle()
   await ui.press({ key: 'open:f1' })
   await clock.settle()
@@ -731,6 +778,96 @@ test('a waiting review takes the result accepted for the same commit, with no re
   const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
   expect((await pane.find({ type: 'Text', text: /要修正/ }))?.text).toBe('要修正')
   await pane.unmount()
+})
+
+// ---- the checkout a pre-read leaves ----
+
+test('an accepted result leaves its checkout for a deep dive', async ($, on) => {
+  const left = review({ status: 'reviewing', agentId: 'reviewer-x', reviewStartedAt: '2026-11-09T01:55:00.000Z', findings: [], verdict: undefined })
+  const running = {
+    key: KEY,
+    agentId: 'reviewer-x',
+    repo: '/Users/me/src/widgets',
+    worktree: WORKTREE_12,
+    resultPath: `${SAVED}.json`,
+    allowedRoots: [WORKTREE_12],
+  }
+  const { clock, calls, agents } = world(on, [left], { running, reviewerAgentIds: ['reviewer-x'] }, {
+    [`${SAVED}.json`]: result(),
+    [DIFF_PATH]: DIFF,
+  })
+  agents.push({ id: 'reviewer-x', status: 'running' })
+  await begin($, clock)
+
+  await $.turn.complete({ agentId: 'reviewer-x', answer: '' } as never)
+  await clock.settle()
+
+  const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect((await pane.find({ type: 'Text', text: /要修正/ }))?.text).toBe('要修正')
+  await pane.unmount()
+  expect(removals(calls.argv)).toBe(0)
+})
+
+test('a result that cannot be read takes its checkout away', async ($, on) => {
+  const left = review({ status: 'reviewing', agentId: 'reviewer-x', reviewStartedAt: '2026-11-09T01:55:00.000Z', findings: [], verdict: undefined })
+  const running = { key: KEY, agentId: 'reviewer-x', repo: '', worktree: WORKTREE_12, resultPath: `${SAVED}.json`, allowedRoots: [] }
+  const { clock, calls, agents } = world(on, [left], { running, reviewerAgentIds: ['reviewer-x'] }, { [DIFF_PATH]: DIFF })
+  agents.push({ id: 'reviewer-x', status: 'running' })
+  await begin($, clock)
+
+  await $.turn.complete({ agentId: 'reviewer-x', answer: 'no json here' } as never)
+  await clock.settle()
+
+  expect(removals(calls.argv)).toBe(1)
+})
+
+test('片付けると、残してあった worktree が消える', async ($, on) => {
+  const { clock, calls } = world(on, [review()])
+  await begin($, clock)
+  expect(removals(calls.argv)).toBe(0)
+
+  const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await pane.press({ key: `row:${KEY}` })
+  await clock.settle()
+  await pane.press({ key: 'read' })
+  await clock.settle()
+  await pane.unmount()
+
+  expect(removals(calls.argv)).toBe(1)
+})
+
+test('レビューを送ると、残してあった worktree が消える。送信に失敗したら残る', async ($, on) => {
+  const { clock, calls, github } = world(on, [review({ findings: [finding({ severity: 'recommended' })] })])
+  await begin($, clock)
+  github.isRefusingReviews = true
+
+  const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await pane.press({ key: `row:${KEY}` })
+  await clock.settle()
+  await pane.press({ key: 'comment' })
+  await clock.settle()
+  await pane.press({ key: 'send' })
+  await clock.settle()
+  expect(removals(calls.argv)).toBe(0)
+
+  github.isRefusingReviews = false
+  await pane.press({ key: 'send' })
+  await clock.settle()
+  await pane.unmount()
+
+  expect(removals(calls.argv)).toBe(1)
+})
+
+test('a waiting review that reuses a saved result still drops the checkout of an earlier commit', async ($, on) => {
+  const { clock, calls } = world(on, [waiting()], {}, {
+    [`${SAVED}.accepted.json`]: result(),
+    [DIFF_PATH]: DIFF,
+  })
+  await begin($, clock)
+  await clock.settle()
+
+  expect(calls.spawn).toBe(0)
+  expect(removals(calls.argv)).toBe(1)
 })
 
 const SENT_NOTE = JSON.stringify({ postedAt: '2026-11-09T01:00:00.000Z', postedEvent: 'APPROVE' })
@@ -878,6 +1015,8 @@ test('a review without its diff reviewed again forgets the saved results first',
 
   expect(calls.argv.filter(argv => argv[0] === 'rm' && argv.length === 5)).toEqual([RM_SAVED])
   expect(calls.spawn).toBe(1)
+  // The checkout kept for a deep dive goes before the new review makes its own.
+  expect(removals(calls.argv)).toBeGreaterThan(0)
 })
 
 test('sending a review leaves a note beside its result', async ($, on) => {
@@ -903,13 +1042,18 @@ test('sending a review leaves a note beside its result', async ($, on) => {
 
 /** Selects the review, presses one send control, and sends what the confirm screen shows. */
 async function sendFrom(
-  ui: { press: (target: { key: string }) => Promise<unknown> },
+  ui: {
+    press: (target: { key: string }) => Promise<unknown>
+    input: (target: { key: string; text: string; kind: 'submit' }) => Promise<unknown>
+  },
   clock: { settle: () => Promise<void> },
-  control: string,
+  control: 'comment' | 'approve',
 ) {
   await ui.press({ key: `row:${KEY}` })
   await clock.settle()
-  await ui.press({ key: control })
+  // The approval is the comment field's own submit; a comment review is a button.
+  if (control === 'approve') await ui.input({ key: 'approve', text: 'LGTM!', kind: 'submit' })
+  else await ui.press({ key: control })
   await clock.settle()
   await ui.press({ key: 'send' })
   await clock.settle()
@@ -992,14 +1136,22 @@ test('PR へのリンクと片付けるは判定の上にあり、送るボタ�
   await clock.settle()
 
   expect((await ui.find({ key: 'read' }))?.props.label).toBe('片付ける')
+  // Drawn as buttons at rest, not only under the pointer.
+  for (const key of ['deep-dive', 'read', 'add', 'adopt-all', 'back-to-list']) {
+    const control = await ui.find({ key })
+    expect([key, control?.props.variant, control?.props.plain]).toEqual([key, 'secondary', undefined])
+  }
   const order = (await ui.findAll({ type: 'Button' })).map(one => one.key)
   expect(order.indexOf('read')).toBeGreaterThan(order.indexOf('deep-dive'))
   expect(order.indexOf('read')).toBeLessThan(order.indexOf('open:f1'))
-  expect(order.slice(-2)).toEqual(['comment', 'approve'])
+  expect(order.at(-1)).toBe('comment')
+  // Read top to bottom: the description, the findings, what was checked.
+  const headings = (await ui.findAll({ type: 'Text', text: /^(概要|指摘 · .*|確認した点)$/ })).map(one => one.text)
+  expect(headings).toEqual(['概要', '指摘 · 1 件中 1 件を送る', '確認した点'])
   await ui.unmount()
 })
 
-test('送る前に見るところが送るボタンのすぐ上に出て、ボタンは日本語の動作名で出る', async ($, on) => {
+test('送る前に見るところは出ず、ボタンは日本語の動作名で出る', async ($, on) => {
   const { clock } = world(on, [review({ findings: [finding({ severity: 'recommended' })] })])
   await begin($, clock)
 
@@ -1007,9 +1159,14 @@ test('送る前に見るところが送るボタンのすぐ上に出て、ボ�
   await ui.press({ key: `row:${KEY}` })
   await clock.settle()
 
-  expect(await ui.find({ type: 'Text', text: /^送る前に見るところ$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^送る前に見るところ$/ })).toBe(undefined)
+  expect(await ui.find({ type: 'Text', text: /観点 \d/ })).toBe(undefined)
   expect((await ui.find({ key: 'comment' }))?.props.label).toBe('コメントで送る (1)')
-  expect((await ui.find({ key: 'approve' }))?.props.label).toBe('承認して送る')
+  expect((await ui.find({ key: 'approve' }))?.props.submitLabel).toBe('承認して送る')
+  // The filled button is kept for the confirm's 送信する: neither send control here is drawn as it.
+  expect((await ui.find({ key: 'comment' }))?.props.variant).toBe('secondary')
+  expect((await ui.find({ key: 'approve' }))?.props.label).toBe(undefined)
+  expect(await ui.find({ type: 'Text', text: /^PR コメント$/ })).toBeDefined()
   await ui.unmount()
 })
 
@@ -1217,7 +1374,7 @@ test('3 行の本文は折りたたまない', async ($, on) => {
   await ui.unmount()
 })
 
-test('4 行の本文で『続きを表示』が出て、押すと全文が出る', async ($, on) => {
+test('4 行の本文で『続きを表示』が出て、押すと全文が出て、折りたたむで 3 行に戻る', async ($, on) => {
   const { clock } = world(on, [review({ body: lines(4) })])
   await begin($, clock)
 
@@ -1229,7 +1386,12 @@ test('4 行の本文で『続きを表示』が出て、押すと全文が出る
   await ui.press({ key: 'more-body' })
   await clock.settle()
   expect((await ui.find({ key: 'body' }))?.props.text).toBe(lines(4))
-  expect(await ui.find({ key: 'more-body' })).toBe(undefined)
+  expect((await ui.find({ key: 'more-body' }))?.props.label).toBe('折りたたむ')
+
+  await ui.press({ key: 'more-body' })
+  await clock.settle()
+  expect((await ui.find({ key: 'body' }))?.props.text).toBe(lines(3))
+  expect((await ui.find({ key: 'more-body' }))?.props.label).toBe('続きを表示')
   await ui.unmount()
 })
 
@@ -1315,18 +1477,105 @@ test('すべて外すで全指摘が外れて Approve に変わり、すべて�
   await ui.unmount()
 })
 
-test('人間が見る観点の各行が ・ で始まる', async ($, on) => {
-  const { clock } = world(on, [review()])
-  await begin($, clock)
-
+/** The detail of the one stored review, drawn on the desktop. */
+async function openDetail($: Engine, clock: { settle: () => Promise<void> }) {
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   await ui.press({ key: `row:${KEY}` })
   await clock.settle()
-  await ui.press({ key: 'more-points' })
+
+  return ui
+}
+
+test('確認した点の各行が ・ で始まり、省いたものはその下に 1 行で出る', async ($, on) => {
+  const { clock } = world(on, [review({ skipped: ['機械チェック（対象なし）', 'diff の一部'] })])
+  await begin($, clock)
+
+  const ui = await openDetail($, clock)
+
+  const points = await ui.findAll({ type: 'Text', text: /確認 \d/ })
+  expect(points.map(one => one.text)).toEqual(['・ 確認 1', '・ 確認 2'])
+  expect((await ui.find({ type: 'Text', text: /^省いたもの/ }))?.text).toBe('省いたもの: 機械チェック（対象なし）、diff の一部')
+  await ui.unmount()
+})
+
+test('確認した点も省いたものも無ければ、節ごと出ない', async ($, on) => {
+  // A review kept from before `checked` existed holds none.
+  const { clock } = world(on, [review({ checked: undefined })])
+  await begin($, clock)
+
+  const ui = await openDetail($, clock)
+
+  expect(await ui.find({ type: 'Text', text: /^確認した点$/ })).toBe(undefined)
+  expect(await ui.find({ type: 'Text', text: /^省いたもの/ })).toBe(undefined)
+  await ui.unmount()
+})
+
+test('確認した点が無くても、省いたものがあれば見出しの下に出る', async ($, on) => {
+  const { clock } = world(on, [review({ checked: [], skipped: ['diff の一部'] })])
+  await begin($, clock)
+
+  const ui = await openDetail($, clock)
+
+  expect(await ui.find({ type: 'Text', text: /^確認した点$/ })).toBeDefined()
+  expect((await ui.find({ type: 'Text', text: /^省いたもの/ }))?.text).toBe('省いたもの: diff の一部')
+  await ui.unmount()
+})
+
+// ---- the comment an approval goes with ----
+
+const approvable = () => review({ findings: [finding({ severity: 'recommended', isAdopted: false })] })
+
+test('承認の確認に、初期値の LGTM! が本文として出る', async ($, on) => {
+  const { clock } = world(on, [approvable()])
+  await begin($, clock)
+
+  const ui = await openDetail($, clock)
+  expect((await ui.find({ key: 'approve' }))?.props.value).toBe('LGTM!')
+  await ui.input({ key: 'approve', text: 'LGTM!', kind: 'submit' })
   await clock.settle()
 
-  const points = await ui.findAll({ type: 'Text', text: /観点 \d/ })
-  expect(points.map(one => one.text)).toEqual(['・ 観点 1', '・ 観点 2', '・ 観点 3'])
+  expect(await ui.find({ type: 'Text', text: /承認として送ります/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /インライン 0 件 · 本文あり/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^LGTM!$/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('PR コメント欄に書いて送ると、その文面が承認の確認に出る', async ($, on) => {
+  const { clock } = world(on, [approvable()])
+  await begin($, clock)
+
+  const ui = await openDetail($, clock)
+  await ui.input({ key: 'approve', text: 'ありがとうございます！', kind: 'submit' })
+  await clock.settle()
+
+  expect(await ui.find({ type: 'Text', text: /^ありがとうございます！$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^LGTM!$/ })).toBe(undefined)
+  await ui.unmount()
+})
+
+test('書いた PR コメントは、別の PR を選ぶと初期値に戻る', async ($, on) => {
+  const { clock } = world(on, [approvable()])
+  await begin($, clock)
+
+  const ui = await openDetail($, clock)
+  await ui.input({ key: 'approve', text: '書きかけ' })
+  await clock.settle()
+  await ui.press({ key: 'back-to-list' })
+  await clock.settle()
+  await ui.press({ key: `row:${KEY}` })
+  await clock.settle()
+
+  expect((await ui.find({ key: 'approve' }))?.props.value).toBe('LGTM!')
+  await ui.unmount()
+})
+
+test('承認できない PR では PR コメント欄が出ない', async ($, on) => {
+  const { clock } = world(on, [review()])
+  await begin($, clock)
+
+  const ui = await openDetail($, clock)
+
+  expect(await ui.find({ key: 'approve' })).toBe(undefined)
   await ui.unmount()
 })
 

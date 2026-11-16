@@ -12,7 +12,6 @@ import {
   parseDiffLines,
   parsePlace,
   postArgs,
-  primaryOf,
   toggleAdopted,
 } from './posting'
 
@@ -113,6 +112,32 @@ test('an inline comment starts with its severity tag', async () => {
   )
 })
 
+test('an approval goes with the comment typed for it', async () => {
+  const none = review({ findings: [] })
+
+  expect(buildReviewPayload(none, LINES, 'APPROVE', 'LGTM!').body).toBe('LGTM!')
+  expect(buildReviewPayload(none, LINES, 'APPROVE', '  ありがとうございます  ').body).toBe('ありがとうございます')
+})
+
+test('an approval with a blank comment, or none, goes without a body', async () => {
+  const none = review({ findings: [] })
+
+  expect('body' in buildReviewPayload(none, LINES, 'APPROVE', '  \n ')).toBe(false)
+  expect('body' in buildReviewPayload(none, LINES, 'APPROVE')).toBe(false)
+})
+
+test("an approval's comment leads the findings that go in the body", async () => {
+  const off = review({ findings: [finding({ severity: 'suggestion', line: 99, comment: '行が diff の外' })] })
+
+  expect(buildReviewPayload(off, LINES, 'APPROVE', 'LGTM!').body).toBe(
+    'LGTM!\n\n[suggestion] src/a.ts:99 行が diff の外',
+  )
+})
+
+test('a comment review does not take the approval comment', async () => {
+  expect(buildReviewPayload(review(), LINES, 'COMMENT', 'LGTM!').body).toBe('インラインコメントを参照してください。')
+})
+
 test('a comment in the body starts with its severity tag, then its place', async () => {
   const off = review({
     findings: [
@@ -211,13 +236,6 @@ test('the send controls follow what the review can still do', async () => {
   expect(actionsOf(review({ ...sent, postedEvent: 'COMMENT' }), true)).toEqual(['posted'])
   expect(actionsOf(review({ ...sent, postedEvent: 'APPROVE' }), true)).toEqual(['approved'])
   expect(actionsOf(review({ ...sent, postedEvent: 'APPROVE' }), false)).toEqual(['approved'])
-})
-
-test('one control is the main one: commenting before approving', async () => {
-  expect(primaryOf(['comment', 'approve'])).toBe('comment')
-  expect(primaryOf(['approve'])).toBe('approve')
-  expect(primaryOf(['rereview'])).toBe(undefined)
-  expect(primaryOf([])).toBe(undefined)
 })
 
 test('the request goes to the pull request the key names', async () => {

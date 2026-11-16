@@ -2,7 +2,7 @@ import { atom, read } from 'claude-code'
 import type { EngineInterface, Register, RenderSurface } from 'claude-code'
 
 import type { Finding, Inbox, Review, ReviewPayload } from '../types'
-import { actionsOf, primaryOf } from './posting'
+import { DEFAULT_APPROVE_COMMENT, actionsOf } from './posting'
 import {
   SEVERITY_TONE,
   bandText,
@@ -22,6 +22,8 @@ import {
   activate,
   addComment,
   adoptAll,
+  approveWith,
+  deepDiveContext,
   fetchNow,
   isToolCallAllowed,
   makeConfig,
@@ -34,10 +36,10 @@ import {
   saveEdit,
   select,
   send,
+  setApproveComment,
   setMode,
-  showBody,
-  showHumanReview,
   toggle,
+  toggleBody,
 } from './run'
 import type { Config } from './run'
 
@@ -56,17 +58,18 @@ const PANE = 'review-inbox'
 const TITLE = 'PR レビュー'
 // The left edge of a row: its colour alone says how heavy the row is.
 const EDGE = '▍'
-const HUMAN_REVIEW_SHOWN = 2
 // A description longer than this many lines is folded until asked for.
 const BODY_SHOWN_LINES = 3
 
 /**
- * Puts the deep-dive request in the prompt box. A surface that draws its own
- * composer (the desktop app) refuses the fill, so the request goes to the
- * clipboard instead, and failing that it is shown to be copied by hand.
+ * Puts the deep-dive request in the prompt box: the pull request, and where
+ * the pre-read left its checkout and its result, for the session it asks for.
+ * A surface that draws its own composer (the desktop app) refuses the fill, so
+ * the request goes to the clipboard instead, and failing that it is shown to
+ * be copied by hand.
  */
-async function deepDive($: EngineInterface, url: string, surface: RenderSurface) {
-  const text = deepDivePrompt(url)
+async function deepDive($: EngineInterface, config: Config, review: Review, surface: RenderSurface) {
+  const text = deepDivePrompt(review.url, await deepDiveContext($, config, review.key))
   if ((await $.prompt.fill({ text, mode: 'replace' })).isFilled) return
   const copied = await $.ui.copy({ text, surface })
   $.ui.toast(
@@ -228,7 +231,7 @@ export const register: Register = (on, options) => {
           ) : (
             <Box flexDirection="row" gap="md" marginTop="xs" alignItems="center">
               <Button key="send" variant="primary" label="送信する" onPress={() => void send($, ready, review.key)} />
-              <Button key="back" plain label="戻る" onPress={() => void setMode($, undefined)} />
+              <Button key="back" variant="secondary" label="戻る" onPress={() => void setMode($, undefined)} />
             </Box>
           )}
         </Box>
@@ -308,7 +311,14 @@ export const register: Register = (on, options) => {
                   autoFocus
                   onSubmit={value => void saveEdit($, review.key, one.id, value)}
                 />
-                <Button key={`edit-cancel:${one.id}`} plain label="やめる" onPress={() => void setMode($, undefined)} />
+                <Box flexDirection="row">
+                  <Button
+                    key={`edit-cancel:${one.id}`}
+                    variant="secondary"
+                    label="やめる"
+                    onPress={() => void setMode($, undefined)}
+                  />
+                </Box>
               </Box>
             )}
             {isShown && isEditable && !isEditing && (
@@ -316,14 +326,14 @@ export const register: Register = (on, options) => {
                 {one.isAdopted && (
                   <Button
                     key={`edit:${one.id}`}
-                    plain
+                    variant="secondary"
                     label="編集"
                     onPress={() => void setMode($, { kind: 'edit', id: one.id })}
                   />
                 )}
                 <Button
                   key={`toggle:${one.id}`}
-                  plain
+                  variant="secondary"
                   label={one.isAdopted ? '外す' : '戻す'}
                   onPress={() => void toggle($, review.key, one.id)}
                 />
@@ -336,16 +346,16 @@ export const register: Register = (on, options) => {
 
     const detail = (review: Review) => {
       const actions = actionsOf(review, state.withDiff.includes(review.key))
-      const primary = primaryOf(actions)
       const isSendable = review.status === 'done' && review.postedAt === undefined
       // A pending request shows what was built: its findings are not changed under it.
       const isEditable = isSendable && pending === undefined
       const adopted = review.findings.filter(one => one.isAdopted).length
       const total = review.findings.length
-      const points = state.isHumanReviewOpen ? review.humanReview : review.humanReview.slice(0, HUMAN_REVIEW_SHOWN)
-      const hidden = review.humanReview.length - points.length
+      const checked = review.status === 'done' ? (review.checked ?? []) : []
+      const skipped = review.status === 'done' ? review.skipped : []
       const bodyLines = (review.body ?? '').trim() === '' ? [] : (review.body as string).split('\n')
-      const isBodyFolded = !state.isBodyOpen && bodyLines.length > BODY_SHOWN_LINES
+      const isBodyLong = bodyLines.length > BODY_SHOWN_LINES
+      const isBodyFolded = !state.isBodyOpen && isBodyLong
       const name = shortName(review.key, ready.sources)
       const tone = toneOf(review)
       // The verdict and the weight of what is still adopted: the line the whole detail hangs from.
@@ -364,17 +374,18 @@ export const register: Register = (on, options) => {
               </Text>
             </Text>
             <Text>{review.title}</Text>
-            <Box flexDirection="row" gap="md" alignItems="center" flexWrap="wrap">
-              {isGithubUrl(review.url) && <Link href={review.url} label="GitHub で開く" />}
+            <Box flexDirection="row" gap="sm" alignItems="center" flexWrap="wrap" marginTop="xs">
               {isGithubUrl(review.url) && (
                 <Button
                   key="deep-dive"
-                  plain
+                  variant="secondary"
                   label="深掘りする"
-                  onPress={press => void deepDive($, review.url, press.surface)}
+                  onPress={press => void deepDive($, ready, review, press.surface)}
                 />
               )}
-              <Button key="read" plain label="片付ける" onPress={() => void markRead($, review.key)} />
+              <Button key="read" variant="secondary" label="片付ける" onPress={() => void markRead($, ready, review.key)} />
+              {/* A link cannot be drawn as a button: it stays a link, last, with the mark of one that leaves. */}
+              {isGithubUrl(review.url) && <Link href={review.url} label="GitHub で開く ↗" />}
             </Box>
             <Box key="verdict" flexDirection="row" gap="sm" marginTop="xs">
               {bar(tone)}
@@ -383,6 +394,25 @@ export const register: Register = (on, options) => {
               </Text>
             </Box>
           </Box>
+          {heading('概要')}
+          {bodyLines.length === 0 ? (
+            <Text dimColor>本文なし</Text>
+          ) : (
+            <Markdown
+              key="body"
+              text={isBodyFolded ? bodyLines.slice(0, BODY_SHOWN_LINES).join('\n') : bodyLines.join('\n')}
+            />
+          )}
+          {isBodyLong && (
+            <Box flexDirection="row" marginTop="xs">
+              <Button
+                key="more-body"
+                variant="secondary"
+                label={isBodyFolded ? '続きを表示' : '折りたたむ'}
+                onPress={() => void toggleBody($)}
+              />
+            </Box>
+          )}
           {review.status === 'done' &&
             heading(
               total === 0 ? '指摘' : isSendable ? `指摘 · ${total} 件中 ${adopted} 件を送る` : `指摘 · ${total} 件`,
@@ -409,21 +439,23 @@ export const register: Register = (on, options) => {
                 onSubmit={value => void addComment($, review.key, value)}
               />
               {mode.error !== undefined && <Text color="error">{mode.error}</Text>}
-              <Button key="add-cancel" plain label="やめる" onPress={() => void setMode($, undefined)} />
+              <Box flexDirection="row">
+                <Button key="add-cancel" variant="secondary" label="やめる" onPress={() => void setMode($, undefined)} />
+              </Box>
             </Box>
           )}
           {isEditable && mode?.kind !== 'add' && (
-            <Box flexDirection="row" gap="md" marginTop="sm">
+            <Box flexDirection="row" gap="sm" marginTop="sm">
               <Button
                 key="add"
-                plain
+                variant="secondary"
                 label="+ コメントを追加"
                 onPress={() => void setMode($, { kind: 'add', place: '' })}
               />
               {total > 0 && (
                 <Button
                   key="adopt-all"
-                  plain
+                  variant="secondary"
                   label={adopted > 0 ? 'すべて外す' : 'すべて戻す'}
                   onPress={() => void adoptAll($, review.key, adopted === 0)}
                 />
@@ -438,31 +470,14 @@ export const register: Register = (on, options) => {
               </Text>
             </Box>
           )}
-          {review.status === 'done' && review.skipped.length > 0 && (
-            <Box marginTop="sm">
-              <Text size="caption" dimColor>
-                省いたもの: {review.skipped.join('、')}
-              </Text>
-            </Box>
-          )}
-          {heading('概要')}
-          {bodyLines.length === 0 ? (
-            <Text dimColor>本文なし</Text>
-          ) : (
-            <Markdown
-              key="body"
-              text={isBodyFolded ? bodyLines.slice(0, BODY_SHOWN_LINES).join('\n') : bodyLines.join('\n')}
-            />
-          )}
-          {isBodyFolded && (
-            <Button key="more-body" plain label="続きを表示" onPress={() => void showBody($)} />
-          )}
-          {points.length > 0 && heading('送る前に見るところ')}
-          {points.map(point => (
-            <Text dimColor>・ {point}</Text>
+          {(checked.length > 0 || skipped.length > 0) && heading('確認した点')}
+          {checked.map(point => (
+            <Text>・ {point}</Text>
           ))}
-          {hidden > 0 && (
-            <Button key="more-points" plain label={`ほか ${hidden} 件`} onPress={() => void showHumanReview($)} />
+          {skipped.length > 0 && (
+            <Text size="caption" dimColor>
+              省いたもの: {skipped.join('、')}
+            </Text>
           )}
           {pending !== undefined &&
             confirm(
@@ -471,22 +486,29 @@ export const register: Register = (on, options) => {
               pending.kind === 'sending',
               pending.kind === 'confirm' ? pending.error : undefined,
             )}
+          {pending === undefined && actions.includes('approve') && heading('PR コメント')}
+          {pending === undefined && actions.includes('approve') && (
+            <Box flexDirection="column" marginTop="xs">
+              {/* The field's own submit is the approval: the comment goes with it, through the confirm. */}
+              <Input
+                key="approve"
+                placeholder="承認に添える文面（空なら本文なし）"
+                value={state.approveComment ?? DEFAULT_APPROVE_COMMENT}
+                rows={2}
+                submitLabel="承認して送る"
+                onInput={value => void setApproveComment($, value)}
+                onSubmit={value => void approveWith($, ready, review.key, value)}
+              />
+            </Box>
+          )}
           {pending === undefined && (
-            <Box flexDirection="row" gap="md" marginTop="md" alignItems="center" flexWrap="wrap">
+            <Box flexDirection="row" gap="md" marginTop="sm" alignItems="center" flexWrap="wrap">
               {actions.includes('comment') && (
                 <Button
                   key="comment"
-                  variant={primary === 'comment' ? 'primary' : 'secondary'}
+                  variant="secondary"
                   label={`コメントで送る (${adopted})`}
                   onPress={() => void openConfirm($, ready, review.key, 'COMMENT')}
-                />
-              )}
-              {actions.includes('approve') && (
-                <Button
-                  key="approve"
-                  variant={primary === 'approve' ? 'primary' : 'secondary'}
-                  label="承認して送る"
-                  onPress={() => void openConfirm($, ready, review.key, 'APPROVE')}
                 />
               )}
               {actions.includes('rereview') && (
@@ -495,9 +517,9 @@ export const register: Register = (on, options) => {
               {review.status === 'failed' && (
                 <Button key="retry" label="もう一度レビューする" onPress={() => void retry($, ready, review.key)} />
               )}
-              {review.postedUrl !== undefined && review.postedUrl.startsWith('https://github.com/') && (
-                <Link href={review.postedUrl} label="送ったレビューを開く" />
-              )}
+              {review.postedUrl !== undefined &&
+                review.postedUrl.startsWith('https://github.com/') &&
+                <Link href={review.postedUrl} label="送ったレビューを開く ↗" />}
             </Box>
           )}
         </Box>
@@ -535,12 +557,14 @@ export const register: Register = (on, options) => {
     if (selected) {
       return (
         <Box flexDirection="column">
-          <Button
-            key="back-to-list"
-            plain
-            label={`← 一覧 (${visible.length})`}
-            onPress={() => void select($, undefined)}
-          />
+          <Box flexDirection="row">
+            <Button
+              key="back-to-list"
+              variant="secondary"
+              label={`← 一覧 (${visible.length})`}
+              onPress={() => void select($, undefined)}
+            />
+          </Box>
           {state.fetchError !== undefined && <Text color="error">取得に失敗しました: {state.fetchError}</Text>}
           {detail(selected)}
         </Box>
@@ -558,7 +582,7 @@ export const register: Register = (on, options) => {
                 : 'まだ取得していません'}
             {isOpen ? '' : ' · 時間外 · 平日 8–17 時だけ自動取得'}
           </Text>
-          <Button key="fetch" plain label="更新" onPress={() => void fetchNow($, ready)} />
+          <Button key="fetch" variant="secondary" label="更新" onPress={() => void fetchNow($, ready)} />
         </Box>
         {state.fetchError !== undefined && <Text color="error">取得に失敗しました: {state.fetchError}</Text>}
         {visible.length === 0 && !state.isFetching && (

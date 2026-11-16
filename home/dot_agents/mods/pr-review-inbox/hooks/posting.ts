@@ -124,13 +124,19 @@ export function bodyLine(finding: Finding): string {
 
 const INLINE_ONLY_BODY = 'インラインコメントを参照してください。'
 
+/** What an approval says when nothing else was typed. */
+export const DEFAULT_APPROVE_COMMENT = 'LGTM!'
+
 export function buildReviewPayload(
   review: Review,
   diffLines: Readonly<Record<string, readonly number[]>>,
   event: ReviewEvent,
+  /** The person's own words on an approval, ahead of the findings; a comment review takes none. */
+  comment?: string,
 ): ReviewPayload {
   const { inline, inBody } = splitForReview(review, diffLines)
-  const text = inBody.map(bodyLine).join('\n\n')
+  const lead = event === 'APPROVE' ? (comment ?? '').trim() : ''
+  const text = [...(lead === '' ? [] : [lead]), ...inBody.map(bodyLine)].join('\n\n')
   // The API wants a body with COMMENT; an approval may go without one.
   const body = text !== '' ? text : event === 'COMMENT' ? INLINE_ONLY_BODY : undefined
 
@@ -174,13 +180,6 @@ export function actionsOf(review: Review, hasDiff: boolean): Action[] {
   if (!hasDiff) return ['rereview']
 
   return [...(canComment(review) ? ['comment' as const] : []), ...(canApprove(review) ? ['approve' as const] : [])]
-}
-
-/** The one control drawn as the main button: commenting before approving. */
-export function primaryOf(actions: readonly Action[]): 'comment' | 'approve' | undefined {
-  if (actions.includes('comment')) return 'comment'
-
-  return actions.includes('approve') ? 'approve' : undefined
 }
 
 // ---- the request ----

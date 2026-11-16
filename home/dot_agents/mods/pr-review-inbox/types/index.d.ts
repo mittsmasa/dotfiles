@@ -39,6 +39,8 @@ export type Review = {
   verdict?: Verdict
   findings: Finding[]
   humanReview: string[]
+  /** What the reviewer verified; absent on a review kept from before it was asked for. */
+  checked?: string[]
   skipped: string[]
   isRead: boolean
   reviewedAt?: string
@@ -83,9 +85,10 @@ export type Inbox = {
   openFindingId?: string
   /** The diff hunk the open finding sits in; drawn only while `id` is the open finding. */
   openDiff?: { id: string; source: string }
-  isHumanReviewOpen?: boolean
   /** Whether the selected review's description is drawn in full. */
   isBodyOpen?: boolean
+  /** The comment an approval of the selected review goes with; absent until typed. */
+  approveComment?: string
   /** Keys of the reviews whose diff is saved, so their findings can be placed. */
   withDiff: string[]
 }
