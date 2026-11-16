@@ -328,13 +328,10 @@ export async function makeConfig($: EngineInterface, options: Readonly<Record<st
   const offset = Number(options.utcOffsetMinutes)
   const text = await $.fs.read(`${home}/${CONFIG_FILE}`).then(String, () => undefined)
   const { repos, criteria, sources, clonePath, profile, warnings } = parseConfig(text, home)
-  const stats: ViewpointStat[] = []
-  for (const path of profile.viewpoints) {
-    const stat = await $.fs.stat(path, { resolve: true }).catch(() => undefined)
-    const kind = stat?.kind
-    stats.push(kind === undefined ? { path } : { path, kind })
-  }
-  const picked = pickViewpointFiles(stats)
+  const picked = await resolveViewpoints(profile.viewpoints, {
+    list: path => $.fs.list(path),
+    stat: path => $.fs.stat(path),
+  })
 
   return {
     home,
