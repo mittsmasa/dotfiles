@@ -75,6 +75,115 @@ test('a viewpoint that is a directory is dropped and named; a missing one is lef
   expect(warnings).toEqual(['review.viewpoints の /team/skill はファイルではない'])
 })
 
+/**
+ * A file system made from a list of file paths; `links` maps a link's path
+ * to the directory it points at.
+ */
+function fakeFs(filePaths: readonly string[], links: Record<string, string> = {}): ViewpointFs {
+  const real = (path: string) => {
+    for (const [link, target] of Object.entries(links)) {
+      if (path === link || path.startsWith(`${link}/`)) return target + path.slice(link.length)
+    }
+
+    return path
+  }
+  const isDir = (path: string) => filePaths.some(file => file.startsWith(`${path}/`))
+
+  return {
+    list: async dir => {
+      const inside = real(dir)
+      const names = new Set<string>()
+      for (const file of filePaths) if (file.startsWith(`${inside}/`)) names.add(file.slice(inside.length + 1).split('/')[0] as string)
+      for (const link of Object.keys(links)) if (link.startsWith(`${dir}/`) && !link.slice(dir.length + 1).includes('/')) names.add(link.slice(dir.length + 1))
+
+      return [...names].map(name => {
+        const path = `${dir}/${name}`
+        if (path in links) return { name, kind: 'other' as const, isLink: true }
+
+        return { name, kind: isDir(`${inside}/${name}`) ? ('dir' as const) : ('file' as const), isLink: false }
+      })
+    },
+    stat: async path => {
+      const target = real(path)
+      if (filePaths.includes(target)) return { kind: 'file' }
+      if (isDir(target)) return { kind: 'dir' }
+      throw new Error('ENOENT')
+    },
+  }
+}
+
+const skill = [
+  '/s/testable-design/SKILL.md',
+  '/s/testable-design/references/test-quality.md',
+  '/s/testable-design/references/frontend-testing.md',
+  '/s/testable-design/tools/bin/testable-scan.ts',
+  '/s/testable-design/.cache/old.md',
+  '/s/review/SKILL.md',
+]
+
+test('a glob reads every matching file under a skill, references included, in path order', async () => {
+  const { files, warnings } = await resolveViewpoints(['/s/testable-design/**/*.md'], fakeFs(skill))
+
+  expect(files).toEqual([
+    '/s/testable-design/SKILL.md',
+    '/s/testable-design/references/frontend-testing.md',
+    '/s/testable-design/references/test-quality.md',
+  ])
+  expect(warnings).toEqual([])
+})
+
+test('plain paths and globs keep the config order, and a file named twice stays where it first appears', async () => {
+  const { files } = await resolveViewpoints(
+    ['/s/review/SKILL.md', '/s/testable-design/SKILL.md', '/s/testable-design/**/*.md'],
+    fakeFs(skill),
+  )
+
+  expect(files).toEqual([
+    '/s/review/SKILL.md',
+    '/s/testable-design/SKILL.md',
+    '/s/testable-design/references/frontend-testing.md',
+    '/s/testable-design/references/test-quality.md',
+  ])
+})
+
+test('* and {a,b} stay inside one segment', async () => {
+  const fs = fakeFs(skill)
+
+  expect((await resolveViewpoints(['/s/*/SKILL.md'], fs)).files).toEqual(['/s/review/SKILL.md', '/s/testable-design/SKILL.md'])
+  expect((await resolveViewpoints(['/s/testable-design/references/{test-quality,missing}.md'], fs)).files).toEqual([
+    '/s/testable-design/references/test-quality.md',
+  ])
+})
+
+test('a glob reaches files through a linked skill directory', async () => {
+  const fs = fakeFs(skill, { '/home/.claude/skills/testable-design': '/s/testable-design' })
+  const { files } = await resolveViewpoints(['/home/.claude/skills/*/references/*.md'], fs)
+
+  expect(files).toEqual([
+    '/home/.claude/skills/testable-design/references/frontend-testing.md',
+    '/home/.claude/skills/testable-design/references/test-quality.md',
+  ])
+})
+
+test('a glob that matches nothing is named; a plain directory is still refused', async () => {
+  const { files, warnings } = await resolveViewpoints(['/s/nothing/**/*.md', '/s/review'], fakeFs(skill))
+
+  expect(files).toEqual([])
+  expect(warnings).toEqual([
+    'review.viewpoints の /s/nothing/**/*.md に合うファイルが無い',
+    'review.viewpoints の /s/review はファイルではない',
+  ])
+})
+
+test('globToRegExp: ** spans directories, including none', () => {
+  const matcher = globToRegExp('/a/**/*.md')
+
+  expect(matcher.test('/a/x.md')).toBe(true)
+  expect(matcher.test('/a/b/c/x.md')).toBe(true)
+  expect(matcher.test('/a/b/x.ts')).toBe(false)
+  expect(matcher.test('/ab/x.md')).toBe(false)
+})
+
 test('{files} becomes one argument per file and an argument holding a value is never split', () => {
   const argv = expandArgv(['oxlint', '-f', 'json', '{files}', '--out={outDir}/x y'], {
     files: ['/w/src/a b.ts', '/w/src/c.ts'],
