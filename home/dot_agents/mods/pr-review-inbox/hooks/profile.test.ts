@@ -1,7 +1,16 @@
 import { expect, test } from 'claude-code/testing'
 
-import { expandArgv, failureOf, parseProfile, pickViewpointFiles, summarizeChecks, warningLine } from './profile'
-import type { Check } from './profile'
+import {
+  expandArgv,
+  failureOf,
+  globToRegExp,
+  parseProfile,
+  pickViewpointFiles,
+  resolveViewpoints,
+  summarizeChecks,
+  warningLine,
+} from './profile'
+import type { Check, ViewpointFs } from './profile'
 
 const HOME = '/Users/me'
 
