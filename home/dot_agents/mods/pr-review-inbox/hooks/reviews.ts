@@ -172,7 +172,7 @@ export function viewArgs(key: string): string[] | undefined {
 
   return [
     'gh', 'pr', 'view', String(parsed.number), '-R', parsed.fullName,
-    '--json', 'headRefOid,baseRefName,files,body,additions,deletions,changedFiles',
+    '--json', 'headRefOid,baseRefName,files,body,additions,deletions,changedFiles,author',
   ]
 }
 
@@ -278,7 +278,10 @@ export function toBodyMarkdown(raw: string): string {
 }
 
 type CommandOutput = { exitCode: number; stdout: string }
-type Fetched = Pick<Review, 'key' | 'title' | 'url' | 'body' | 'headSha' | 'baseRefName' | 'files' | 'lines'>
+type Fetched = Pick<
+  Review,
+  'key' | 'title' | 'url' | 'body' | 'headSha' | 'baseRefName' | 'files' | 'lines' | 'author'
+>
 
 function parseJson(text: string): unknown {
   try {
@@ -319,6 +322,17 @@ function linesOf(detail: Record<string, unknown>): Review['lines'] {
   return added === undefined || removed === undefined || files === undefined ? undefined : { added, removed, files }
 }
 
+/**
+ * Who opened the pull request, as gh names them: the login, a bot's without
+ * its `app/`. Nothing for a login that is not shaped like one.
+ */
+function authorOf(detail: Record<string, unknown>): string | undefined {
+  const login = isRecord(detail.author) ? detail.author.login : undefined
+  if (typeof login !== 'string' || !/^[\w./[\]-]{1,60}$/.test(login)) return undefined
+
+  return login.replace(/^app\//, '') || undefined
+}
+
 /** A pull request's size on one line, as the detail's heading carries it. */
 export function linesText(lines: Review['lines']): string | undefined {
   return lines ? `+${lines.added} −${lines.removed} · ${lines.files} ファイル` : undefined
@@ -354,6 +368,7 @@ function toFetched(
         : [],
       // Missing counts are no failed fetch either: the heading goes without them.
       lines: linesOf(detail),
+      author: authorOf(detail),
     })
   }
 
@@ -377,7 +392,13 @@ export function selectQueued(
     const existing = stored.find(review => review.key === one.key)
     if (existing?.status === 'reviewing') return existing
     if (existing && existing.headSha === one.headSha && !reRequested.has(one.key)) {
-      return { ...existing, title: one.title, body: one.body, lines: one.lines ?? existing.lines }
+      return {
+        ...existing,
+        title: one.title,
+        body: one.body,
+        lines: one.lines ?? existing.lines,
+        author: one.author ?? existing.author,
+      }
     }
 
     return {
