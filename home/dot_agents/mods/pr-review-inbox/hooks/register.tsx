@@ -370,7 +370,7 @@ export const register: Register = (on, options) => {
                 {name.number}
               </Text>{' '}
               <Text size="caption" dimColor>
-                {[name.repo, linesText(review.lines)].filter(Boolean).join(' · ')}
+                {[name.repo, review.author && `@${review.author}`, linesText(review.lines)].filter(Boolean).join(' · ')}
               </Text>
             </Text>
             <Text>{review.title}</Text>
