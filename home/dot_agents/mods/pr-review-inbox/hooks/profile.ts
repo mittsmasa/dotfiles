@@ -19,7 +19,7 @@ export type Check = {
 export type GuideSource = { kind: 'generic' } | { kind: 'file'; path: string }
 
 export type Profile = {
-  /** Viewpoint files, `~` expanded, not yet resolved; read in this order. None by default. */
+  /** Viewpoint files or globs, `~` expanded, not yet resolved; read in this order. None by default. */
   viewpoints: string[]
   guide: GuideSource
   /** The file whose text replaces the comment style; the built-in one without. */
