@@ -30,6 +30,8 @@ export type Review = {
   headSha: string
   baseRefName: string
   files: string[]
+  /** Who opened the pull request, by login; absent until a fetch brings it. */
+  author?: string
   /** The pull request's size as GitHub counts it; absent until a fetch brings it. */
   lines?: { added: number; removed: number; files: number }
   status: 'queued' | 'reviewing' | 'done' | 'failed'
