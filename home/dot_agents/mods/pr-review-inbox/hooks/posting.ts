@@ -1,6 +1,7 @@
 // Pure logic of sending a review: which findings go, where each lands, and
 // what the request holds. The sending itself is in run.ts.
 import type { Finding, Review, ReviewEvent, ReviewPayload } from '../types'
+import { pathOfRow } from './diff'
 import { parseKey, severityTag } from './reviews'
 
 // ---- adopting, editing, adding ----
@@ -40,11 +41,12 @@ export function parsePlace(text: string): Place | undefined | 'invalid' {
 
 export function addHumanComment(
   review: Review,
-  input: { place: string; body: string },
+  // A place picked on the diff comes as it is: a path may hold what `path:line` cannot.
+  input: { place: string | Place; body: string },
 ): { review: Review } | { error: string } {
   const body = input.body.trim()
   if (body === '') return { error: '本文を入力してください' }
-  const place = parsePlace(input.place)
+  const place = typeof input.place === 'string' ? parsePlace(input.place) : input.place
   if (place === 'invalid') return { error: '場所は path:line の形で入力してください' }
   const count = review.findings.filter(finding => finding.source === 'human').length
   const added: Finding = {
@@ -74,7 +76,8 @@ export function parseDiffLines(diff: string): Record<string, number[]> {
       file = undefined
       isInHunk = false
     } else if (!isInHunk && row.startsWith('+++ ')) {
-      file = row.startsWith('+++ b/') ? row.slice(6) : undefined
+      // The same reading as the diff screen's, so a place picked there is a key here.
+      file = pathOfRow(row, '+++ b/')
     } else if (row.startsWith('@@ ')) {
       const start = /^@@ -\d+(?:,\d+)? \+(\d+)/.exec(row)?.[1]
       next = Number(start)

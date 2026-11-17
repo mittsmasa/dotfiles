@@ -2,6 +2,8 @@ import { atom, read } from 'claude-code'
 import type { EngineInterface, Register, RenderSurface } from 'claude-code'
 
 import type { Finding, Inbox, Review, ReviewPayload } from '../types'
+import { rowsOf, safeText } from './diff'
+import type { DiffRow } from './diff'
 import { DEFAULT_APPROVE_COMMENT, actionsOf } from './posting'
 import {
   SEVERITY_TONE,
@@ -23,6 +25,7 @@ import {
   addComment,
   adoptAll,
   approveWith,
+  closeDiffView,
   deepDiveContext,
   fetchNow,
   isToolCallAllowed,
@@ -30,6 +33,8 @@ import {
   markRead,
   onTurnComplete,
   openConfirm,
+  openDiffFile,
+  openDiffView,
   openFinding,
   requeue,
   retry,
@@ -38,6 +43,7 @@ import {
   send,
   setApproveComment,
   setMode,
+  startLineComment,
   toggle,
   toggleBody,
 } from './run'
@@ -60,6 +66,11 @@ const TITLE = 'PR レビュー'
 const EDGE = '▍'
 // A description longer than this many lines is folded until asked for.
 const BODY_SHOWN_LINES = 3
+// A line number's column on the diff screen, in cells.
+const LINE_NUMBER_WIDTH = 5
+const SEVERITIES = ['blocker', 'recommended', 'suggestion'] as const
+// Leading spaces drawn as no-break spaces: a surface that folds spaces keeps the indent.
+const indented = (text: string) => text.replace(/^ +/, spaces => '\u00a0'.repeat(spaces.length))
 
 /**
  * Puts the deep-dive request in the prompt box: the pull request, and where
@@ -344,6 +355,191 @@ export const register: Register = (on, options) => {
       )
     }
 
+    // The number, the repository, who opened it, and its size: the first line of both screens.
+    const headline = (review: Review) => {
+      const name = shortName(review.key, ready.sources)
+
+      return (
+        <Text>
+          <Text mono weight="bold">
+            {name.number}
+          </Text>{' '}
+          <Text size="caption" dimColor>
+            {[name.repo, review.author && `@${review.author}`, linesText(review.lines)].filter(Boolean).join(' · ')}
+          </Text>
+        </Text>
+      )
+    }
+
+    // ---- the diff screen: the files, one of them open, findings under their lines ----
+    // The diff is the pull request's: every part of it is drawn as Text, through safeText.
+    const diffScreen = (review: Review, view: NonNullable<Inbox['diffView']>) => {
+      const isSendable = review.status === 'done' && review.postedAt === undefined
+      // Lines take a comment only while the detail's findings could be changed too.
+      const canComment = isSendable && pending === undefined
+      const open = view.open
+      const rows = open ? rowsOf(open.source) : []
+      const shown = new Set(rows.flatMap(row => (row.kind === 'add' || row.kind === 'context' ? [row.newLine] : [])))
+      const at = mode?.kind === 'add' ? mode.at : undefined
+
+      // A finding where it sits: read here, changed in the detail.
+      const note = (one: Finding) => {
+        const tags = [
+          one.source === 'human' ? '自分' : '下読み',
+          one.source === 'human' ? undefined : one.severity,
+          one.isUnsure ? '要確認' : undefined,
+          one.isAdopted ? undefined : '外した',
+        ].filter(Boolean)
+
+        return (
+          <Box key={`note:${one.id}`} flexDirection="row" gap="sm" marginY="xs" marginLeft="md">
+            {bar(one.isAdopted ? SEVERITY_TONE[one.severity] : 'inactive')}
+            <Box flexDirection="column" flexGrow={1}>
+              <Text size="caption" dimColor>
+                {tags.join(' · ')}
+              </Text>
+              <Text strikethrough={!one.isAdopted} dimColor={!one.isAdopted}>
+                {one.source === 'human' ? one.comment : one.reason}
+              </Text>
+              {one.source !== 'human' && one.isAdopted && (
+                <Box borderStyle="single" borderDimColor paddingX="sm" marginTop="xs">
+                  <Text>{one.comment}</Text>
+                </Box>
+              )}
+            </Box>
+          </Box>
+        )
+      }
+
+      const numberCell = (value: number | undefined) => (
+        <Box width={LINE_NUMBER_WIDTH} flexShrink={0} flexDirection="row" justifyContent="flex-end">
+          <Text mono size="caption" dimColor>
+            {value === undefined ? '' : String(value)}
+          </Text>
+        </Box>
+      )
+
+      const line = (path: string, row: DiffRow, index: number) => {
+        if (row.kind === 'hunk') {
+          return (
+            <Box key={`hunk:${index}`} marginTop="xs">
+              <Text mono size="caption" dimColor>
+                {safeText(row.text)}
+              </Text>
+            </Box>
+          )
+        }
+        const newLine = row.kind === 'remove' ? undefined : row.newLine
+        const mark = row.kind === 'add' ? '+' : row.kind === 'remove' ? '-' : '\u00a0'
+        const text = `${mark} ${indented(safeText(row.text))}`
+        const tint = row.kind === 'add' ? 'diffAdded' : row.kind === 'remove' ? 'diffRemoved' : undefined
+        const isWriting = at !== undefined && at.file === path && at.line === newLine
+
+        return [
+          <Box key={`line-box:${index}`} flexDirection="row" gap="sm" {...(tint ? { backgroundColor: tint } : {})}>
+            {numberCell(row.kind === 'add' ? undefined : row.oldLine)}
+            {numberCell(newLine)}
+            <Box flexGrow={1}>
+              {/* The payload places a comment on the right side only: a removed line takes none. */}
+              {canComment && newLine !== undefined ? (
+                <Button key={`line:${newLine}`} plain onPress={() => void startLineComment($, path, newLine)}>
+                  <Text mono>{text}</Text>
+                </Button>
+              ) : (
+                <Text mono>{text}</Text>
+              )}
+            </Box>
+          </Box>,
+          ...(newLine === undefined ? [] : review.findings.filter(one => one.file === path && one.line === newLine).map(note)),
+          isWriting && mode?.kind === 'add' && (
+            <Box key="line-comment-box" flexDirection="column" gap="xs" marginY="xs" marginLeft="md">
+              <Input
+                key="line-comment"
+                label={`${newLine} 行目へのコメント`}
+                rows={3}
+                submitLabel="追加"
+                autoFocus
+                onSubmit={value => void addComment($, review.key, value)}
+              />
+              {mode.error !== undefined && <Text color="error">{mode.error}</Text>}
+              <Box flexDirection="row">
+                <Button
+                  key="line-comment-cancel"
+                  variant="secondary"
+                  label="やめる"
+                  onPress={() => void setMode($, undefined)}
+                />
+              </Box>
+            </Box>
+          ),
+        ]
+      }
+
+      const file = (one: { path: string; added: number; removed: number }) => {
+        const place = splitPlace(one.path, undefined)
+        const inFile = review.findings.filter(finding => finding.file === one.path)
+        const heaviest = SEVERITIES.find(severity => inFile.some(finding => finding.isAdopted && finding.severity === severity))
+        const isShown = open?.path === one.path
+        // Findings of this file with no line the open diff shows: no line, off the diff, or past the cut.
+        const loose = inFile.filter(finding => finding.line === undefined || !shown.has(finding.line))
+        const counts = [`+${one.added} −${one.removed}`, inFile.length > 0 ? `指摘 ${inFile.length}` : undefined]
+
+        return (
+          <Box key={`file-box:${one.path}`} flexDirection="row" gap="sm" marginTop="sm">
+            {bar(heaviest ? SEVERITY_TONE[heaviest] : 'inactive')}
+            <Box flexDirection="column" flexGrow={1}>
+              <Box flexDirection="row" justifyContent="space-between" gap="sm">
+                <Button key={`file:${one.path}`} plain onPress={() => void openDiffFile($, ready, one.path)}>
+                  <Text mono weight="medium">
+                    {safeText(place.name)}
+                  </Text>
+                </Button>
+                <Text size="caption" dimColor>
+                  {counts.filter(Boolean).join(' · ')}
+                </Text>
+              </Box>
+              {place.dir !== '' && (
+                <Text mono size="caption" dimColor>
+                  {safeText(place.dir)}
+                </Text>
+              )}
+              {isShown && open.source === '' && <Text dimColor>表示できる差分がありません。</Text>}
+              {isShown && loose.length > 0 && (
+                <Box marginTop="xs">
+                  <Text size="caption" dimColor>
+                    行に付かない指摘
+                  </Text>
+                </Box>
+              )}
+              {isShown && loose.map(note)}
+              {isShown && rows.map((row, index) => line(one.path, row, index))}
+              {isShown && open.isCut && (
+                <Box flexDirection="row" gap="sm" marginTop="xs" flexWrap="wrap">
+                  <Text dimColor>長いので途中までです。</Text>
+                  {isGithubUrl(review.url) && <Link href={`${review.url}/files`} label="GitHub で続きを見る ↗" />}
+                </Box>
+              )}
+            </Box>
+          </Box>
+        )
+      }
+
+      return (
+        <Box flexDirection="column">
+          <Box flexDirection="row">
+            <Button key="back-to-detail" variant="secondary" label="← 詳細" onPress={() => void closeDiffView($)} />
+          </Box>
+          <Box flexDirection="column" marginTop="sm">
+            {headline(review)}
+            <Text>{review.title}</Text>
+          </Box>
+          {heading('ファイル')}
+          {view.files.length === 0 && <Text dimColor>変更されたファイルがありません。</Text>}
+          {view.files.map(file)}
+        </Box>
+      )
+    }
+
     const detail = (review: Review) => {
       const actions = actionsOf(review, state.withDiff.includes(review.key))
       const isSendable = review.status === 'done' && review.postedAt === undefined
@@ -356,7 +552,6 @@ export const register: Register = (on, options) => {
       const bodyLines = (review.body ?? '').trim() === '' ? [] : (review.body as string).split('\n')
       const isBodyLong = bodyLines.length > BODY_SHOWN_LINES
       const isBodyFolded = !state.isBodyOpen && isBodyLong
-      const name = shortName(review.key, ready.sources)
       const tone = toneOf(review)
       // The verdict and the weight of what is still adopted: the line the whole detail hangs from.
       const counts = review.status === 'done' ? countsText(review.findings.filter(one => one.isAdopted)) : ''
@@ -365,14 +560,7 @@ export const register: Register = (on, options) => {
       return (
         <Box flexDirection="column">
           <Box flexDirection="column" marginTop="sm">
-            <Text>
-              <Text mono weight="bold">
-                {name.number}
-              </Text>{' '}
-              <Text size="caption" dimColor>
-                {[name.repo, review.author && `@${review.author}`, linesText(review.lines)].filter(Boolean).join(' · ')}
-              </Text>
-            </Text>
+            {headline(review)}
             <Text>{review.title}</Text>
             <Box flexDirection="row" gap="sm" alignItems="center" flexWrap="wrap" marginTop="xs">
               {isGithubUrl(review.url) && (
@@ -381,6 +569,14 @@ export const register: Register = (on, options) => {
                   variant="secondary"
                   label="深掘りする"
                   onPress={press => void deepDive($, ready, review, press.surface)}
+                />
+              )}
+              {state.withDiff.includes(review.key) && (
+                <Button
+                  key="diff-view"
+                  variant="secondary"
+                  label="差分を見る"
+                  onPress={() => void openDiffView($, ready, review.key)}
                 />
               )}
               <Button key="read" variant="secondary" label="片付ける" onPress={() => void markRead($, ready, review.key)} />
@@ -554,6 +750,7 @@ export const register: Register = (on, options) => {
     }
 
     // A selected review takes the whole pane; the list folds to the line that leads back to it.
+    if (selected && state.diffView?.key === selected.key) return diffScreen(selected, state.diffView)
     if (selected) {
       return (
         <Box flexDirection="column">

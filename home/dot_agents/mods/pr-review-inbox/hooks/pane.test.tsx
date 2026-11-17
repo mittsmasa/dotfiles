@@ -1533,6 +1533,383 @@ test('確認した点が無くても、省いたものがあれば見出しの�
   await ui.unmount()
 })
 
+// ---- the diff screen ----
+
+// order-list.tsx: right-side lines 10 (context), 11 (added), 12 (context); old line 11 removed.
+// filter.ts: right-side lines 40 (context), 41 (added).
+const SCREEN_DIFF = [
+  'diff --git a/x b/x',
+  '--- a/web/src/components/orders/order-list.tsx',
+  '+++ b/web/src/components/orders/order-list.tsx',
+  '@@ -10,3 +10,3 @@',
+  ' const a = 1',
+  '-const old = 2',
+  '+const b = 2',
+  ' return a',
+  'diff --git a/y b/y',
+  '--- a/web/src/filter.ts',
+  '+++ b/web/src/filter.ts',
+  HUNK_FILTER,
+].join('\n')
+const ORDERS = 'web/src/components/orders/order-list.tsx'
+const FILTER = 'web/src/filter.ts'
+
+/** The diff screen of the one stored review, with no file open yet. */
+async function openDiffScreen($: Engine, clock: { settle: () => Promise<void> }) {
+  const ui = await openDetail($, clock)
+  await ui.press({ key: 'diff-view' })
+  await clock.settle()
+
+  return ui
+}
+
+test('diff の保存がある PR の詳細に「差分を見る」が出て、押すとファイル一覧が行数と指摘の数つきで出る', async ($, on) => {
+  const { clock } = world(on, [review()], {}, { [DIFF_PATH]: SCREEN_DIFF })
+  await begin($, clock)
+
+  const ui = await openDiffScreen($, clock)
+
+  expect(await ui.find({ key: `file:${ORDERS}` })).toBeDefined()
+  expect(await ui.find({ key: `file:${FILTER}` })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^\+1 −1 · 指摘 1$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^\+1 −0$/ })).toBeDefined()
+  // No file is open yet, and the detail is not drawn under the screen.
+  expect(await ui.find({ type: 'Text', text: /const b = 2/ })).toBe(undefined)
+  expect(await ui.find({ key: 'read' })).toBe(undefined)
+  await ui.unmount()
+})
+
+test('diff の保存が無い PR の詳細には「差分を見る」が出ない', async ($, on) => {
+  const { clock } = world(on, [review()], {}, {})
+  await begin($, clock)
+
+  const ui = await openDetail($, clock)
+
+  expect(await ui.find({ key: 'read' })).toBeDefined()
+  expect(await ui.find({ key: 'diff-view' })).toBe(undefined)
+  await ui.unmount()
+})
+
+test('ファイルを押すと行が出て、同じファイルを押すと閉じ、別のファイルを押すと切り替わる', async ($, on) => {
+  const { clock } = world(on, [review()], {}, { [DIFF_PATH]: SCREEN_DIFF })
+  await begin($, clock)
+
+  const ui = await openDiffScreen($, clock)
+  await ui.press({ key: `file:${ORDERS}` })
+  await clock.settle()
+  expect(await ui.find({ type: 'Text', text: /^\+ const b = 2$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^- const old = 2$/ })).toBeDefined()
+
+  await ui.press({ key: `file:${ORDERS}` })
+  await clock.settle()
+  expect(await ui.find({ type: 'Text', text: /const b = 2/ })).toBe(undefined)
+
+  await ui.press({ key: `file:${ORDERS}` })
+  await clock.settle()
+  await ui.press({ key: `file:${FILTER}` })
+  await clock.settle()
+  expect(await ui.find({ type: 'Text', text: /^\+ const w = 4$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /const b = 2/ })).toBe(undefined)
+  await ui.unmount()
+})
+
+test('下読みの指摘はその行の直後に出て、行が差分に無い指摘はファイルの先頭に出る', async ($, on) => {
+  const findings = [
+    finding(),
+    finding({ id: 'f2', severity: 'recommended', line: 99, reason: '差分の外の行の話', comment: '外の行です' }),
+  ]
+  const { clock } = world(on, [review({ findings })], {}, { [DIFF_PATH]: SCREEN_DIFF })
+  await begin($, clock)
+
+  const ui = await openDiffScreen($, clock)
+  await ui.press({ key: `file:${ORDERS}` })
+  await clock.settle()
+
+  const texts = (await ui.findAll({ type: 'Text' })).map(one => one.text)
+  const at = (text: string) => texts.indexOf(text)
+  expect(at('行に付かない指摘')).toBeGreaterThan(-1)
+  // The finding off the diff stands above the first row; the one on line 11 between that row and the next.
+  expect(at('差分の外の行の話')).toBeGreaterThan(at('行に付かない指摘'))
+  expect(at('差分の外の行の話')).toBeLessThan(at('@@ -10,3 +10,3 @@'))
+  expect(at('合計の丸め方が表示側と合わない')).toBeGreaterThan(at('+ const b = 2'))
+  expect(at('合計の丸め方が表示側と合わない')).toBeLessThan(at('  return a'))
+  expect(at('下読み · blocker')).toBeGreaterThan(at('+ const b = 2'))
+  await ui.unmount()
+})
+
+test('追加行を押すと入力欄がその行の下に出て、送ると自分の指摘がその行の下と詳細ビューの両方に出る', async ($, on) => {
+  const { clock } = world(on, [review()], {}, { [DIFF_PATH]: SCREEN_DIFF })
+  await begin($, clock)
+
+  const ui = await openDiffScreen($, clock)
+  await ui.press({ key: `file:${FILTER}` })
+  await clock.settle()
+  expect(await ui.find({ key: 'line-comment' })).toBe(undefined)
+
+  await ui.press({ key: 'line:41' })
+  await clock.settle()
+  expect((await ui.find({ key: 'line-comment' }))?.props.label).toBe('41 行目へのコメント')
+
+  await ui.input({ key: 'line-comment', text: 'ここ w の意味を知りたいです', kind: 'submit' })
+  await clock.settle()
+  expect(await ui.find({ key: 'line-comment' })).toBe(undefined)
+  const texts = (await ui.findAll({ type: 'Text' })).map(one => one.text)
+  expect(texts.indexOf('ここ w の意味を知りたいです')).toBeGreaterThan(texts.indexOf('+ const w = 4'))
+  expect(texts).toContain('自分')
+
+  await ui.press({ key: 'back-to-detail' })
+  await clock.settle()
+  // The detail lists it as a finding at that file and line, to be sent with the rest.
+  expect(await ui.find({ key: 'open:h1' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^filter\.ts:41$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /2 件中 2 件を送る/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('行コメントは「やめる」で入力欄が消え、何も足されない', async ($, on) => {
+  const { clock } = world(on, [review()], {}, { [DIFF_PATH]: SCREEN_DIFF })
+  await begin($, clock)
+
+  const ui = await openDiffScreen($, clock)
+  await ui.press({ key: `file:${FILTER}` })
+  await clock.settle()
+  await ui.press({ key: 'line:40' })
+  await clock.settle()
+  await ui.press({ key: 'line-comment-cancel' })
+  await clock.settle()
+
+  expect(await ui.find({ key: 'line-comment' })).toBe(undefined)
+  expect(await ui.find({ type: 'Text', text: /^自分$/ })).toBe(undefined)
+  await ui.unmount()
+})
+
+test('削除行は押せず、追加行と文脈行は押せる', async ($, on) => {
+  const { clock } = world(on, [review()], {}, { [DIFF_PATH]: SCREEN_DIFF })
+  await begin($, clock)
+
+  const ui = await openDiffScreen($, clock)
+  await ui.press({ key: `file:${ORDERS}` })
+  await clock.settle()
+
+  // Right-side lines 10, 11 and 12 each take a press; the removed old line 11 has no Button.
+  const lines = (await ui.findAll({ type: 'Button' })).map(one => one.props.key).filter(key => String(key).startsWith('line:'))
+  expect(lines).toEqual(['line:10', 'line:11', 'line:12'])
+  await ui.unmount()
+})
+
+test('確認中の PR と送信済みの PR では、差分は読めるが、どの行も押せない', async ($, on) => {
+  const sent = review({
+    key: OTHER,
+    url: 'https://github.com/acme/widgets/pull/13',
+    postedAt: '2026-11-09T01:30:00.000Z',
+    postedEvent: 'COMMENT',
+  })
+  const { clock } = world(on, [review(), sent], {}, {
+    [DIFF_PATH]: SCREEN_DIFF,
+    [`${DATA}/diffs/acme/widgets/13/${SHA}.diff`]: SCREEN_DIFF,
+  })
+  await begin($, clock)
+
+  const ui = await openDetail($, clock)
+  await ui.press({ key: 'comment' })
+  await clock.settle()
+  await ui.press({ key: 'diff-view' })
+  await clock.settle()
+  await ui.press({ key: `file:${ORDERS}` })
+  await clock.settle()
+  expect(await ui.find({ type: 'Text', text: /^\+ const b = 2$/ })).toBeDefined()
+  expect(await ui.find({ key: 'line:11' })).toBe(undefined)
+  // The request being confirmed is still there once back on the detail.
+  await ui.press({ key: 'back-to-detail' })
+  await clock.settle()
+  expect(await ui.find({ key: 'send' })).toBeDefined()
+  await ui.press({ key: 'back' })
+  await clock.settle()
+
+  await ui.press({ key: 'back-to-list' })
+  await clock.settle()
+  await ui.press({ key: `row:${OTHER}` })
+  await clock.settle()
+  await ui.press({ key: 'diff-view' })
+  await clock.settle()
+  await ui.press({ key: `file:${ORDERS}` })
+  await clock.settle()
+  expect(await ui.find({ type: 'Text', text: /^\+ const b = 2$/ })).toBeDefined()
+  expect(await ui.find({ key: 'line:11' })).toBe(undefined)
+  await ui.unmount()
+})
+
+test('上限を超えるファイルは途中までで、GitHub への案内が出て、切れた先の行の指摘は先頭に出る', async ($, on) => {
+  // 1,200 added lines: the screen draws 1,000 rows, the header among them.
+  const long = [
+    'diff --git a/x b/x',
+    '--- /dev/null',
+    `+++ b/${ORDERS}`,
+    '@@ -0,0 +1,1200 @@',
+    ...Array.from({ length: 1200 }, (_, index) => `+line ${index + 1}`),
+  ].join('\n')
+  const findings = [finding({ line: 1100, reason: '切れた先の行の話' })]
+  const { clock } = world(on, [review({ findings })], {}, { [DIFF_PATH]: long })
+  await begin($, clock)
+
+  const ui = await openDiffScreen($, clock)
+  await ui.press({ key: `file:${ORDERS}` })
+  await clock.settle()
+
+  expect(await ui.find({ type: 'Text', text: /^\+ line 999$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^\+ line 1000$/ })).toBe(undefined)
+  expect(await ui.find({ type: 'Text', text: /^長いので途中までです。$/ })).toBeDefined()
+  expect((await ui.find({ type: 'Link' }))?.props.href).toBe('https://github.com/acme/widgets/pull/12/files')
+  const texts = (await ui.findAll({ type: 'Text' })).map(one => one.text)
+  expect(texts.indexOf('切れた先の行の話')).toBeGreaterThan(texts.indexOf('行に付かない指摘'))
+  expect(texts.indexOf('切れた先の行の話')).toBeLessThan(texts.indexOf('+ line 1'))
+  await ui.unmount()
+})
+
+test('hunk の無いファイルを開くと、表示できる差分が無いと出る', async ($, on) => {
+  const binary = ['diff --git a/logo.png b/logo.png', 'Binary files a/logo.png and b/logo.png differ'].join('\n')
+  const { clock } = world(on, [review()], {}, { [DIFF_PATH]: binary })
+  await begin($, clock)
+
+  const ui = await openDiffScreen($, clock)
+  await ui.press({ key: 'file:logo.png' })
+  await clock.settle()
+
+  expect(await ui.find({ type: 'Text', text: /^表示できる差分がありません。$/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('制御文字を含む行でも画面が出て、置き換えた文字で描かれる', async ($, on) => {
+  const dirty = [
+    'diff --git a/x b/x',
+    `--- a/${FILTER}`,
+    `+++ b/${FILTER}`,
+    '@@ -1,1 +1,2 @@',
+    ' keep',
+    '+\tif (isAdmin‮) {\u001b[31m',
+  ].join('\n')
+  const { clock } = world(on, [review()], {}, { [DIFF_PATH]: dirty })
+  await begin($, clock)
+
+  const ui = await openDiffScreen($, clock)
+  await ui.press({ key: `file:${FILTER}` })
+  await clock.settle()
+
+  // The tab's two spaces lead the line, so they are drawn as no-break spaces.
+  expect(await ui.find({ type: 'Text', text: /^\+   if \(isAdmin�\) \{�\[31m$/ })).toBeDefined()
+  expect(await ui.find({ key: 'line:2' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('「← 詳細」で詳細に戻り、別の PR を選ぶと差分の画面は持ち越されない', async ($, on) => {
+  const other = review({ key: OTHER, url: 'https://github.com/acme/widgets/pull/13' })
+  const { clock } = world(on, [review(), other], {}, {
+    [DIFF_PATH]: SCREEN_DIFF,
+    [`${DATA}/diffs/acme/widgets/13/${SHA}.diff`]: SCREEN_DIFF,
+  })
+  await begin($, clock)
+
+  const ui = await openDiffScreen($, clock)
+  await ui.press({ key: `file:${ORDERS}` })
+  await clock.settle()
+  await ui.press({ key: 'back-to-detail' })
+  await clock.settle()
+  expect(await ui.find({ key: 'read' })).toBeDefined()
+  expect(await ui.find({ key: `file:${ORDERS}` })).toBe(undefined)
+
+  await ui.press({ key: 'diff-view' })
+  await clock.settle()
+  // Opened again, the screen starts with every file closed.
+  expect(await ui.find({ type: 'Text', text: /const b = 2/ })).toBe(undefined)
+  await ui.press({ key: 'back-to-detail' })
+  await clock.settle()
+  await ui.press({ key: 'back-to-list' })
+  await clock.settle()
+  await ui.press({ key: `row:${OTHER}` })
+  await clock.settle()
+  expect(await ui.find({ key: 'read' })).toBeDefined()
+  expect(await ui.find({ key: 'back-to-detail' })).toBe(undefined)
+  await ui.unmount()
+})
+
+test('行の入力欄を開いたまま「← 詳細」で戻ると、詳細に追加フォームは開いていない', async ($, on) => {
+  const { clock } = world(on, [review()], {}, { [DIFF_PATH]: SCREEN_DIFF })
+  await begin($, clock)
+
+  const ui = await openDiffScreen($, clock)
+  await ui.press({ key: `file:${FILTER}` })
+  await clock.settle()
+  await ui.press({ key: 'line:41' })
+  await clock.settle()
+  await ui.press({ key: 'back-to-detail' })
+  await clock.settle()
+
+  expect(await ui.find({ key: 'add-body' })).toBe(undefined)
+  expect(await ui.find({ key: 'add' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('ファイルを読んでいる間に別のファイルへ切り替えても、先のファイルの差分は出ない', async ($, on) => {
+  const { clock, disk } = world(on, [review()], {}, { [DIFF_PATH]: SCREEN_DIFF })
+  await begin($, clock)
+
+  const ui = await openDiffScreen($, clock)
+  let release = () => {}
+  disk.hold = new Promise<void>(resolve => {
+    release = resolve
+  })
+  // The first file's read waits; the second is opened and read; only then does the first come back.
+  await ui.press({ key: `file:${ORDERS}` })
+  await clock.settle()
+  await ui.press({ key: `file:${FILTER}` })
+  await clock.settle()
+  release()
+  await clock.settle()
+
+  expect(await ui.find({ type: 'Text', text: /^\+ const w = 4$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /const b = 2/ })).toBe(undefined)
+  await ui.unmount()
+})
+
+test('ファイル一覧を読んでいる間に別の PR を選ぶと、先の PR の差分の画面は出ない', async ($, on) => {
+  const other = review({ key: OTHER, url: 'https://github.com/acme/widgets/pull/13' })
+  const { clock, disk } = world(on, [review(), other], {}, {
+    [DIFF_PATH]: SCREEN_DIFF,
+    [`${DATA}/diffs/acme/widgets/13/${SHA}.diff`]: SCREEN_DIFF,
+  })
+  await begin($, clock)
+
+  const ui = await openDetail($, clock)
+  let release = () => {}
+  disk.hold = new Promise<void>(resolve => {
+    release = resolve
+  })
+  await ui.press({ key: 'diff-view' })
+  await clock.settle()
+  await ui.press({ key: 'back-to-list' })
+  await clock.settle()
+  await ui.press({ key: `row:${OTHER}` })
+  await clock.settle()
+  // A comment being added on the other review: the late read must not end it.
+  await ui.press({ key: 'add' })
+  await clock.settle()
+  release()
+  await clock.settle()
+
+  // The other review's detail stays as it was; nothing of the first one's diff landed on it.
+  expect(await ui.find({ key: 'add-body' })).toBeDefined()
+  expect(await ui.find({ key: 'read' })).toBeDefined()
+  expect(await ui.find({ key: 'back-to-detail' })).toBe(undefined)
+  // Nor is it waiting for the first review to be selected again.
+  await ui.press({ key: 'back-to-list' })
+  await clock.settle()
+  await ui.press({ key: `row:${KEY}` })
+  await clock.settle()
+  expect(await ui.find({ key: 'read' })).toBeDefined()
+  expect(await ui.find({ key: 'back-to-detail' })).toBe(undefined)
+  await ui.unmount()
+})
+
 // ---- the comment an approval goes with ----
 
 const approvable = () => review({ findings: [finding({ severity: 'recommended', isAdopted: false })] })
