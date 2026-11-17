@@ -148,6 +148,15 @@ export function rowsOf(source: string): DiffRow[] {
   return rows
 }
 
+// Rows of a file drawn at once. The desktop app drew a file of 11 rows and
+// left the pane empty for one of 340: the tree of a long file has to be cut.
+export const DIFF_PAGE_ROWS = 100
+
+/** How many pages a file's rows make; one even with no row. */
+export function pageCountOf(rowCount: number): number {
+  return Math.max(1, Math.ceil(rowCount / DIFF_PAGE_ROWS))
+}
+
 // Control characters a Text refuses, and the ones that reorder what is read.
 const UNSAFE = /[\u0000-\u0008\u000a-\u001f\u007f-\u009f‪-‮⁦-⁩]/g
 

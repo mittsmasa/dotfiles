@@ -98,8 +98,11 @@ export type Inbox = {
   diffView?: {
     key: string
     files: { path: string; added: number; removed: number }[]
-    /** `isCut`: the file's diff was longer than one drawing holds. */
-    open?: { path: string; source: string; isCut: boolean }
+    /**
+     * `isCut`: the file's diff was longer than is kept. `page`: which stretch of
+     * its rows is drawn, from 0; a surface does not draw a tree of every row.
+     */
+    open?: { path: string; source: string; isCut: boolean; page: number }
   }
   /** Keys of the reviews whose diff is saved, so their findings can be placed. */
   withDiff: string[]

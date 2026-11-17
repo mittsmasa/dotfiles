@@ -2,7 +2,7 @@ import { atom, read } from 'claude-code'
 import type { EngineInterface, Register, RenderSurface } from 'claude-code'
 
 import type { Finding, Inbox, Review, ReviewPayload } from '../types'
-import { rowsOf, safeText } from './diff'
+import { DIFF_PAGE_ROWS, pageCountOf, rowsOf, safeText } from './diff'
 import type { DiffRow } from './diff'
 import { DEFAULT_APPROVE_COMMENT, actionsOf } from './posting'
 import {
@@ -46,6 +46,7 @@ import {
   startLineComment,
   toggle,
   toggleBody,
+  turnDiffPage,
 } from './run'
 import type { Config } from './run'
 
@@ -66,8 +67,11 @@ const TITLE = 'PR レビュー'
 const EDGE = '▍'
 // A description longer than this many lines is folded until asked for.
 const BODY_SHOWN_LINES = 3
-// A line number's column on the diff screen, in cells.
-const LINE_NUMBER_WIDTH = 5
+// The line number's column on the diff screen, in cells.
+const LINE_NUMBER_WIDTH = 6
+// A row's tint: the theme's own diff colours hide the text on the desktop app,
+// so the tint is a thin wash the text of either theme reads through.
+const TINT = { add: '#2ea04326', remove: '#f8514926' } as const
 const SEVERITIES = ['blocker', 'recommended', 'suggestion'] as const
 // Leading spaces drawn as no-break spaces: a surface that folds spaces keeps the indent.
 const indented = (text: string) => text.replace(/^ +/, spaces => '\u00a0'.repeat(spaces.length))
@@ -378,13 +382,19 @@ export const register: Register = (on, options) => {
       // Lines take a comment only while the detail's findings could be changed too.
       const canComment = isSendable && pending === undefined
       const open = view.open
-      const rows = open ? rowsOf(open.source) : []
+      const all = open ? rowsOf(open.source) : []
+      const pageCount = pageCountOf(all.length)
+      const page = Math.min(open?.page ?? 0, pageCount - 1)
+      // Only this stretch is drawn: a surface does not draw the tree of a long file whole.
+      const rows = all.slice(page * DIFF_PAGE_ROWS, (page + 1) * DIFF_PAGE_ROWS)
       const shown = new Set(rows.flatMap(row => (row.kind === 'add' || row.kind === 'context' ? [row.newLine] : [])))
       const at = mode?.kind === 'add' ? mode.at : undefined
 
       // A finding where it sits: read here, changed in the detail.
       const note = (one: Finding) => {
         const tags = [
+          // Off the rows drawn, the line is all that says where it belongs.
+          one.line !== undefined && !shown.has(one.line) ? `L${one.line}` : undefined,
           one.source === 'human' ? '自分' : '下読み',
           one.source === 'human' ? undefined : one.severity,
           one.isUnsure ? '要確認' : undefined,
@@ -411,14 +421,6 @@ export const register: Register = (on, options) => {
         )
       }
 
-      const numberCell = (value: number | undefined) => (
-        <Box width={LINE_NUMBER_WIDTH} flexShrink={0} flexDirection="row" justifyContent="flex-end">
-          <Text mono size="caption" dimColor>
-            {value === undefined ? '' : String(value)}
-          </Text>
-        </Box>
-      )
-
       const line = (path: string, row: DiffRow, index: number) => {
         if (row.kind === 'hunk') {
           return (
@@ -432,23 +434,30 @@ export const register: Register = (on, options) => {
         const newLine = row.kind === 'remove' ? undefined : row.newLine
         const mark = row.kind === 'add' ? '+' : row.kind === 'remove' ? '-' : '\u00a0'
         const text = `${mark} ${indented(safeText(row.text))}`
-        const tint = row.kind === 'add' ? 'diffAdded' : row.kind === 'remove' ? 'diffRemoved' : undefined
+        const tint = row.kind === 'context' ? undefined : TINT[row.kind]
         const isWriting = at !== undefined && at.file === path && at.line === newLine
 
+        // As few elements a row as will do: a file has hundreds of rows. The number is the
+        // Button, so the code is one mono Text on every row: a Button draws its label in its own face.
         return [
           <Box key={`line-box:${index}`} flexDirection="row" gap="sm" {...(tint ? { backgroundColor: tint } : {})}>
-            {numberCell(row.kind === 'add' ? undefined : row.oldLine)}
-            {numberCell(newLine)}
-            <Box flexGrow={1}>
+            <Box width={LINE_NUMBER_WIDTH} flexShrink={0}>
               {/* The payload places a comment on the right side only: a removed line takes none. */}
               {canComment && newLine !== undefined ? (
-                <Button key={`line:${newLine}`} plain onPress={() => void startLineComment($, path, newLine)}>
-                  <Text mono>{text}</Text>
-                </Button>
+                <Button
+                  key={`line:${newLine}`}
+                  plain
+                  dimColor
+                  label={String(newLine)}
+                  onPress={() => void startLineComment($, path, newLine)}
+                />
               ) : (
-                <Text mono>{text}</Text>
+                <Text mono dimColor>
+                  {String(newLine ?? (row.kind === 'remove' ? row.oldLine : ''))}
+                </Text>
               )}
             </Box>
+            <Text mono>{text}</Text>
           </Box>,
           ...(newLine === undefined ? [] : review.findings.filter(one => one.file === path && one.line === newLine).map(note)),
           isWriting && mode?.kind === 'add' && (
@@ -475,6 +484,22 @@ export const register: Register = (on, options) => {
         ]
       }
 
+      // The open file's pages: which rows are drawn, and the way to the next and the last ones.
+      const pager = (at: 'top' | 'bottom') =>
+        pageCount > 1 && (
+          <Box key={`pager:${at}`} flexDirection="row" gap="sm" alignItems="center" marginTop="xs">
+            {page > 0 && (
+              <Button key={`page-prev:${at}`} variant="secondary" label="前へ" onPress={() => void turnDiffPage($, -1)} />
+            )}
+            <Text size="caption" dimColor>
+              {`${page * DIFF_PAGE_ROWS + 1}–${Math.min(all.length, (page + 1) * DIFF_PAGE_ROWS)} 行目 / ${all.length} 行`}
+            </Text>
+            {page < pageCount - 1 && (
+              <Button key={`page-next:${at}`} variant="secondary" label="次へ" onPress={() => void turnDiffPage($, 1)} />
+            )}
+          </Box>
+        )
+
       // A file's Button is named by its place in the list: a surface cuts a key as long as a path,
       // and a press on the cut key reaches no Button.
       const file = (one: { path: string; added: number; removed: number }, index: number) => {
@@ -482,7 +507,7 @@ export const register: Register = (on, options) => {
         const inFile = review.findings.filter(finding => finding.file === one.path)
         const heaviest = SEVERITIES.find(severity => inFile.some(finding => finding.isAdopted && finding.severity === severity))
         const isShown = open?.path === one.path
-        // Findings of this file with no line the open diff shows: no line, off the diff, or past the cut.
+        // Findings of this file with no line among the rows drawn: no line, off the diff, on another page.
         const loose = inFile.filter(finding => finding.line === undefined || !shown.has(finding.line))
         const counts = [`+${one.added} −${one.removed}`, inFile.length > 0 ? `指摘 ${inFile.length}` : undefined]
 
@@ -514,7 +539,9 @@ export const register: Register = (on, options) => {
                 </Box>
               )}
               {isShown && loose.map(note)}
+              {isShown && pager('top')}
               {isShown && rows.map((row, index) => line(one.path, row, index))}
+              {isShown && pager('bottom')}
               {isShown && open.isCut && (
                 <Box flexDirection="row" gap="sm" marginTop="xs" flexWrap="wrap">
                   <Text dimColor>長いので途中までです。</Text>

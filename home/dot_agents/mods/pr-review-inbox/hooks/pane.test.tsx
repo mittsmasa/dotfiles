@@ -1742,30 +1742,117 @@ test('確認中の PR と送信済みの PR では、差分は読めるが、ど
   await ui.unmount()
 })
 
-test('上限を超えるファイルは途中までで、GitHub への案内が出て、切れた先の行の指摘は先頭に出る', async ($, on) => {
-  // 1,200 added lines: the screen draws 1,000 rows, the header among them.
-  const long = [
-    'diff --git a/x b/x',
-    '--- /dev/null',
-    `+++ b/${ORDERS}`,
-    '@@ -0,0 +1,1200 @@',
-    ...Array.from({ length: 1200 }, (_, index) => `+line ${index + 1}`),
-  ].join('\n')
-  const findings = [finding({ line: 1100, reason: '切れた先の行の話' })]
-  const { clock } = world(on, [review({ findings })], {}, { [DIFF_PATH]: long })
+// 1,200 added lines of one file: more than is kept (1,000 rows), and more than one page (100 rows).
+const LONG_DIFF = [
+  'diff --git a/x b/x',
+  '--- /dev/null',
+  `+++ b/${ORDERS}`,
+  '@@ -0,0 +1,1200 @@',
+  ...Array.from({ length: 1200 }, (_, index) => `+line ${index + 1}`),
+].join('\n')
+
+test('長いファイルは 100 行ずつ出て、次へと前へで行き来でき、最後のページに途中までの案内が出る', async ($, on) => {
+  const { clock } = world(on, [review({ findings: [] })], {}, { [DIFF_PATH]: LONG_DIFF })
   await begin($, clock)
 
   const ui = await openDiffScreen($, clock)
   await ui.press({ key: FILE_ORDERS })
   await clock.settle()
 
+  // The first page: the hunk's header and 99 lines. A surface does not draw a long file's tree whole.
+  expect(await ui.find({ type: 'Text', text: /^\+ line 99$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^\+ line 100$/ })).toBe(undefined)
+  expect((await ui.findAll({ type: 'Text', text: /^1–100 行目 \/ 1000 行$/ })).length).toBe(2)
+  expect(await ui.find({ key: 'page-prev:top' })).toBe(undefined)
+  const lines = (await ui.findAll({ type: 'Button' })).filter(one => String(one.props.key).startsWith('line:'))
+  expect(lines).toHaveLength(99)
+
+  await ui.press({ key: 'page-next:bottom' })
+  await clock.settle()
+  expect(await ui.find({ type: 'Text', text: /^\+ line 99$/ })).toBe(undefined)
+  expect(await ui.find({ type: 'Text', text: /^\+ line 100$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^\+ line 199$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^101–200 行目 \/ 1000 行$/ })).toBeDefined()
+
+  await ui.press({ key: 'page-prev:top' })
+  await clock.settle()
+  expect(await ui.find({ type: 'Text', text: /^\+ line 99$/ })).toBeDefined()
+
+  for (let turn = 0; turn < 9; turn += 1) {
+    await ui.press({ key: 'page-next:top' })
+    await clock.settle()
+  }
+  // The last page: the rows kept end at line 999, and no page follows.
   expect(await ui.find({ type: 'Text', text: /^\+ line 999$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^\+ line 1000$/ })).toBe(undefined)
+  expect(await ui.find({ key: 'page-next:top' })).toBe(undefined)
   expect(await ui.find({ type: 'Text', text: /^長いので途中までです。$/ })).toBeDefined()
   expect((await ui.find({ type: 'Link' }))?.props.href).toBe('https://github.com/acme/widgets/pull/12/files')
-  const texts = (await ui.findAll({ type: 'Text' })).map(one => one.text)
-  expect(texts.indexOf('切れた先の行の話')).toBeGreaterThan(texts.indexOf('行に付かない指摘'))
-  expect(texts.indexOf('切れた先の行の話')).toBeLessThan(texts.indexOf('+ line 1'))
+  await ui.unmount()
+})
+
+test('ほかのページの行の指摘は、行番号を添えてファイルの先頭に出て、そのページでは行の下に出る', async ($, on) => {
+  const findings = [
+    finding({ line: 150, reason: '2 ページ目の行の話' }),
+    finding({ id: 'f2', line: 1100, reason: '切れた先の行の話' }),
+  ]
+  const { clock } = world(on, [review({ findings })], {}, { [DIFF_PATH]: LONG_DIFF })
+  await begin($, clock)
+
+  const ui = await openDiffScreen($, clock)
+  await ui.press({ key: FILE_ORDERS })
+  await clock.settle()
+  const first = (await ui.findAll({ type: 'Text' })).map(one => one.text)
+  expect(first.indexOf('2 ページ目の行の話')).toBeGreaterThan(first.indexOf('行に付かない指摘'))
+  expect(first.indexOf('2 ページ目の行の話')).toBeLessThan(first.indexOf('+ line 1'))
+  expect(first).toContain('L150 · 下読み · blocker')
+  expect(first).toContain('L1100 · 下読み · blocker')
+
+  await ui.press({ key: 'page-next:top' })
+  await clock.settle()
+  const second = (await ui.findAll({ type: 'Text' })).map(one => one.text)
+  // On its own page the finding stands under its line, with no line number added.
+  expect(second.indexOf('2 ページ目の行の話')).toBeGreaterThan(second.indexOf('+ line 150'))
+  expect(second.indexOf('2 ページ目の行の話')).toBeLessThan(second.indexOf('+ line 151'))
+  expect(second).toContain('下読み · blocker')
+  expect(second.indexOf('切れた先の行の話')).toBeLessThan(second.indexOf('+ line 100'))
+  await ui.unmount()
+})
+
+test('ページを進めたあと別のファイルを開いて戻ると、最初のページから出る。短いファイルにページ送りは出ない', async ($, on) => {
+  const two = [LONG_DIFF, 'diff --git a/y b/y', `--- a/${FILTER}`, `+++ b/${FILTER}`, HUNK_FILTER].join('\n')
+  const { clock } = world(on, [review({ findings: [] })], {}, { [DIFF_PATH]: two })
+  await begin($, clock)
+
+  const ui = await openDiffScreen($, clock)
+  await ui.press({ key: FILE_ORDERS })
+  await clock.settle()
+  await ui.press({ key: 'page-next:top' })
+  await clock.settle()
+  await ui.press({ key: FILE_FILTER })
+  await clock.settle()
+  expect(await ui.find({ type: 'Text', text: /^\+ const w = 4$/ })).toBeDefined()
+  expect(await ui.find({ key: 'page-next:top' })).toBe(undefined)
+  expect(await ui.find({ type: 'Text', text: /行目 \// })).toBe(undefined)
+
+  await ui.press({ key: FILE_ORDERS })
+  await clock.settle()
+  expect(await ui.find({ type: 'Text', text: /^\+ line 1$/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('1 行に置く要素は、押せる行でボタン 1 つと Text 2 つまで', async ($, on) => {
+  // The desktop app left the pane empty for a file of 340 rows at eight elements a row.
+  const { clock } = world(on, [review({ findings: [] })], {}, { [DIFF_PATH]: LONG_DIFF })
+  await begin($, clock)
+
+  const ui = await openDiffScreen($, clock)
+  const before = (await ui.findAll({})).length
+  await ui.press({ key: FILE_ORDERS })
+  await clock.settle()
+
+  // 99 lines and a header, the pagers and the notes around them.
+  expect((await ui.findAll({})).length - before).toBeLessThan(99 * 4 + 30)
   await ui.unmount()
 })
 

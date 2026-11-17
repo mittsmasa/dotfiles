@@ -4,7 +4,7 @@ import { atom, update } from 'claude-code'
 import type { EngineInterface } from 'claude-code'
 
 import type { Inbox, Mode, Placement, Review, ReviewEvent } from '../types'
-import { fileDiff, filesOf, hunkAt } from './diff'
+import { fileDiff, filesOf, hunkAt, pageCountOf, rowsOf } from './diff'
 import type { RepoConfig } from './reviews'
 import { expandArgv, failureOf, outputsOf, resolveViewpoints, summarizeChecks, warningLine } from './profile'
 import type { CheckResult } from './profile'
@@ -326,12 +326,28 @@ export async function openDiffFile($: EngineInterface, config: Config, path: str
   if (isClosing) return
   const diff = await $.fs.read(diffPath).then(String, () => undefined)
   if (diff === undefined) return
-  const open = { path, ...fileDiff(diff, path, DIFF_FILE_LIMITS) }
+  const open = { path, ...fileDiff(diff, path, DIFF_FILE_LIMITS), page: 0 }
   await mutate($, state =>
     state.selectedKey === key && state.diffView?.key === key && wantedDiffFile === path
       ? { ...state, diffView: { ...state.diffView, open } }
       : state,
   )
+}
+
+/** Turns the open file's page by `by`, staying within its pages. A comment being written on a line ends. */
+export function turnDiffPage($: EngineInterface, by: number) {
+  return mutate($, state => {
+    const open = state.diffView?.open
+    if (!state.diffView || !open) return state
+    const last = pageCountOf(rowsOf(open.source).length) - 1
+    const page = Math.min(last, Math.max(0, open.page + by))
+
+    return {
+      ...state,
+      mode: isLineComment(state.mode) ? undefined : state.mode,
+      diffView: { ...state.diffView, open: { ...open, page } },
+    }
+  })
 }
 
 /** Starts a comment on a right-side line of the diff: only on a review that can still be sent. */
