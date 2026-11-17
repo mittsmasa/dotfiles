@@ -623,7 +623,6 @@ export const register: Register = (on, options) => {
       const isEditable = isSendable && pending === undefined
       const adopted = review.findings.filter(one => one.isAdopted).length
       const total = review.findings.length
-      const checked = review.status === 'done' ? (review.checked ?? []) : []
       const skipped = review.status === 'done' ? review.skipped : []
       const bodyLines = (review.body ?? '').trim() === '' ? [] : (review.body as string).split('\n')
       const isBodyLong = bodyLines.length > BODY_SHOWN_LINES
@@ -742,14 +741,13 @@ export const register: Register = (on, options) => {
               </Text>
             </Box>
           )}
-          {(checked.length > 0 || skipped.length > 0) && heading('確認した点')}
-          {checked.map(point => (
-            <Text>・ {point}</Text>
-          ))}
+          {/* What the reviewer verified is kept on the review, not drawn: nobody read it here. */}
           {skipped.length > 0 && (
-            <Text size="caption" dimColor>
-              省いたもの: {skipped.join('、')}
-            </Text>
+            <Box marginTop="md">
+              <Text size="caption" dimColor>
+                省いたもの: {skipped.join('、')}
+              </Text>
+            </Box>
           )}
           {pending !== undefined &&
             confirm(

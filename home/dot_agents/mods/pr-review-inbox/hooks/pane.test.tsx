@@ -1151,7 +1151,7 @@ test('PR へのリンクと片付けるは判定の上にあり、送るボタ�
   expect(order.at(-1)).toBe('comment')
   // Read top to bottom: the description, the findings, what was checked.
   const headings = (await ui.findAll({ type: 'Text', text: /^(概要|指摘 · .*|確認した点)$/ })).map(one => one.text)
-  expect(headings).toEqual(['概要', '指摘 · 1 件中 1 件を送る', '確認した点'])
+  expect(headings).toEqual(['概要', '指摘 · 1 件中 1 件を送る'])
   await ui.unmount()
 })
 
@@ -1502,38 +1502,27 @@ async function openDetail($: Engine, clock: { settle: () => Promise<void> }) {
   return ui
 }
 
-test('確認した点の各行が ・ で始まり、省いたものはその下に 1 行で出る', async ($, on) => {
+test('確認した点は出ず、省いたものだけが 1 行で出る', async ($, on) => {
   const { clock } = world(on, [review({ skipped: ['機械チェック（対象なし）', 'diff の一部'] })])
   await begin($, clock)
 
   const ui = await openDetail($, clock)
 
-  const points = await ui.findAll({ type: 'Text', text: /確認 \d/ })
-  expect(points.map(one => one.text)).toEqual(['・ 確認 1', '・ 確認 2'])
+  // The review still holds what was verified; the detail no longer draws it.
+  expect(await ui.find({ type: 'Text', text: /確認 \d/ })).toBe(undefined)
+  expect(await ui.find({ type: 'Text', text: /^確認した点$/ })).toBe(undefined)
   expect((await ui.find({ type: 'Text', text: /^省いたもの/ }))?.text).toBe('省いたもの: 機械チェック（対象なし）、diff の一部')
   await ui.unmount()
 })
 
-test('確認した点も省いたものも無ければ、節ごと出ない', async ($, on) => {
-  // A review kept from before `checked` existed holds none.
-  const { clock } = world(on, [review({ checked: undefined })])
+test('省いたものが無ければ、その行も出ない', async ($, on) => {
+  const { clock } = world(on, [review()])
   await begin($, clock)
 
   const ui = await openDetail($, clock)
 
   expect(await ui.find({ type: 'Text', text: /^確認した点$/ })).toBe(undefined)
   expect(await ui.find({ type: 'Text', text: /^省いたもの/ })).toBe(undefined)
-  await ui.unmount()
-})
-
-test('確認した点が無くても、省いたものがあれば見出しの下に出る', async ($, on) => {
-  const { clock } = world(on, [review({ checked: [], skipped: ['diff の一部'] })])
-  await begin($, clock)
-
-  const ui = await openDetail($, clock)
-
-  expect(await ui.find({ type: 'Text', text: /^確認した点$/ })).toBeDefined()
-  expect((await ui.find({ type: 'Text', text: /^省いたもの/ }))?.text).toBe('省いたもの: diff の一部')
   await ui.unmount()
 })
 
