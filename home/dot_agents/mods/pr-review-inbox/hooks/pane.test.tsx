@@ -1552,6 +1552,9 @@ const SCREEN_DIFF = [
   HUNK_FILTER,
 ].join('\n')
 const ORDERS = 'web/src/components/orders/order-list.tsx'
+// A file's Button is named by its place in the list, not by its path.
+const FILE_ORDERS = 'file:0'
+const FILE_FILTER = 'file:1'
 const FILTER = 'web/src/filter.ts'
 
 /** The diff screen of the one stored review, with no file open yet. */
@@ -1569,8 +1572,8 @@ test('diff の保存がある PR の詳細に「差分を見る」が出て、�
 
   const ui = await openDiffScreen($, clock)
 
-  expect(await ui.find({ key: `file:${ORDERS}` })).toBeDefined()
-  expect(await ui.find({ key: `file:${FILTER}` })).toBeDefined()
+  expect(await ui.find({ key: FILE_ORDERS })).toBeDefined()
+  expect(await ui.find({ key: FILE_FILTER })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^\+1 −1 · 指摘 1$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^\+1 −0$/ })).toBeDefined()
   // No file is open yet, and the detail is not drawn under the screen.
@@ -1595,18 +1598,18 @@ test('ファイルを押すと行が出て、同じファイルを押すと閉�
   await begin($, clock)
 
   const ui = await openDiffScreen($, clock)
-  await ui.press({ key: `file:${ORDERS}` })
+  await ui.press({ key: FILE_ORDERS })
   await clock.settle()
   expect(await ui.find({ type: 'Text', text: /^\+ const b = 2$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^- const old = 2$/ })).toBeDefined()
 
-  await ui.press({ key: `file:${ORDERS}` })
+  await ui.press({ key: FILE_ORDERS })
   await clock.settle()
   expect(await ui.find({ type: 'Text', text: /const b = 2/ })).toBe(undefined)
 
-  await ui.press({ key: `file:${ORDERS}` })
+  await ui.press({ key: FILE_ORDERS })
   await clock.settle()
-  await ui.press({ key: `file:${FILTER}` })
+  await ui.press({ key: FILE_FILTER })
   await clock.settle()
   expect(await ui.find({ type: 'Text', text: /^\+ const w = 4$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /const b = 2/ })).toBe(undefined)
@@ -1622,7 +1625,7 @@ test('下読みの指摘はその行の直後に出て、行が差分に無い�
   await begin($, clock)
 
   const ui = await openDiffScreen($, clock)
-  await ui.press({ key: `file:${ORDERS}` })
+  await ui.press({ key: FILE_ORDERS })
   await clock.settle()
 
   const texts = (await ui.findAll({ type: 'Text' })).map(one => one.text)
@@ -1642,7 +1645,7 @@ test('追加行を押すと入力欄がその行の下に出て、送ると自�
   await begin($, clock)
 
   const ui = await openDiffScreen($, clock)
-  await ui.press({ key: `file:${FILTER}` })
+  await ui.press({ key: FILE_FILTER })
   await clock.settle()
   expect(await ui.find({ key: 'line-comment' })).toBe(undefined)
 
@@ -1671,7 +1674,7 @@ test('行コメントは「やめる」で入力欄が消え、何も足され�
   await begin($, clock)
 
   const ui = await openDiffScreen($, clock)
-  await ui.press({ key: `file:${FILTER}` })
+  await ui.press({ key: FILE_FILTER })
   await clock.settle()
   await ui.press({ key: 'line:40' })
   await clock.settle()
@@ -1688,7 +1691,7 @@ test('削除行は押せず、追加行と文脈行は押せる', async ($, on) 
   await begin($, clock)
 
   const ui = await openDiffScreen($, clock)
-  await ui.press({ key: `file:${ORDERS}` })
+  await ui.press({ key: FILE_ORDERS })
   await clock.settle()
 
   // Right-side lines 10, 11 and 12 each take a press; the removed old line 11 has no Button.
@@ -1715,7 +1718,7 @@ test('確認中の PR と送信済みの PR では、差分は読めるが、ど
   await clock.settle()
   await ui.press({ key: 'diff-view' })
   await clock.settle()
-  await ui.press({ key: `file:${ORDERS}` })
+  await ui.press({ key: FILE_ORDERS })
   await clock.settle()
   expect(await ui.find({ type: 'Text', text: /^\+ const b = 2$/ })).toBeDefined()
   expect(await ui.find({ key: 'line:11' })).toBe(undefined)
@@ -1732,7 +1735,7 @@ test('確認中の PR と送信済みの PR では、差分は読めるが、ど
   await clock.settle()
   await ui.press({ key: 'diff-view' })
   await clock.settle()
-  await ui.press({ key: `file:${ORDERS}` })
+  await ui.press({ key: FILE_ORDERS })
   await clock.settle()
   expect(await ui.find({ type: 'Text', text: /^\+ const b = 2$/ })).toBeDefined()
   expect(await ui.find({ key: 'line:11' })).toBe(undefined)
@@ -1753,7 +1756,7 @@ test('上限を超えるファイルは途中までで、GitHub への案内が�
   await begin($, clock)
 
   const ui = await openDiffScreen($, clock)
-  await ui.press({ key: `file:${ORDERS}` })
+  await ui.press({ key: FILE_ORDERS })
   await clock.settle()
 
   expect(await ui.find({ type: 'Text', text: /^\+ line 999$/ })).toBeDefined()
@@ -1766,13 +1769,31 @@ test('上限を超えるファイルは途中までで、GitHub への案内が�
   await ui.unmount()
 })
 
+test('パスの長いファイルでも、ボタンの key は短く、押すと開く', async ($, on) => {
+  // A surface cuts a long key, and a press on the cut key reaches no Button.
+  const deep = 'features/leads/detail/components/leadDetailMobileTabView/leadDetailMobileTabView.tsx'
+  const diff = ['diff --git a/x b/x', `--- a/${deep}`, `+++ b/${deep}`, '@@ -1,1 +1,2 @@', ' keep', '+added'].join('\n')
+  const { clock } = world(on, [review()], {}, { [DIFF_PATH]: diff })
+  await begin($, clock)
+
+  const ui = await openDiffScreen($, clock)
+  const keys = (await ui.findAll({ type: 'Button' })).map(one => String(one.props.key))
+  expect(keys.filter(key => key.length > 32)).toEqual([])
+  await ui.press({ key: 'file:0' })
+  await clock.settle()
+
+  expect(await ui.find({ type: 'Text', text: /^\+ added$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^leadDetailMobileTabView\.tsx$/ })).toBeDefined()
+  await ui.unmount()
+})
+
 test('hunk の無いファイルを開くと、表示できる差分が無いと出る', async ($, on) => {
   const binary = ['diff --git a/logo.png b/logo.png', 'Binary files a/logo.png and b/logo.png differ'].join('\n')
   const { clock } = world(on, [review()], {}, { [DIFF_PATH]: binary })
   await begin($, clock)
 
   const ui = await openDiffScreen($, clock)
-  await ui.press({ key: 'file:logo.png' })
+  await ui.press({ key: 'file:0' })
   await clock.settle()
 
   expect(await ui.find({ type: 'Text', text: /^表示できる差分がありません。$/ })).toBeDefined()
@@ -1792,7 +1813,7 @@ test('制御文字を含む行でも画面が出て、置き換えた文字で�
   await begin($, clock)
 
   const ui = await openDiffScreen($, clock)
-  await ui.press({ key: `file:${FILTER}` })
+  await ui.press({ key: 'file:0' })
   await clock.settle()
 
   // The tab's two spaces lead the line, so they are drawn as no-break spaces.
@@ -1810,12 +1831,12 @@ test('「← 詳細」で詳細に戻り、別の PR を選ぶと差分の画面
   await begin($, clock)
 
   const ui = await openDiffScreen($, clock)
-  await ui.press({ key: `file:${ORDERS}` })
+  await ui.press({ key: FILE_ORDERS })
   await clock.settle()
   await ui.press({ key: 'back-to-detail' })
   await clock.settle()
   expect(await ui.find({ key: 'read' })).toBeDefined()
-  expect(await ui.find({ key: `file:${ORDERS}` })).toBe(undefined)
+  expect(await ui.find({ key: FILE_ORDERS })).toBe(undefined)
 
   await ui.press({ key: 'diff-view' })
   await clock.settle()
@@ -1837,7 +1858,7 @@ test('行の入力欄を開いたまま「← 詳細」で戻ると、詳細に�
   await begin($, clock)
 
   const ui = await openDiffScreen($, clock)
-  await ui.press({ key: `file:${FILTER}` })
+  await ui.press({ key: FILE_FILTER })
   await clock.settle()
   await ui.press({ key: 'line:41' })
   await clock.settle()
@@ -1859,9 +1880,9 @@ test('ファイルを読んでいる間に別のファイルへ切り替えて�
     release = resolve
   })
   // The first file's read waits; the second is opened and read; only then does the first come back.
-  await ui.press({ key: `file:${ORDERS}` })
+  await ui.press({ key: FILE_ORDERS })
   await clock.settle()
-  await ui.press({ key: `file:${FILTER}` })
+  await ui.press({ key: FILE_FILTER })
   await clock.settle()
   release()
   await clock.settle()

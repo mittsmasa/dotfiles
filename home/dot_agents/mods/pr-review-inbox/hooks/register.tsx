@@ -475,7 +475,9 @@ export const register: Register = (on, options) => {
         ]
       }
 
-      const file = (one: { path: string; added: number; removed: number }) => {
+      // A file's Button is named by its place in the list: a surface cuts a key as long as a path,
+      // and a press on the cut key reaches no Button.
+      const file = (one: { path: string; added: number; removed: number }, index: number) => {
         const place = splitPlace(one.path, undefined)
         const inFile = review.findings.filter(finding => finding.file === one.path)
         const heaviest = SEVERITIES.find(severity => inFile.some(finding => finding.isAdopted && finding.severity === severity))
@@ -485,11 +487,11 @@ export const register: Register = (on, options) => {
         const counts = [`+${one.added} −${one.removed}`, inFile.length > 0 ? `指摘 ${inFile.length}` : undefined]
 
         return (
-          <Box key={`file-box:${one.path}`} flexDirection="row" gap="sm" marginTop="sm">
+          <Box key={`file-box:${index}`} flexDirection="row" gap="sm" marginTop="sm">
             {bar(heaviest ? SEVERITY_TONE[heaviest] : 'inactive')}
             <Box flexDirection="column" flexGrow={1}>
               <Box flexDirection="row" justifyContent="space-between" gap="sm">
-                <Button key={`file:${one.path}`} plain onPress={() => void openDiffFile($, ready, one.path)}>
+                <Button key={`file:${index}`} plain onPress={() => void openDiffFile($, ready, one.path)}>
                   <Text mono weight="medium">
                     {safeText(place.name)}
                   </Text>
