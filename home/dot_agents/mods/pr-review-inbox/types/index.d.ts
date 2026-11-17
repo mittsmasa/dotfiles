@@ -91,6 +91,16 @@ export type Inbox = {
   isBodyOpen?: boolean
   /** The comment an approval of the selected review goes with; absent until typed. */
   approveComment?: string
+  /**
+   * The diff screen of the review `key`: its files, and the one drawn open.
+   * Drawn only while `key` is the selected review.
+   */
+  diffView?: {
+    key: string
+    files: { path: string; added: number; removed: number }[]
+    /** `isCut`: the file's diff was longer than one drawing holds. */
+    open?: { path: string; source: string; isCut: boolean }
+  }
   /** Keys of the reviews whose diff is saved, so their findings can be placed. */
   withDiff: string[]
 }
