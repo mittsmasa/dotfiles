@@ -1282,6 +1282,8 @@ export function reviewerPrompt(input: {
   files: readonly string[]
   /** The file holding my earlier threads on this pull request; left out when there is none. */
   previousPath?: string
+  /** The file holding the pull request's comments and checks; left out when there is none. */
+  conversationPath?: string
 }): string {
   const guide = input.guide ?? { kind: 'generic' }
   const viewpoints = input.skillFiles ?? []
@@ -1328,6 +1330,7 @@ export function reviewerPrompt(input: {
       ? `Review criteria to follow strictly, read it first; where it differs from the viewpoints, it wins: ${input.criteriaPath}`
       : 'No project criteria file.',
     ...viewpointSections,
+    ...(input.conversationPath ? [`${CONVERSATION_GUIDE}\nComments and checks: ${input.conversationPath}`] : []),
     ...(input.previousPath ? [`${FOLLOWUP_GUIDE}\nEarlier review comments: ${input.previousPath}`] : []),
     `Changed files:\n${input.files.slice(0, 200).map(file => `- ${file}`).join('\n')}`,
     SEVERITY_GUIDE,
