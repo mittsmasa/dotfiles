@@ -7,6 +7,8 @@ export type Finding = {
   isUnsure: boolean
   file?: string
   line?: number
+  /** `LEFT`: `line` counts in the file before the change, a removed line. Absent: after it. */
+  side?: 'LEFT'
   /** Why it is a problem, shown in the list. */
   reason: string
   /** The text to post on the pull request; a person may edit it. */
@@ -57,7 +59,7 @@ export type ReviewEvent = 'COMMENT' | 'APPROVE'
 /** What the selected review's detail is doing besides listing findings. */
 export type Mode =
   | { kind: 'edit'; id: string }
-  | { kind: 'add'; place: string; at?: { file: string; line: number }; error?: string }
+  | { kind: 'add'; place: string; at?: { file: string; line: number; side?: 'LEFT' }; error?: string }
   | { kind: 'confirm'; payload: ReviewPayload; placement: Placement; error?: string }
   | { kind: 'sending'; payload: ReviewPayload; placement: Placement }
 
@@ -73,7 +75,7 @@ export type ReviewPayload = {
   commit_id: string
   event: ReviewEvent
   body?: string
-  comments: { path: string; line: number; side: 'RIGHT'; body: string }[]
+  comments: { path: string; line: number; side: 'RIGHT' | 'LEFT'; body: string }[]
 }
 
 export type Inbox = {
@@ -103,6 +105,8 @@ export type Inbox = {
      * its rows is drawn, from 0; a surface does not draw a tree of every row.
      */
     open?: { path: string; source: string; isCut: boolean; page: number }
+    /** Whether the open file is drawn as saved; absent, changes of whitespace alone are folded. */
+    showsWhitespace?: boolean
   }
   /** Keys of the reviews whose diff is saved, so their findings can be placed. */
   withDiff: string[]

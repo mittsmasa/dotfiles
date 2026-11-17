@@ -2,7 +2,7 @@ import { atom, read } from 'claude-code'
 import type { EngineInterface, Register, RenderSurface } from 'claude-code'
 
 import type { Finding, Inbox, Review, ReviewPayload } from '../types'
-import { DIFF_PAGE_ROWS, pageCountOf, rowsOf, safeText } from './diff'
+import { DIFF_PAGE_ROWS, pageCountOf, rowsOf, safeText, shownRows } from './diff'
 import type { DiffRow } from './diff'
 import { DEFAULT_APPROVE_COMMENT, actionsOf } from './posting'
 import {
@@ -46,6 +46,7 @@ import {
   startLineComment,
   toggle,
   toggleBody,
+  toggleWhitespace,
   turnDiffPage,
 } from './run'
 import type { Config } from './run'
@@ -278,6 +279,7 @@ export const register: Register = (on, options) => {
           : [
               one.source !== 'human' && one.severity === 'blocker' ? one.severity : undefined,
               one.isUnsure ? '要確認' : undefined,
+              one.side === 'LEFT' ? '削除行' : undefined,
               one.source === 'human' ? '自分' : undefined,
               one.isAdopted ? undefined : '外した',
             ].filter(Boolean)
@@ -382,24 +384,43 @@ export const register: Register = (on, options) => {
       // Lines take a comment only while the detail's findings could be changed too.
       const canComment = isSendable && pending === undefined
       const open = view.open
-      const all = open ? rowsOf(open.source) : []
+      const showsWhitespace = view.showsWhitespace === true
+      // Folded by default: a line that only moved its indent reads as unchanged.
+      const all = open ? shownRows(open.source, showsWhitespace) : []
+      // Whether the fold hides anything of this file: only then is there something to switch.
+      const isFolding = open !== undefined && !showsWhitespace && rowsOf(open.source).length !== all.length
       const pageCount = pageCountOf(all.length)
       const page = Math.min(open?.page ?? 0, pageCount - 1)
       // Only this stretch is drawn: a surface does not draw the tree of a long file whole.
       const rows = all.slice(page * DIFF_PAGE_ROWS, (page + 1) * DIFF_PAGE_ROWS)
       const shown = new Set(rows.flatMap(row => (row.kind === 'add' || row.kind === 'context' ? [row.newLine] : [])))
+      const shownLeft = new Set(rows.flatMap(row => (row.kind === 'remove' ? [row.oldLine] : [])))
       const at = mode?.kind === 'add' ? mode.at : undefined
+      // A finding on a removed line is placed by the old file's numbers; any other by the new one's.
+      const isLeft = (one: Finding) => one.side === 'LEFT'
+      const sits = (one: Finding, row: DiffRow) =>
+        isLeft(one)
+          ? row.kind === 'remove' && row.oldLine === one.line
+          : (row.kind === 'add' || row.kind === 'context') && row.newLine === one.line
+      const isOnPage = (one: Finding) => one.line !== undefined && (isLeft(one) ? shownLeft : shown).has(one.line)
+      // The page of the open file a finding's line is on, when it is on one.
+      const pageOf = (one: Finding) => {
+        const index = all.findIndex(row => sits(one, row))
+
+        return index < 0 ? undefined : Math.floor(index / DIFF_PAGE_ROWS)
+      }
 
       // A finding where it sits: read here, changed in the detail.
       const note = (one: Finding) => {
         const tags = [
           // Off the rows drawn, the line is all that says where it belongs.
-          one.line !== undefined && !shown.has(one.line) ? `L${one.line}` : undefined,
+          one.line !== undefined && !isOnPage(one) ? `L${isLeft(one) ? '-' : ''}${one.line}` : undefined,
           one.source === 'human' ? '自分' : '下読み',
           one.source === 'human' ? undefined : one.severity,
           one.isUnsure ? '要確認' : undefined,
           one.isAdopted ? undefined : '外した',
         ].filter(Boolean)
+        const target = pageOf(one)
 
         return (
           <Box key={`note:${one.id}`} flexDirection="row" gap="sm" marginY="xs" marginLeft="md">
@@ -414,6 +435,16 @@ export const register: Register = (on, options) => {
               {one.source !== 'human' && one.isAdopted && (
                 <Box borderStyle="single" borderDimColor paddingX="sm" marginTop="xs">
                   <Text>{one.comment}</Text>
+                </Box>
+              )}
+              {!isOnPage(one) && target !== undefined && (
+                <Box flexDirection="row" marginTop="xs">
+                  <Button
+                    key={`goto:${one.id}`}
+                    variant="secondary"
+                    label="この行へ"
+                    onPress={() => void turnDiffPage($, target - page)}
+                  />
                 </Box>
               )}
             </Box>
@@ -432,28 +463,31 @@ export const register: Register = (on, options) => {
           )
         }
         const newLine = row.kind === 'remove' ? undefined : row.newLine
+        // The number a comment on this row goes by: the old file's on a removed row.
+        const number = row.kind === 'remove' ? row.oldLine : row.newLine
+        const side = row.kind === 'remove' ? ('LEFT' as const) : undefined
         const mark = row.kind === 'add' ? '+' : row.kind === 'remove' ? '-' : '\u00a0'
         const text = `${mark} ${indented(safeText(row.text))}`
         const tint = row.kind === 'context' ? undefined : TINT[row.kind]
-        const isWriting = at !== undefined && at.file === path && at.line === newLine
+        const isWriting = at !== undefined && at.file === path && at.line === number && at.side === side
 
         // As few elements a row as will do: a file has hundreds of rows. The number is the
         // Button, so the code is one mono Text on every row: a Button draws its label in its own face.
         return [
           <Box key={`line-box:${index}`} flexDirection="row" gap="sm" {...(tint ? { backgroundColor: tint } : {})}>
             <Box width={LINE_NUMBER_WIDTH} flexShrink={0}>
-              {/* The payload places a comment on the right side only: a removed line takes none. */}
-              {canComment && newLine !== undefined ? (
+              {/* A removed row is named apart: its number may be a new line's too. */}
+              {canComment ? (
                 <Button
-                  key={`line:${newLine}`}
+                  key={side ? `line:L${number}` : `line:${number}`}
                   plain
                   dimColor
-                  label={String(newLine)}
-                  onPress={() => void startLineComment($, path, newLine)}
+                  label={String(number)}
+                  onPress={() => void startLineComment($, path, number, side)}
                 />
               ) : (
                 <Text mono size="caption" dimColor>
-                  {String(newLine ?? (row.kind === 'remove' ? row.oldLine : ''))}
+                  {String(number)}
                 </Text>
               )}
             </Box>
@@ -461,12 +495,12 @@ export const register: Register = (on, options) => {
               {text}
             </Text>
           </Box>,
-          ...(newLine === undefined ? [] : review.findings.filter(one => one.file === path && one.line === newLine).map(note)),
+          ...review.findings.filter(one => one.file === path && sits(one, row)).map(note),
           isWriting && mode?.kind === 'add' && (
             <Box key="line-comment-box" flexDirection="column" gap="xs" marginY="xs" marginLeft="md">
               <Input
                 key="line-comment"
-                label={`${newLine} 行目へのコメント`}
+                label={side ? `${number} 行目（削除行）へのコメント` : `${number} 行目へのコメント`}
                 rows={3}
                 submitLabel="追加"
                 autoFocus
@@ -510,7 +544,7 @@ export const register: Register = (on, options) => {
         const heaviest = SEVERITIES.find(severity => inFile.some(finding => finding.isAdopted && finding.severity === severity))
         const isShown = open?.path === one.path
         // Findings of this file with no line among the rows drawn: no line, off the diff, on another page.
-        const loose = inFile.filter(finding => finding.line === undefined || !shown.has(finding.line))
+        const loose = inFile.filter(finding => !isOnPage(finding))
         const counts = [`+${one.added} −${one.removed}`, inFile.length > 0 ? `指摘 ${inFile.length}` : undefined]
 
         return (
@@ -533,10 +567,21 @@ export const register: Register = (on, options) => {
                 </Text>
               )}
               {isShown && open.source === '' && <Text dimColor>表示できる差分がありません。</Text>}
+              {isShown && open.source !== '' && all.length === 0 && <Text dimColor>空白だけの変更です。</Text>}
+              {isShown && (isFolding || showsWhitespace) && (
+                <Box flexDirection="row" marginTop="xs">
+                  <Button
+                    key="whitespace"
+                    variant="secondary"
+                    label={showsWhitespace ? '空白の変更を隠す' : '空白の変更も表示'}
+                    onPress={() => void toggleWhitespace($)}
+                  />
+                </Box>
+              )}
               {isShown && loose.length > 0 && (
                 <Box marginTop="xs">
                   <Text size="caption" dimColor>
-                    行に付かない指摘
+                    このページに無い指摘
                   </Text>
                 </Box>
               )}

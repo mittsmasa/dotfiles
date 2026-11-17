@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { fileDiff, filesOf, hunkAt, rowsOf, safeText } from './diff'
+import { fileDiff, filesOf, foldWhitespace, hunkAt, rowsOf, safeText } from './diff'
 
 // src/a.ts has two hunks (right-side lines 10-12 and 40-41); src/b.ts has one (lines 1-2).
 const DIFF = [
@@ -160,4 +160,66 @@ test('safeText は tab を空白 2 つに、制御文字と双方向の制御文
   expect(safeText('a\u0007b\u001b[31m')).toBe('a�b�[31m')
   expect(safeText('if (isAdmin‮ ⁦) {')).toBe('if (isAdmin� �) {')
   expect(safeText('const 合計 = 1 // ふつうの行')).toBe('const 合計 = 1 // ふつうの行')
+})
+
+// ---- folding changes of whitespace, and the left side ----
+
+const rowsFrom = (...lines: string[]) => rowsOf(lines.join('\n'))
+
+test('foldWhitespace: 字下げだけ変わった行は文脈行になり、文面は新しい側、行番号は両側を持つ', () => {
+  const folded = foldWhitespace(rowsFrom('@@ -5,2 +5,3 @@', '-first()', '-second()', '+if (ok) {', '+  first()', '+\tsecond( )'))
+
+  expect(folded).toEqual([
+    { kind: 'hunk', text: '@@ -5,2 +5,3 @@' },
+    { kind: 'add', newLine: 5, text: 'if (ok) {' },
+    { kind: 'context', oldLine: 5, newLine: 6, text: '  first()' },
+    { kind: 'context', oldLine: 6, newLine: 7, text: '\tsecond( )' },
+  ])
+})
+
+test('foldWhitespace: 中身も変わった行は、削除行と追加行のまま残る', () => {
+  const rows = rowsFrom('@@ -1,2 +1,2 @@', ' keep', '-const a = 1', '+const a = 2')
+
+  expect(foldWhitespace(rows)).toEqual(rows)
+})
+
+test('foldWhitespace: 対にならなかった行は、削除行が先、追加行が後に並ぶ', () => {
+  // `a` pairs with ` a`; `b` and `x` are left over, after the pair.
+  expect(foldWhitespace(rowsFrom('@@ -1,2 +1,2 @@', '-a', '-b', '+ a', '+x'))).toEqual([
+    { kind: 'hunk', text: '@@ -1,2 +1,2 @@' },
+    { kind: 'context', oldLine: 1, newLine: 1, text: ' a' },
+    { kind: 'remove', oldLine: 2, text: 'b' },
+    { kind: 'add', newLine: 2, text: 'x' },
+  ])
+  // Left over ahead of a pair: the removed row first, then the added one, then the pair.
+  expect(foldWhitespace(rowsFrom('@@ -1,2 +1,2 @@', '-gone', '-same', '+come', '+ same')).map(row => row.kind)).toEqual([
+    'hunk',
+    'remove',
+    'add',
+    'context',
+  ])
+})
+
+test('foldWhitespace: 空白だけの変更しか無い hunk は出ず、全部そうなら空になる', () => {
+  const only = rowsFrom('@@ -1,2 +1,2 @@', ' keep', '-a', '+  a')
+  const real = rowsFrom('@@ -9,1 +9,1 @@', '-b', '+c')
+
+  expect(foldWhitespace(only)).toEqual([])
+  expect(foldWhitespace([...only, ...real])).toEqual(real)
+})
+
+test('foldWhitespace: 追加された空行は追加行のまま残る', () => {
+  const rows = rowsFrom('@@ -1,1 +1,2 @@', ' keep', '+')
+
+  expect(foldWhitespace(rows)).toEqual(rows)
+})
+
+test('hunkAt に LEFT を渡すと、変更前の行番号で削除行を探す', () => {
+  // src/a.ts: old line 11 is removed (`const old = 2`); new line 11 is another row of the same hunk.
+  expect(hunkAt(DIFF, 'src/a.ts', 11, 'LEFT')?.split('\n')[0]).toBe('@@ -10,3 +10,3 @@ function a() {')
+  // Old line 40 is a context row, and old line 99 is not in the diff: neither is a removed line.
+  expect(hunkAt(DIFF, 'src/a.ts', 40, 'LEFT')).toBe(undefined)
+  expect(hunkAt(DIFF, 'src/a.ts', 99, 'LEFT')).toBe(undefined)
+  // A deleted file has no new path: it goes by its old one.
+  expect(hunkAt(FIVE_KINDS, 'src/deleted.ts', 1, 'LEFT')).toBe(['@@ -1,1 +0,0 @@', '-gone'].join('\n'))
 })

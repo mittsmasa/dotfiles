@@ -103,6 +103,8 @@ function world(
     prompts: [] as string[],
     open: [] as unknown[],
     writes: [] as string[],
+    // What was last written to each path, as the write named it.
+    written: {} as Record<string, string>,
     argv: [] as (readonly string[])[],
   }
   // What GitHub says of the review requests: when each named me, and whether it answers at all.
@@ -176,6 +178,8 @@ function world(
   })
   on('fs.write', (_, e) => {
     calls.writes.push(e.path)
+    const text = Object.values(e as Record<string, unknown>).find(value => typeof value === 'string' && value !== e.path)
+    if (typeof text === 'string') calls.written[e.path] = text
 
     return { value: undefined }
   })
@@ -1630,9 +1634,9 @@ test('下読みの指摘はその行の直後に出て、行が差分に無い�
 
   const texts = (await ui.findAll({ type: 'Text' })).map(one => one.text)
   const at = (text: string) => texts.indexOf(text)
-  expect(at('行に付かない指摘')).toBeGreaterThan(-1)
+  expect(at('このページに無い指摘')).toBeGreaterThan(-1)
   // The finding off the diff stands above the first row; the one on line 11 between that row and the next.
-  expect(at('差分の外の行の話')).toBeGreaterThan(at('行に付かない指摘'))
+  expect(at('差分の外の行の話')).toBeGreaterThan(at('このページに無い指摘'))
   expect(at('差分の外の行の話')).toBeLessThan(at('@@ -10,3 +10,3 @@'))
   expect(at('合計の丸め方が表示側と合わない')).toBeGreaterThan(at('+ const b = 2'))
   expect(at('合計の丸め方が表示側と合わない')).toBeLessThan(at('  return a'))
@@ -1686,7 +1690,7 @@ test('行コメントは「やめる」で入力欄が消え、何も足され�
   await ui.unmount()
 })
 
-test('削除行は押せず、追加行と文脈行は押せる', async ($, on) => {
+test('追加行と文脈行に加えて、削除行も押せる。削除行のボタンは別の名前を持つ', async ($, on) => {
   const { clock } = world(on, [review()], {}, { [DIFF_PATH]: SCREEN_DIFF })
   await begin($, clock)
 
@@ -1694,9 +1698,9 @@ test('削除行は押せず、追加行と文脈行は押せる', async ($, on) 
   await ui.press({ key: FILE_ORDERS })
   await clock.settle()
 
-  // Right-side lines 10, 11 and 12 each take a press; the removed old line 11 has no Button.
+  // Right-side lines 10, 11 and 12, and the removed old line 11, which shares its number with a new line.
   const lines = (await ui.findAll({ type: 'Button' })).map(one => one.props.key).filter(key => String(key).startsWith('line:'))
-  expect(lines).toEqual(['line:10', 'line:11', 'line:12'])
+  expect(lines).toEqual(['line:10', 'line:L11', 'line:11', 'line:12'])
   await ui.unmount()
 })
 
@@ -1722,6 +1726,7 @@ test('確認中の PR と送信済みの PR では、差分は読めるが、ど
   await clock.settle()
   expect(await ui.find({ type: 'Text', text: /^\+ const b = 2$/ })).toBeDefined()
   expect(await ui.find({ key: 'line:11' })).toBe(undefined)
+  expect(await ui.find({ key: 'line:L11' })).toBe(undefined)
   // The request being confirmed is still there once back on the detail.
   await ui.press({ key: 'back-to-detail' })
   await clock.settle()
@@ -1739,6 +1744,229 @@ test('確認中の PR と送信済みの PR では、差分は読めるが、ど
   await clock.settle()
   expect(await ui.find({ type: 'Text', text: /^\+ const b = 2$/ })).toBeDefined()
   expect(await ui.find({ key: 'line:11' })).toBe(undefined)
+  await ui.unmount()
+})
+
+test('削除行の行番号を押してコメントを足すと、削除行の下に出て、同じ番号の追加行の下には出ない', async ($, on) => {
+  const { clock } = world(on, [review({ findings: [] })], {}, { [DIFF_PATH]: SCREEN_DIFF })
+  await begin($, clock)
+
+  const ui = await openDiffScreen($, clock)
+  await ui.press({ key: FILE_ORDERS })
+  await clock.settle()
+  await ui.press({ key: 'line:L11' })
+  await clock.settle()
+  expect((await ui.find({ key: 'line-comment' }))?.props.label).toBe('11 行目（削除行）へのコメント')
+  await ui.input({ key: 'line-comment', text: '消した理由を知りたいです', kind: 'submit' })
+  await clock.settle()
+
+  const texts = (await ui.findAll({ type: 'Text' })).map(one => one.text)
+  // Under the removed row, and above the added row that is also numbered 11.
+  expect(texts.indexOf('消した理由を知りたいです')).toBeGreaterThan(texts.indexOf('- const old = 2'))
+  expect(texts.indexOf('消した理由を知りたいです')).toBeLessThan(texts.indexOf('+ const b = 2'))
+  expect(texts.filter(text => text === '消した理由を知りたいです')).toHaveLength(1)
+
+  await ui.press({ key: 'back-to-detail' })
+  await clock.settle()
+  expect(await ui.find({ type: 'Text', text: /^削除行 · 自分$/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('削除行のコメントは、確認で行に付く数に入り、送る payload では LEFT と変更前の行番号になる', async ($, on) => {
+  const { clock, calls } = world(on, [review({ findings: [] })], {}, { [DIFF_PATH]: SCREEN_DIFF })
+  await begin($, clock)
+
+  const ui = await openDiffScreen($, clock)
+  await ui.press({ key: FILE_ORDERS })
+  await clock.settle()
+  await ui.press({ key: 'line:L11' })
+  await clock.settle()
+  await ui.input({ key: 'line-comment', text: '消した理由を知りたいです', kind: 'submit' })
+  await clock.settle()
+  await ui.press({ key: 'line:12' })
+  await clock.settle()
+  await ui.input({ key: 'line-comment', text: 'ここは右側です', kind: 'submit' })
+  await clock.settle()
+  await ui.press({ key: 'back-to-detail' })
+  await clock.settle()
+  await ui.press({ key: 'comment' })
+  await clock.settle()
+
+  expect(await ui.find({ type: 'Text', text: /インライン 2 件/ })).toBeDefined()
+  await ui.press({ key: 'send' })
+  await clock.settle()
+  const payload = JSON.parse(calls.written[`${DATA}/payloads/acme/widgets/12/${SHA}.json`] ?? '{}') as {
+    comments?: { path: string; line: number; side: string; body: string }[]
+  }
+  expect(payload.comments).toEqual([
+    { path: ORDERS, line: 11, side: 'LEFT', body: '消した理由を知りたいです' },
+    { path: ORDERS, line: 12, side: 'RIGHT', body: 'ここは右側です' },
+  ])
+  await ui.unmount()
+})
+
+// order-list.tsx: a block that only moved its indent (old 10-11 to new 11-12) inside a new wrapper,
+// and one line whose text changed. filter.ts: an indent changed and nothing else.
+const INDENT_DIFF = [
+  'diff --git a/x b/x',
+  `--- a/${ORDERS}`,
+  `+++ b/${ORDERS}`,
+  '@@ -9,4 +9,6 @@',
+  ' start',
+  '-first()',
+  '-second()',
+  '-third()',
+  '+if (ok) {',
+  '+  first()',
+  '+  second()',
+  '+  changed()',
+  '+}',
+  'diff --git a/y b/y',
+  `--- a/${FILTER}`,
+  `+++ b/${FILTER}`,
+  '@@ -1,1 +1,1 @@',
+  '-const a = 1',
+  '+  const a = 1',
+].join('\n')
+
+test('既定で、字下げだけ変わった行は変更として出ず、「空白の変更も表示」で出て、もう一度押すと隠れる', async ($, on) => {
+  const { clock } = world(on, [review({ findings: [] })], {}, { [DIFF_PATH]: INDENT_DIFF })
+  await begin($, clock)
+
+  const ui = await openDiffScreen($, clock)
+  await ui.press({ key: FILE_ORDERS })
+  await clock.settle()
+
+  const folded = (await ui.findAll({ type: 'Text' })).map(one => one.text)
+  // The two lines that only moved read as unchanged, in their new text; what changed stays.
+  expect(folded).toContain('    first()')
+  expect(folded).toContain('    second()')
+  expect(folded).not.toContain('- first()')
+  expect(folded).toContain('- third()')
+  expect(folded).toContain('+ if (ok) {')
+  expect(folded).toContain('+   changed()')
+  expect((await ui.find({ key: 'whitespace' }))?.props.label).toBe('空白の変更も表示')
+
+  await ui.press({ key: 'whitespace' })
+  await clock.settle()
+  const whole = (await ui.findAll({ type: 'Text' })).map(one => one.text)
+  expect(whole).toContain('- first()')
+  expect(whole).toContain('+   first()')
+  expect((await ui.find({ key: 'whitespace' }))?.props.label).toBe('空白の変更を隠す')
+
+  await ui.press({ key: 'whitespace' })
+  await clock.settle()
+  expect((await ui.findAll({ type: 'Text' })).map(one => one.text)).not.toContain('- first()')
+  await ui.unmount()
+})
+
+test('空白だけが変わったファイルでは、そう出て、表示に切り替えられる。別のファイルを開くと隠す表示に戻る', async ($, on) => {
+  const { clock } = world(on, [review({ findings: [] })], {}, { [DIFF_PATH]: INDENT_DIFF })
+  await begin($, clock)
+
+  const ui = await openDiffScreen($, clock)
+  await ui.press({ key: FILE_FILTER })
+  await clock.settle()
+  expect(await ui.find({ type: 'Text', text: /^空白だけの変更です。$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /const a = 1/ })).toBe(undefined)
+
+  await ui.press({ key: 'whitespace' })
+  await clock.settle()
+  expect(await ui.find({ type: 'Text', text: /^- const a = 1$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^空白だけの変更です。$/ })).toBe(undefined)
+
+  await ui.press({ key: FILE_ORDERS })
+  await clock.settle()
+  expect((await ui.findAll({ type: 'Text' })).map(one => one.text)).not.toContain('- first()')
+  expect((await ui.find({ key: 'whitespace' }))?.props.label).toBe('空白の変更も表示')
+  await ui.unmount()
+})
+
+test('空白の変更が無いファイルには、切り替えのボタンが出ない', async ($, on) => {
+  const { clock } = world(on, [review({ findings: [] })], {}, { [DIFF_PATH]: SCREEN_DIFF })
+  await begin($, clock)
+
+  const ui = await openDiffScreen($, clock)
+  await ui.press({ key: FILE_ORDERS })
+  await clock.settle()
+
+  expect(await ui.find({ type: 'Text', text: /^\+ const b = 2$/ })).toBeDefined()
+  expect(await ui.find({ key: 'whitespace' })).toBe(undefined)
+  await ui.unmount()
+})
+
+test('畳んだ表示の行から足したコメントは、確認で行に付く', async ($, on) => {
+  const { clock } = world(on, [review({ findings: [] })], {}, { [DIFF_PATH]: INDENT_DIFF })
+  await begin($, clock)
+
+  const ui = await openDiffScreen($, clock)
+  await ui.press({ key: FILE_ORDERS })
+  await clock.settle()
+  // New line 11 is `  first()`: unchanged on the folded screen, an added line in the saved diff.
+  await ui.press({ key: 'line:11' })
+  await clock.settle()
+  await ui.input({ key: 'line-comment', text: 'ここです', kind: 'submit' })
+  await clock.settle()
+  await ui.press({ key: 'back-to-detail' })
+  await clock.settle()
+  await ui.press({ key: 'comment' })
+  await clock.settle()
+
+  expect(await ui.find({ type: 'Text', text: /インライン 1 件/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /行に付く/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('ほかのページの指摘の「この行へ」を押すと、その行のページに移る', async ($, on) => {
+  const findings = [finding({ line: 250, reason: '3 ページ目の行の話' })]
+  const { clock } = world(on, [review({ findings })], {}, { [DIFF_PATH]: LONG_DIFF })
+  await begin($, clock)
+
+  const ui = await openDiffScreen($, clock)
+  await ui.press({ key: FILE_ORDERS })
+  await clock.settle()
+  expect(await ui.find({ type: 'Text', text: /^このページに無い指摘$/ })).toBeDefined()
+  await ui.press({ key: 'goto:f1' })
+  await clock.settle()
+
+  const texts = (await ui.findAll({ type: 'Text' })).map(one => one.text)
+  expect(texts.indexOf('3 ページ目の行の話')).toBeGreaterThan(texts.indexOf('+ line 250'))
+  expect(texts).not.toContain('このページに無い指摘')
+  expect(await ui.find({ key: 'goto:f1' })).toBe(undefined)
+  await ui.unmount()
+})
+
+test('畳んだ表示では、畳んだあとの最終ページから先に進めない', async ($, on) => {
+  // 150 lines that only moved their indent, then 60 added: 211 rows as saved, 61 once folded.
+  const moved = Array.from({ length: 150 }, (_, index) => `call${index}()`)
+  const diff = [
+    'diff --git a/x b/x',
+    `--- a/${ORDERS}`,
+    `+++ b/${ORDERS}`,
+    '@@ -1,150 +1,210 @@',
+    ...moved.map(text => `-${text}`),
+    ...moved.map(text => `+  ${text}`),
+    ...Array.from({ length: 60 }, (_, index) => `+added${index}()`),
+  ].join('\n')
+  const { clock } = world(on, [review({ findings: [] })], {}, { [DIFF_PATH]: diff })
+  await begin($, clock)
+
+  const ui = await openDiffScreen($, clock)
+  await ui.press({ key: FILE_ORDERS })
+  await clock.settle()
+  // Folded: the header, 150 unchanged rows and 60 added ones make three pages.
+  expect((await ui.findAll({ type: 'Text', text: /^1–100 行目 \/ 211 行$/ })).length).toBe(2)
+  await ui.press({ key: 'page-next:top' })
+  await clock.settle()
+  await ui.press({ key: 'page-next:top' })
+  await clock.settle()
+  expect(await ui.find({ type: 'Text', text: /^201–211 行目 \/ 211 行$/ })).toBeDefined()
+  expect(await ui.find({ key: 'page-next:top' })).toBe(undefined)
+
+  // As saved it is longer: 361 rows, four pages, and the fold's last page is not its last.
+  await ui.press({ key: 'whitespace' })
+  await clock.settle()
+  expect(await ui.find({ type: 'Text', text: /^1–100 行目 \/ 361 行$/ })).toBeDefined()
   await ui.unmount()
 })
 
@@ -1803,7 +2031,7 @@ test('ほかのページの行の指摘は、行番号を添えてファイル�
   await ui.press({ key: FILE_ORDERS })
   await clock.settle()
   const first = (await ui.findAll({ type: 'Text' })).map(one => one.text)
-  expect(first.indexOf('2 ページ目の行の話')).toBeGreaterThan(first.indexOf('行に付かない指摘'))
+  expect(first.indexOf('2 ページ目の行の話')).toBeGreaterThan(first.indexOf('このページに無い指摘'))
   expect(first.indexOf('2 ページ目の行の話')).toBeLessThan(first.indexOf('+ line 1'))
   expect(first).toContain('L150 · 下読み · blocker')
   expect(first).toContain('L1100 · 下読み · blocker')

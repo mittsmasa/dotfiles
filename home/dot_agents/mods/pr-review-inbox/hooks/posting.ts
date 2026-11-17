@@ -27,7 +27,7 @@ export function editComment(review: Review, id: string, comment: string): Review
   return comment.trim() === '' ? review : mapFinding(review, id, finding => ({ ...finding, comment }))
 }
 
-type Place = { file: string; line: number }
+type Place = { file: string; line: number; side?: 'LEFT' }
 
 /** `path:line`, or nothing; `'invalid'` for anything else. */
 export function parsePlace(text: string): Place | undefined | 'invalid' {
@@ -93,17 +93,62 @@ export function parseDiffLines(diff: string): Record<string, number[]> {
   return lines
 }
 
-/** Adopted findings, split by whether GitHub can hang them on a line of the diff. */
+/**
+ * The left-side line numbers a diff shows, per file: removed and context lines,
+ * counted in the file before the change. A deleted file goes by its old path.
+ */
+export function parseLeftLines(diff: string): Record<string, number[]> {
+  const lines: Record<string, number[]> = {}
+  let file: string | undefined
+  let old: string | undefined
+  let next = 0
+  let isInHunk = false
+  for (const row of diff.split('\n')) {
+    if (row.startsWith('diff --git ')) {
+      file = undefined
+      old = undefined
+      isInHunk = false
+    } else if (!isInHunk && row.startsWith('--- ')) {
+      old = pathOfRow(row, '--- a/')
+    } else if (!isInHunk && row.startsWith('+++ ')) {
+      file = pathOfRow(row, '+++ b/') ?? old
+    } else if (row.startsWith('@@ ')) {
+      const start = /^@@ -(\d+)/.exec(row)?.[1]
+      next = Number(start)
+      isInHunk = start !== undefined
+    } else if (isInHunk && file !== undefined) {
+      if (row.startsWith('-') || row.startsWith(' ')) {
+        ;(lines[file] ??= []).push(next)
+        next += 1
+      }
+    }
+  }
+
+  return lines
+}
+
+type Lines = Readonly<Record<string, readonly number[]>>
+
+/**
+ * Adopted findings, split by whether GitHub can hang them on a line of the
+ * diff. A finding on the left side is looked up among `leftLines`.
+ */
 export function splitForReview(
   review: Review,
-  diffLines: Readonly<Record<string, readonly number[]>>,
+  diffLines: Lines,
+  leftLines: Lines = {},
 ): { inline: Finding[]; inBody: Finding[] } {
   const adopted = review.findings.filter(finding => finding.isAdopted)
-  const isInline = (finding: Finding) =>
-    finding.file !== undefined &&
-    finding.line !== undefined &&
-    Object.hasOwn(diffLines, finding.file) &&
-    (diffLines[finding.file] as readonly number[]).includes(finding.line)
+  const isInline = (finding: Finding) => {
+    const lines = finding.side === 'LEFT' ? leftLines : diffLines
+
+    return (
+      finding.file !== undefined &&
+      finding.line !== undefined &&
+      Object.hasOwn(lines, finding.file) &&
+      (lines[finding.file] as readonly number[]).includes(finding.line)
+    )
+  }
 
   return { inline: adopted.filter(isInline), inBody: adopted.filter(finding => !isInline(finding)) }
 }
@@ -119,7 +164,8 @@ export function taggedComment(finding: Finding): string {
 /** How a finding reads in the review body: the severity, then its place, when it has one. */
 export function bodyLine(finding: Finding): string {
   if (finding.file === undefined) return taggedComment(finding)
-  const place = finding.line === undefined ? finding.file : `${finding.file}:${finding.line}`
+  const line = finding.line === undefined ? '' : `:${finding.line}${finding.side === 'LEFT' ? '（削除行）' : ''}`
+  const place = `${finding.file}${line}`
   const tag = finding.source === 'human' ? '' : `${severityTag(finding.severity)} `
 
   return `${tag}${place} ${finding.comment}`
@@ -136,8 +182,10 @@ export function buildReviewPayload(
   event: ReviewEvent,
   /** The person's own words on an approval, ahead of the findings; a comment review takes none. */
   comment?: string,
+  /** The left-side lines of the diff; left out, a finding on a removed line goes into the body. */
+  leftLines: Lines = {},
 ): ReviewPayload {
-  const { inline, inBody } = splitForReview(review, diffLines)
+  const { inline, inBody } = splitForReview(review, diffLines, leftLines)
   const lead = event === 'APPROVE' ? (comment ?? '').trim() : ''
   const text = [...(lead === '' ? [] : [lead]), ...inBody.map(bodyLine)].join('\n\n')
   // The API wants a body with COMMENT; an approval may go without one.
@@ -150,7 +198,7 @@ export function buildReviewPayload(
     comments: inline.map(finding => ({
       path: finding.file as string,
       line: finding.line as number,
-      side: 'RIGHT',
+      side: finding.side ?? 'RIGHT',
       body: taggedComment(finding),
     })),
   }

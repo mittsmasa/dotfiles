@@ -4,7 +4,7 @@ import { atom, update } from 'claude-code'
 import type { EngineInterface } from 'claude-code'
 
 import type { Inbox, Mode, Placement, Review, ReviewEvent } from '../types'
-import { fileDiff, filesOf, hunkAt, pageCountOf, rowsOf } from './diff'
+import { fileDiff, filesOf, hunkAt, pageCountOf, shownRows } from './diff'
 import type { RepoConfig } from './reviews'
 import { expandArgv, failureOf, outputsOf, resolveViewpoints, summarizeChecks, warningLine } from './profile'
 import type { CheckResult } from './profile'
@@ -18,6 +18,7 @@ import {
   headArgs,
   headOf,
   parseDiffLines,
+  parseLeftLines,
   setAllAdopted,
   postArgs,
   postedUrlOf,
@@ -253,7 +254,7 @@ export async function openFinding($: EngineInterface, config: Config, id: string
   if (inbox.openFindingId !== id || !path || finding?.file === undefined || finding.line === undefined) return
   const { file, line } = finding
   const diff = await $.fs.read(path).then(String, () => undefined)
-  const source = diff === undefined ? undefined : hunkAt(diff, file, line)
+  const source = diff === undefined ? undefined : hunkAt(diff, file, line, finding.side ?? 'RIGHT')
   if (source === undefined || source.length > HUNK_MAX_CHARS) return
   // The read took a while: only the finding still open, of the review still selected, gets it.
   await mutate($, state =>
@@ -339,7 +340,8 @@ export function turnDiffPage($: EngineInterface, by: number) {
   return mutate($, state => {
     const open = state.diffView?.open
     if (!state.diffView || !open) return state
-    const last = pageCountOf(rowsOf(open.source).length) - 1
+    // Counted as the screen draws the file: folded unless whitespace is shown.
+    const last = pageCountOf(shownRows(open.source, state.diffView.showsWhitespace === true).length) - 1
     const page = Math.min(last, Math.max(0, open.page + by))
 
     return {
@@ -350,8 +352,25 @@ export function turnDiffPage($: EngineInterface, by: number) {
   })
 }
 
-/** Starts a comment on a right-side line of the diff: only on a review that can still be sent. */
-export function startLineComment($: EngineInterface, file: string, line: number) {
+/** Shows the open file as saved, or folds its changes of whitespace again; either starts at its first page. */
+export function toggleWhitespace($: EngineInterface) {
+  return mutate($, state => {
+    const open = state.diffView?.open
+    if (!state.diffView || !open) return state
+
+    return {
+      ...state,
+      mode: isLineComment(state.mode) ? undefined : state.mode,
+      diffView: { ...state.diffView, open: { ...open, page: 0 }, showsWhitespace: state.diffView.showsWhitespace !== true },
+    }
+  })
+}
+
+/**
+ * Starts a comment on a line of the diff: only on a review that can still be
+ * sent. `LEFT` is a removed line, numbered in the file before the change.
+ */
+export function startLineComment($: EngineInterface, file: string, line: number, side?: 'LEFT') {
   return mutate($, state => {
     const review = state.reviews.find(one => one.key === state.selectedKey)
     const isBusy = isSending || state.mode?.kind === 'confirm' || state.mode?.kind === 'sending'
@@ -359,7 +378,7 @@ export function startLineComment($: EngineInterface, file: string, line: number)
 
     return !review || !isOpen(review) || isBusy || !isOnDiff
       ? state
-      : { ...state, mode: { kind: 'add', place: '', at: { file, line } } }
+      : { ...state, mode: { kind: 'add', place: '', at: { file, line, ...(side ? { side } : {}) } } }
   })
 }
 
@@ -924,14 +943,15 @@ export async function openConfirm($: EngineInterface, config: Config, key: strin
   const diff = await $.fs.read(path).then(String, () => undefined)
   if (diff === undefined) return refreshWithDiff($, config)
   const diffLines = parseDiffLines(diff)
+  const leftLines = parseLeftLines(diff)
   // The same split the payload is built from, so each finding's tag matches what is sent.
-  const { inline, inBody } = splitForReview(review, diffLines)
+  const { inline, inBody } = splitForReview(review, diffLines, leftLines)
   const placement: Placement = Object.fromEntries([
     ...inline.map(finding => [finding.id, 'inline'] as const),
     ...inBody.map(finding => [finding.id, 'body'] as const),
   ])
   const comment = inbox.approveComment ?? DEFAULT_APPROVE_COMMENT
-  await setMode($, { kind: 'confirm', payload: buildReviewPayload(review, diffLines, event, comment), placement })
+  await setMode($, { kind: 'confirm', payload: buildReviewPayload(review, diffLines, event, comment, leftLines), placement })
 }
 
 /** The approval with the comment as typed: the confirm screen shows it before anything goes. */

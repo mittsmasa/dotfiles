@@ -16,26 +16,39 @@ export function pathOfRow(row: string, prefix: '--- a/' | '+++ b/'): string | un
  * The hunk of `file` that shows right-side `line`, from its `@@` header to its
  * last row, or nothing when the diff shows no such line of that file.
  */
-export function hunkAt(diff: string, file: string, line: number): string | undefined {
+export function hunkAt(diff: string, file: string, line: number, side: 'RIGHT' | 'LEFT' = 'RIGHT'): string | undefined {
   let current: string | undefined
+  let old: string | undefined
   let hunk: string[] = []
   let next = 0
+  let oldNext = 0
   let isInHunk = false
   let isHit = false
   for (const row of diff.split('\n')) {
     if (row.startsWith('diff --git ') || row.startsWith('@@ ')) {
       if (isHit) break
-      const start = row.startsWith('@@ ') ? /^@@ -\d+(?:,\d+)? \+(\d+)/.exec(row)?.[1] : undefined
-      if (row.startsWith('diff --git ')) current = undefined
-      isInHunk = start !== undefined
+      const starts = row.startsWith('@@ ') ? /^@@ -(\d+)(?:,\d+)? \+(\d+)/.exec(row) : null
+      if (row.startsWith('diff --git ')) {
+        current = undefined
+        old = undefined
+      }
+      isInHunk = starts !== null
       hunk = isInHunk ? [row] : []
-      next = Number(start)
+      oldNext = Number(starts?.[1])
+      next = Number(starts?.[2])
+    } else if (!isInHunk && row.startsWith('--- ')) {
+      old = pathOfRow(row, '--- a/')
     } else if (!isInHunk && row.startsWith('+++ ')) {
-      current = pathOfRow(row, '+++ b/')
+      // A deleted file has no new path: it goes by its old one, as on the diff screen.
+      current = pathOfRow(row, '+++ b/') ?? old
     } else if (isInHunk && isHunkRow(row)) {
       hunk.push(row)
+      if (row.startsWith('-') || row.startsWith(' ')) {
+        if (side === 'LEFT' && row.startsWith('-') && current === file && oldNext === line) isHit = true
+        oldNext += 1
+      }
       if (row.startsWith('+') || row.startsWith(' ')) {
-        if (current === file && next === line) isHit = true
+        if (side === 'RIGHT' && current === file && next === line) isHit = true
         next += 1
       }
     }
@@ -146,6 +159,107 @@ export function rowsOf(source: string): DiffRow[] {
   }
 
   return rows
+}
+
+const bare = (text: string) => text.replace(/\s+/g, '')
+
+/**
+ * A run of removed rows and the run of added rows after it, with the rows that
+ * differ in whitespace alone paired, in order, into context rows: the text of
+ * the new side, the numbers of both. What is left keeps the diff's order,
+ * removed before added.
+ */
+function pairUp(
+  removed: readonly Extract<DiffRow, { kind: 'remove' }>[],
+  added: readonly Extract<DiffRow, { kind: 'add' }>[],
+): DiffRow[] {
+  // The longest common subsequence of the two runs, compared without whitespace.
+  const width = added.length + 1
+  const lengths = new Uint16Array((removed.length + 1) * width)
+  for (let r = removed.length - 1; r >= 0; r -= 1) {
+    for (let a = added.length - 1; a >= 0; a -= 1) {
+      lengths[r * width + a] =
+        bare((removed[r] as DiffRow).text) === bare((added[a] as DiffRow).text)
+          ? (lengths[(r + 1) * width + a + 1] as number) + 1
+          : Math.max(lengths[(r + 1) * width + a] as number, lengths[r * width + a + 1] as number)
+    }
+  }
+  // The pairs, walked from the front: between two pairs, the removed rows, then the added ones.
+  const out: DiffRow[] = []
+  let r = 0
+  let a = 0
+  let fromRemoved = 0
+  let fromAdded = 0
+  while (r < removed.length && a < added.length) {
+    const gone = removed[r] as Extract<DiffRow, { kind: 'remove' }>
+    const come = added[a] as Extract<DiffRow, { kind: 'add' }>
+    if (bare(gone.text) === bare(come.text)) {
+      out.push(...removed.slice(fromRemoved, r), ...added.slice(fromAdded, a))
+      out.push({ kind: 'context', oldLine: gone.oldLine, newLine: come.newLine, text: come.text })
+      r += 1
+      a += 1
+      fromRemoved = r
+      fromAdded = a
+    } else if ((lengths[(r + 1) * width + a] as number) >= (lengths[r * width + a + 1] as number)) {
+      r += 1
+    } else {
+      a += 1
+    }
+  }
+
+  return [...out, ...removed.slice(fromRemoved), ...added.slice(fromAdded)]
+}
+
+/**
+ * A file's rows with the changes of whitespace alone folded away, as GitHub's
+ * "Hide whitespace" reads: a line that only moved its indent is a context row,
+ * and a hunk left with no change is not shown. Line numbers and hunk headers
+ * are the saved diff's own, so a place picked here is a place in that diff.
+ */
+export function foldWhitespace(rows: readonly DiffRow[]): DiffRow[] {
+  const out: DiffRow[] = []
+  let header: DiffRow | undefined
+  let hunk: DiffRow[] = []
+  const flush = () => {
+    const folded: DiffRow[] = []
+    for (let index = 0; index < hunk.length; ) {
+      const row = hunk[index] as DiffRow
+      if (row.kind !== 'remove') {
+        folded.push(row)
+        index += 1
+        continue
+      }
+      const removed: Extract<DiffRow, { kind: 'remove' }>[] = []
+      const added: Extract<DiffRow, { kind: 'add' }>[] = []
+      for (let next = hunk[index]; next?.kind === 'remove'; next = hunk[index]) {
+        removed.push(next)
+        index += 1
+      }
+      for (let next = hunk[index]; next?.kind === 'add'; next = hunk[index]) {
+        added.push(next)
+        index += 1
+      }
+      folded.push(...pairUp(removed, added))
+    }
+    if (folded.some(row => row.kind === 'add' || row.kind === 'remove')) out.push(...(header ? [header] : []), ...folded)
+    hunk = []
+  }
+  for (const row of rows) {
+    if (row.kind === 'hunk') {
+      flush()
+      header = row
+    } else {
+      hunk.push(row)
+    }
+  }
+  flush()
+
+  return out
+}
+
+/** The rows of a file as the diff screen draws them: folded unless whitespace is asked for. */
+export function shownRows(source: string, showsWhitespace: boolean): DiffRow[] {
+  return showsWhitespace ? rowsOf(source) : foldWhitespace(rowsOf(source))
 }
 
 // Rows of a file drawn at once. The desktop app drew a file of 11 rows and

@@ -10,6 +10,7 @@ import {
   editComment,
   headArgs,
   parseDiffLines,
+  parseLeftLines,
   parsePlace,
   postArgs,
   toggleAdopted,
@@ -198,6 +199,69 @@ test('差分の行から足したコメントは、空白を含むパスでも�
   expect(buildReviewPayload(added.review, parseDiffLines(spaced), 'COMMENT').comments).toEqual([
     { path: 'foo bar.ts', line: 2, side: 'RIGHT', body: 'ここです' },
   ])
+})
+
+// src/a.ts: old lines 10 (context), 11 (removed), 12 (context). src/dead.ts is deleted: old lines 1-2.
+const LEFT_DIFF = [
+  'diff --git a/src/a.ts b/src/a.ts',
+  '--- a/src/a.ts',
+  '+++ b/src/a.ts',
+  '@@ -10,3 +10,3 @@',
+  ' const x = 1',
+  '-const old = 2',
+  '+const y = 2',
+  ' return x',
+  'diff --git a/src/dead.ts b/src/dead.ts',
+  'deleted file mode 100644',
+  '--- a/src/dead.ts',
+  '+++ /dev/null',
+  '@@ -1,2 +0,0 @@',
+  '-one',
+  '-two',
+].join('\n')
+
+test('parseLeftLines は、削除行と文脈行の変更前の行番号を数え、削除されたファイルは元のパスで引く', () => {
+  expect(parseLeftLines(LEFT_DIFF)).toEqual({ 'src/a.ts': [10, 11, 12], 'src/dead.ts': [1, 2] })
+})
+
+test('左側の指摘は side: LEFT と変更前の行番号で payload に入り、右側の指摘は RIGHT のまま', () => {
+  const both = review({
+    findings: [
+      finding({ id: 'h1', source: 'human', line: 11, side: 'LEFT', comment: '消した行の話' }),
+      finding({ id: 'h2', source: 'human', line: 11, comment: '足した行の話' }),
+      finding({ id: 'h3', source: 'human', file: 'src/dead.ts', line: 2, side: 'LEFT', comment: '消したファイルの話' }),
+    ],
+  })
+  const payload = buildReviewPayload(both, parseDiffLines(LEFT_DIFF), 'COMMENT', undefined, parseLeftLines(LEFT_DIFF))
+
+  expect(payload.comments).toEqual([
+    { path: 'src/a.ts', line: 11, side: 'LEFT', body: '消した行の話' },
+    { path: 'src/a.ts', line: 11, side: 'RIGHT', body: '足した行の話' },
+    { path: 'src/dead.ts', line: 2, side: 'LEFT', body: '消したファイルの話' },
+  ])
+  expect(payload.body).toBe('インラインコメントを参照してください。')
+})
+
+test('左側の行番号が diff に無い指摘は本文に回り、file:line（削除行）と書かれる', () => {
+  // Old line 99 is not in the diff; new line 99 being absent too is beside the point.
+  const off = review({ findings: [finding({ id: 'h1', source: 'human', line: 99, side: 'LEFT', comment: '外の行' })] })
+  const payload = buildReviewPayload(off, parseDiffLines(LEFT_DIFF), 'COMMENT', undefined, parseLeftLines(LEFT_DIFF))
+
+  expect(payload.comments).toEqual([])
+  expect(payload.body).toBe('src/a.ts:99（削除行） 外の行')
+})
+
+test('左側の行番号を渡さないと、左側の指摘は行があっても本文に回る', () => {
+  const left = review({ findings: [finding({ id: 'h1', source: 'human', line: 11, side: 'LEFT', comment: '消した行の話' })] })
+
+  expect(buildReviewPayload(left, parseDiffLines(LEFT_DIFF), 'COMMENT').comments).toEqual([])
+})
+
+test('差分の削除行から足したコメントは、左側の指摘になる', () => {
+  const added = addHumanComment(review({ findings: [] }), { place: { file: 'src/a.ts', line: 11, side: 'LEFT' }, body: 'ここです' })
+  if ('error' in added) throw new Error('expected the comment to be added')
+
+  expect(added.review.findings[0]).toMatchObject({ file: 'src/a.ts', line: 11, side: 'LEFT', source: 'human' })
 })
 
 test('a comment needs a body, and a place is path:line or nothing', async () => {
