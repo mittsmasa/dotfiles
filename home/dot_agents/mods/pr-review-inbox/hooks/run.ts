@@ -37,6 +37,8 @@ import {
   acceptedCopyOf,
   applyFetchResult,
   CONFIG_FILE,
+  conversationArgs,
+  conversationFile,
   criteriaFor,
   criteriaRoot,
   fail,
@@ -821,6 +823,7 @@ async function startReview($: EngineInterface, config: Config, review: Review) {
         resultPath,
         files: review.files,
         ...(hasPrevious ? { previousPath } : {}),
+        ...(hasConversation ? { conversationPath } : {}),
       }),
     })
     if (started.agentId === undefined) throw new Error('reviewer を起動できない')
