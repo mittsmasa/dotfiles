@@ -4,7 +4,7 @@ import { atom, update } from 'claude-code'
 import type { EngineInterface } from 'claude-code'
 
 import type { Inbox, Mode, Placement, Review, ReviewEvent } from '../types'
-import { hunkAt } from './diff'
+import { fileDiff, filesOf, hunkAt } from './diff'
 import type { RepoConfig } from './reviews'
 import { expandArgv, failureOf, outputsOf, resolveViewpoints, summarizeChecks, warningLine } from './profile'
 import type { CheckResult } from './profile'
@@ -212,6 +212,7 @@ export function select($: EngineInterface, key: string | undefined) {
           mode: undefined,
           openFindingId: undefined,
           openDiff: undefined,
+          diffView: undefined,
           isBodyOpen: false,
           approveComment: undefined,
         },
@@ -260,6 +261,92 @@ export async function openFinding($: EngineInterface, config: Config, id: string
   )
 }
 
+// ---- the diff screen ----
+
+// One file's diff drawn at once: a drawing holds 100,000 characters in all,
+// and each row adds its line numbers.
+const DIFF_FILE_LIMITS = { chars: 50_000, rows: 1000 }
+
+const isLineComment = (mode: Mode | undefined) => mode?.kind === 'add' && mode.at !== undefined
+
+/**
+ * Opens the diff screen of the selected review: reads its saved diff and lists
+ * the files. A request being confirmed or sent stays up; any other mode ends.
+ */
+export async function openDiffView($: EngineInterface, config: Config, key: string) {
+  const review = inbox.reviews.find(one => one.key === key)
+  const path = review && diffPathOf(config, review)
+  if (!path || inbox.selectedKey !== key) return
+  const diff = await $.fs.read(path).then(String, () => undefined)
+  if (diff === undefined) return refreshWithDiff($, config)
+  const files = filesOf(diff)
+  // The read took a while: only the review still selected gets its screen.
+  await mutate($, state => {
+    const isConfirming = state.mode?.kind === 'confirm' || state.mode?.kind === 'sending'
+
+    return state.selectedKey === key
+      ? { ...state, mode: isConfirming ? state.mode : undefined, diffView: { key, files } }
+      : state
+  })
+}
+
+/** Back to the detail. A comment being written on a line ends with the screen it was on. */
+export function closeDiffView($: EngineInterface) {
+  wantedDiffFile = undefined
+
+  return mutate($, state => ({
+    ...state,
+    diffView: undefined,
+    mode: isLineComment(state.mode) ? undefined : state.mode,
+  }))
+}
+
+// The file last asked for on the diff screen: a slower read of another must not land.
+let wantedDiffFile: string | undefined
+
+/** Opens one file of the diff screen, closing the one that was open; the open one closes. */
+export async function openDiffFile($: EngineInterface, config: Config, path: string) {
+  const view = inbox.diffView
+  if (!view || view.key !== inbox.selectedKey) return
+  const key = view.key
+  const review = inbox.reviews.find(one => one.key === key)
+  const diffPath = review && diffPathOf(config, review)
+  if (!diffPath) return
+  const isClosing = view.open?.path === path
+  wantedDiffFile = isClosing ? undefined : path
+  await mutate($, state =>
+    state.diffView?.key === key
+      ? {
+          ...state,
+          mode: isLineComment(state.mode) ? undefined : state.mode,
+          diffView: { key, files: state.diffView.files },
+        }
+      : state,
+  )
+  if (isClosing) return
+  const diff = await $.fs.read(diffPath).then(String, () => undefined)
+  if (diff === undefined) return
+  const open = { path, ...fileDiff(diff, path, DIFF_FILE_LIMITS) }
+  await mutate($, state =>
+    state.selectedKey === key && state.diffView?.key === key && wantedDiffFile === path
+      ? { ...state, diffView: { ...state.diffView, open } }
+      : state,
+  )
+}
+
+/** Starts a comment on a right-side line of the diff: only on a review that can still be sent. */
+export function startLineComment($: EngineInterface, file: string, line: number) {
+  return mutate($, state => {
+    const review = state.reviews.find(one => one.key === state.selectedKey)
+    const isBusy = isSending || state.mode?.kind === 'confirm' || state.mode?.kind === 'sending'
+    const isOnDiff = state.diffView !== undefined && state.diffView.key === state.selectedKey
+
+    return !review || !isOpen(review) || isBusy || !isOnDiff
+      ? state
+      : { ...state, mode: { kind: 'add', place: '', at: { file, line } } }
+  })
+}
+
 export function setMode($: EngineInterface, mode: Mode | undefined) {
   return mutate($, state => (isSending ? state : { ...state, mode }))
 }
@@ -269,6 +356,7 @@ export async function markRead($: EngineInterface, config: Config, key: string) 
     ...state,
     selectedKey: undefined,
     openDiff: undefined,
+    diffView: undefined,
     reviews: state.reviews.map(review => (review.key === key ? { ...review, isRead: true } : review)),
   }))
   // The checkout was kept for a deep dive; a reviewer still at work keeps its own.
@@ -794,7 +882,8 @@ export async function addComment($: EngineInterface, key: string, body: string) 
   const review = inbox.reviews.find(one => one.key === key)
   const mode = inbox.mode
   if (!review || !isOpen(review) || mode?.kind !== 'add') return
-  const added = addHumanComment(review, { place: mode.place, body })
+  // A line pressed on the diff is the place; the field of the detail's form is not read then.
+  const added = addHumanComment(review, { place: mode.at ?? mode.place, body })
   if ('error' in added) return setMode($, { ...mode, error: added.error })
   await patch($, key, () => added.review)
   await setMode($, undefined)
@@ -893,6 +982,7 @@ export async function send($: EngineInterface, config: Config, key: string) {
     ...(isDone
       ? {
           selectedKey: undefined,
+          diffView: undefined,
           reviews: state.reviews.map(one => (one.key === key ? { ...one, isRead: true } : one)),
         }
       : {}),
