@@ -782,6 +782,21 @@ async function startReview($: EngineInterface, config: Config, review: Review) {
         () => true,
         () => false,
       ))
+    // The comments and checks as they stand now, in the same folder. A failure here is only noted:
+    // the review goes on without them.
+    const conversationPath = `${scanDir}/conversation.json`
+    const conversationArgv = conversationArgs(review.key)
+    const conversationRun = conversationArgv ? await run($, conversationArgv, config).catch(() => undefined) : undefined
+    const conversation = conversationRun?.exitCode === 0 ? conversationFile(conversationRun.stdout) : undefined
+    const hasConversation =
+      typeof conversation === 'string' &&
+      (await $.fs.write(conversationPath, conversation).then(
+        () => true,
+        () => false,
+      ))
+    if (conversation === undefined || (typeof conversation === 'string' && !hasConversation)) {
+      skipped.push('PR の会話と checks（取得失敗）')
+    }
     const allowedRoots = [
       worktreeReal,
       await realPath($, scanDir),
