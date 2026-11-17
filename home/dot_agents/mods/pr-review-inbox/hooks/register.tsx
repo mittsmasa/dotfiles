@@ -452,12 +452,14 @@ export const register: Register = (on, options) => {
                   onPress={() => void startLineComment($, path, newLine)}
                 />
               ) : (
-                <Text mono dimColor>
+                <Text mono size="caption" dimColor>
                   {String(newLine ?? (row.kind === 'remove' ? row.oldLine : ''))}
                 </Text>
               )}
             </Box>
-            <Text mono>{text}</Text>
+            <Text mono size="caption">
+              {text}
+            </Text>
           </Box>,
           ...(newLine === undefined ? [] : review.findings.filter(one => one.file === path && one.line === newLine).map(note)),
           isWriting && mode?.kind === 'add' && (
