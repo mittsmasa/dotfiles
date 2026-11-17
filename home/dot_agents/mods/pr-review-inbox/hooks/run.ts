@@ -3,7 +3,7 @@
 import { atom, update } from 'claude-code'
 import type { EngineInterface } from 'claude-code'
 
-import type { Inbox, Mode, Placement, Review, ReviewEvent } from '../types'
+import type { History, Inbox, Mode, Placement, Review, ReviewEvent } from '../types'
 import { fileDiff, filesOf, hunkAt, pageCountOf, shownRows } from './diff'
 import type { RepoConfig } from './reviews'
 import { expandArgv, failureOf, outputsOf, resolveViewpoints, summarizeChecks, warningLine } from './profile'
@@ -30,6 +30,10 @@ import {
   isCheckoutSafe,
   guardOf,
   acceptReviewerOutput,
+  historyArgs,
+  historyOf,
+  previousFile,
+  withHistories,
   acceptedCopyOf,
   applyFetchResult,
   CONFIG_FILE,
@@ -564,8 +568,16 @@ export async function fetchNow($: EngineInterface, config: Config) {
       if (requestedAt === undefined) throw new Error(firstLine(asked.stderr) || 'レビュー依頼の履歴を読めませんでした')
       if (requestedAt !== null && Date.parse(requestedAt) > Date.parse(sentAt)) reRequested.set(view.key, headSha)
     }
-    const next = applyFetchResult({ search, views }, stored, new Set(reRequested.keys()))
-    if (next === stored) throw new Error(firstLine(search.stderr) || '取得結果を読めませんでした')
+    const fetched = applyFetchResult({ search, views }, stored, new Set(reRequested.keys()))
+    if (fetched === stored) throw new Error(firstLine(search.stderr) || '取得結果を読めませんでした')
+    // My earlier reviews of each: one that cannot be read keeps what was held, and fails nothing.
+    const histories = new Map<string, History | null | undefined>()
+    for (const review of fetched) {
+      const argv = historyArgs(review.key)
+      const asked = argv ? await run($, argv, config).catch(() => undefined) : undefined
+      histories.set(review.key, asked?.exitCode === 0 ? historyOf(asked.stdout) : undefined)
+    }
+    const next = withHistories(fetched, histories, stored)
     // Only once the fetch is good: a failed one leaves the saved results too.
     for (const [key, headSha] of reRequested) await dropSaved($, config, { key, headSha })
     const fetchedAt = (await now($)).toISOString()
@@ -760,6 +772,16 @@ async function startReview($: EngineInterface, config: Config, review: Review) {
     const guideText = await readNamed($, guideSource.kind === 'file' ? guideSource.path : undefined, 'review.guide', skipped)
     const commentStyle = await readNamed($, stylePath, 'review.commentStyle', skipped)
     const guide = guideText !== undefined ? { kind: 'text' as const, text: guideText } : { kind: 'generic' as const }
+    // The points I raised before, for the reviewer to check against today's code. The folder
+    // it is written to is one the reviewer already reads.
+    const previous = previousFile(review.history)
+    const previousPath = `${scanDir}/previous.json`
+    const hasPrevious =
+      previous !== undefined &&
+      (await $.fs.write(previousPath, previous).then(
+        () => true,
+        () => false,
+      ))
     const allowedRoots = [
       worktreeReal,
       await realPath($, scanDir),
@@ -783,6 +805,7 @@ async function startReview($: EngineInterface, config: Config, review: Review) {
         ...(commentStyle === undefined ? {} : { commentStyle }),
         resultPath,
         files: review.files,
+        ...(hasPrevious ? { previousPath } : {}),
       }),
     })
     if (started.agentId === undefined) throw new Error('reviewer を起動できない')
@@ -929,7 +952,9 @@ export async function requeue($: EngineInterface, config: Config, key: string) {
   if (open) await dropSaved($, config, open)
   if (open) await removeWorktree($, config, key)
   await patch($, key, review =>
-    isOpen(review) ? { ...review, status: 'queued', findings: [], humanReview: [], checked: [], skipped: [] } : review,
+    isOpen(review)
+      ? { ...review, status: 'queued', findings: [], followups: undefined, humanReview: [], checked: [], skipped: [] }
+      : review,
   )
   await pump($, config)
 }

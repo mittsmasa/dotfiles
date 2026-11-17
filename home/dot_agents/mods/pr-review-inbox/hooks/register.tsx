@@ -1,7 +1,7 @@
 import { atom, read } from 'claude-code'
 import type { EngineInterface, Register, RenderSurface } from 'claude-code'
 
-import type { Finding, Inbox, Review, ReviewPayload } from '../types'
+import type { Finding, Inbox, PastThread, Review, ReviewPayload } from '../types'
 import { DIFF_PAGE_ROWS, pageCountOf, rowsOf, safeText, shownRows } from './diff'
 import type { DiffRow } from './diff'
 import { DEFAULT_APPROVE_COMMENT, actionsOf } from './posting'
@@ -12,12 +12,16 @@ import {
   clockText,
   countsText,
   deepDivePrompt,
+  historyText,
   isDue,
   isGithubUrl,
   linesText,
   rowLabel,
   shortName,
   splitPlace,
+  threadTags,
+  threadTone,
+  threadsHeading,
   toneOf,
 } from './reviews'
 import {
@@ -74,6 +78,8 @@ const LINE_NUMBER_WIDTH = 6
 // so the tint is a thin wash the text of either theme reads through.
 const TINT = { add: '#2ea04326', remove: '#f8514926' } as const
 const SEVERITIES = ['blocker', 'recommended', 'suggestion'] as const
+// A text cut to a few lines' worth, with the mark of what was left out.
+const clip = (text: string, max: number) => (text.length > max ? `${text.slice(0, max)}…` : text)
 // Leading spaces drawn as no-break spaces: a surface that folds spaces keeps the indent.
 const indented = (text: string) => text.replace(/^ +/, spaces => '\u00a0'.repeat(spaces.length))
 
@@ -616,6 +622,37 @@ export const register: Register = (on, options) => {
       )
     }
 
+    // ---- one thread I opened in an earlier review: what GitHub knows, and what the pre-read made of it ----
+    // Its texts are the pull request's: drawn as plain text, cut short, never as markdown or a link.
+    const pastThread = (review: Review, one: PastThread) => {
+      const followup = review.followups?.find(each => each.id === one.id)
+      const place = splitPlace(one.path, one.line ?? one.originalLine)
+      const reply = one.replies[0]
+
+      return (
+        <Box key={`thread:${one.id}`} flexDirection="row" gap="sm" marginTop="sm">
+          {bar(threadTone(one, followup))}
+          <Box flexDirection="column" flexGrow={1}>
+            <Box flexDirection="row" justifyContent="space-between" gap="sm">
+              <Text mono weight="medium">
+                {place.name}
+              </Text>
+              <Text size="caption" dimColor>
+                {threadTags(one, followup).join(' · ')}
+              </Text>
+            </Box>
+            <Text>{clip(one.comment, 160)}</Text>
+            {followup !== undefined && followup.note !== '' && <Text size="caption">下読み: {followup.note}</Text>}
+            {reply !== undefined && (
+              <Text size="caption" dimColor>
+                返信: {clip(reply, 120)}
+              </Text>
+            )}
+          </Box>
+        </Box>
+      )
+    }
+
     const detail = (review: Review) => {
       const actions = actionsOf(review, state.withDiff.includes(review.key))
       const isSendable = review.status === 'done' && review.postedAt === undefined
@@ -665,6 +702,11 @@ export const register: Register = (on, options) => {
               </Text>
             </Box>
           </Box>
+          {review.history && (
+            <Text key="history" size="caption" dimColor>
+              {historyText(review.history, offset)}
+            </Text>
+          )}
           {heading('概要')}
           {bodyLines.length === 0 ? (
             <Text dimColor>本文なし</Text>
@@ -683,6 +725,13 @@ export const register: Register = (on, options) => {
                 onPress={() => void toggleBody($)}
               />
             </Box>
+          )}
+          {review.history && review.history.threads.length > 0 && heading(threadsHeading(review.history, review.followups ?? []))}
+          {review.history?.threads.map(one => pastThread(review, one))}
+          {review.history?.more !== undefined && (
+            <Text size="caption" dimColor>
+              ほか {review.history.more} 件
+            </Text>
           )}
           {review.status === 'done' &&
             heading(
@@ -814,6 +863,8 @@ export const register: Register = (on, options) => {
                 </Text>
               </Button>
               <Text size="caption" color={tone}>
+                {/* A pull request I reviewed before comes back for another look. */}
+                {review.history && review.postedAt === undefined ? '再レビュー · ' : ''}
                 {rowLabel(review, offset)}
               </Text>
             </Box>

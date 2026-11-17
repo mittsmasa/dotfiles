@@ -22,6 +22,38 @@ export type Finding = {
 
 export type Verdict = 'needs-fix' | 'comments' | 'clean'
 
+/**
+ * One review thread I opened on the pull request, as GitHub holds it. Its
+ * texts are the pull request's: drawn as plain text, never followed.
+ */
+export type PastThread = {
+  /** GitHub's node id of the thread. */
+  id: string
+  path: string
+  /** The line today; absent once the code under the thread changed. */
+  line?: number
+  originalLine?: number
+  isResolved: boolean
+  isOutdated: boolean
+  /** My first comment, on one line. */
+  comment: string
+  /** What others answered, newest first. */
+  replies: string[]
+}
+
+/** My earlier reviews of a pull request; held only where there is at least one. */
+export type History = {
+  count: number
+  lastReviewedAt: string
+  lastState: 'COMMENTED' | 'APPROVED' | 'CHANGES_REQUESTED' | 'DISMISSED'
+  threads: PastThread[]
+  /** Threads of mine beyond the ones held. */
+  more?: number
+}
+
+/** The pre-read's view of one earlier thread: whether today's code answers it. */
+export type Followup = { id: string; state: 'addressed' | 'open' | 'unclear'; note: string }
+
 export type Review = {
   /** `owner/repo#123` */
   key: string
@@ -43,6 +75,10 @@ export type Review = {
   verdict?: Verdict
   findings: Finding[]
   humanReview: string[]
+  /** My earlier reviews, as the last fetch read them; absent when I have not reviewed it. */
+  history?: History
+  /** The pre-read's view of the earlier threads; absent when it was given none. */
+  followups?: Followup[]
   /** What the reviewer verified; absent on a review kept from before it was asked for. */
   checked?: string[]
   skipped: string[]
