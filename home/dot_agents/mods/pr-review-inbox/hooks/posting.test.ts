@@ -187,6 +187,19 @@ test('a comment a person adds lands inline with a place on the diff, in the body
   expect(loose.review.findings[0]?.source).toBe('human')
 })
 
+test('差分の行から足したコメントは、空白を含むパスでも行コメントになり、path にタブが残らない', async () => {
+  // git ends a path that holds a space with a tab.
+  const spaced = ['diff --git a/foo bar.ts b/foo bar.ts', '--- a/foo bar.ts\t', '+++ b/foo bar.ts\t', '@@ -1,1 +1,2 @@', ' a', '+b'].join('\n')
+  const added = addHumanComment(review({ findings: [] }), { place: { file: 'foo bar.ts', line: 2 }, body: 'ここです' })
+  if ('error' in added) throw new Error('expected the comment to be added')
+
+  expect(added.review.findings[0]).toMatchObject({ file: 'foo bar.ts', line: 2, source: 'human' })
+  expect(parseDiffLines(spaced)).toEqual({ 'foo bar.ts': [1, 2] })
+  expect(buildReviewPayload(added.review, parseDiffLines(spaced), 'COMMENT').comments).toEqual([
+    { path: 'foo bar.ts', line: 2, side: 'RIGHT', body: 'ここです' },
+  ])
+})
+
 test('a comment needs a body, and a place is path:line or nothing', async () => {
   expect(addHumanComment(review(), { place: '', body: '  ' })).toEqual({ error: '本文を入力してください' })
   expect(addHumanComment(review(), { place: 'src/a.ts', body: 'x' })).toEqual({
