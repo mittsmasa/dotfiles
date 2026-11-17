@@ -57,7 +57,7 @@ export type ReviewEvent = 'COMMENT' | 'APPROVE'
 /** What the selected review's detail is doing besides listing findings. */
 export type Mode =
   | { kind: 'edit'; id: string }
-  | { kind: 'add'; place: string; error?: string }
+  | { kind: 'add'; place: string; at?: { file: string; line: number }; error?: string }
   | { kind: 'confirm'; payload: ReviewPayload; placement: Placement; error?: string }
   | { kind: 'sending'; payload: ReviewPayload; placement: Placement }
 
