@@ -23,6 +23,9 @@
 .claude/skills/partner-prop-invoice
 .claude/sounds/ref-whitecul.wav
 
+# pr-review-inbox の設定 - 対象 org と clone の場所を書くので公開しない
+.config/pr-review-inbox/config.json
+
 # workflow の md 成果物 - 実データなので同期しない
 .claude/workflow
 
