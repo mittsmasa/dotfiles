@@ -1,6 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
 import {
+  checksToRun,
   expandArgv,
   failureOf,
   globToRegExp,
