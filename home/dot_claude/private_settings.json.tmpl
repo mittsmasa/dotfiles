@@ -250,6 +250,11 @@
             "type": "command",
             "command": "bash ~/.claude/scripts/npx-redirect-hook.sh",
             "if": "Bash(npx *)"
+          },
+          {
+            "type": "command",
+            "command": "~/.local/share/mise/installs/node/global/bin/node ~/.agents/mods/pr-review-inbox/tools/self-review.ts gate",
+            "if": "Bash(gh pr create *)"
           }
         ]
       }
