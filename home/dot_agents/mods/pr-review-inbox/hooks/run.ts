@@ -6,7 +6,16 @@ import type { EngineInterface } from 'claude-code'
 import type { History, Inbox, Mode, Placement, Review, ReviewEvent } from '../types'
 import { fileDiff, filesOf, hunkAt, pageCountOf, shownRows } from './diff'
 import type { RepoConfig } from './reviews'
-import { expandArgv, failureOf, outputsOf, resolveViewpoints, summarizeChecks, warningLine } from './profile'
+import {
+  checksToRun,
+  expandArgv,
+  failureOf,
+  outputsOf,
+  resolveViewpoints,
+  summarizeChecks,
+  takesFiles,
+  warningLine,
+} from './profile'
 import type { CheckResult } from './profile'
 import {
   DEFAULT_APPROVE_COMMENT,
@@ -630,8 +639,9 @@ export async function retry($: EngineInterface, config: Config, key: string) {
 }
 
 /**
- * Runs the checks the config sets over the changed scripts; with none set,
- * nothing runs and nothing is reported as left out. A check fails only when it
+ * Runs the checks the config sets; with none set, nothing runs and nothing is
+ * reported as left out. Without a changed script to check, only the checks
+ * that are not handed the scripts run (`checksToRun`). A check fails only when it
  * cannot start, times out, or leaves an output it names missing: a lint that
  * finds something exits non-zero and its output is the point. `outputs` is
  * absent when nothing ran at all; the reviewer then gets no output directory.
@@ -646,15 +656,17 @@ async function mechanicalChecks(
   const { checks } = config.profile
   if (checks.length === 0) return { skipped: [] }
   const targets: string[] = []
-  for (const file of review.files.filter(isScript).slice(0, 200)) {
+  const scripts = checks.some(takesFiles) ? review.files.filter(isScript).slice(0, 200) : []
+  for (const file of scripts) {
     const stat = await $.fs.stat(`${worktreeReal}/${file}`, { resolve: true }).catch(() => undefined)
     // A link may point outside the checkout; only plain files inside it are scanned.
     const isInside = stat?.realPath?.startsWith(worktreeReal + '/') === true
     if (stat && stat.kind === 'file' && !stat.isLink && isInside) targets.push(stat.realPath as string)
   }
-  if (targets.length === 0) return { skipped: ['機械チェック（対象の JS / TS ファイルなし）'] }
+  const plan = checksToRun(checks, targets.length)
+  if (plan.run.length === 0) return { skipped: plan.skipped }
   const results: CheckResult[] = []
-  for (const check of checks) {
+  for (const check of plan.run) {
     const written = outputsOf(check).map(name => `${scanDir}/${name}`)
     // A retry at the same head must not read what an earlier run left.
     if (written.length > 0) await $.process.run(['rm', '-f', ...written])
@@ -671,7 +683,9 @@ async function mechanicalChecks(
     }
   }
 
-  return summarizeChecks(results)
+  const summary = summarizeChecks(results)
+
+  return { ...summary, skipped: [...plan.skipped, ...summary.skipped] }
 }
 
 /** A file the config names, read whole; what could not be read goes to `skipped`. */
