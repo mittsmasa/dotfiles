@@ -58,7 +58,7 @@ org 内の依頼をすべて拾い、clone は `~/work/repo/<リポジトリ名>
 "viewpoints": [
   "~/.agents/skills/testable-design/SKILL.md",
   "~/.agents/skills/testable-design/references/*.md",
-  "~/.claude/skills/partner-prop-review/**/*.md"
+  "~/.claude/skills/team-review/**/*.md"
 ]
 ```
 
