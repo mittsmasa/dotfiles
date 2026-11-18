@@ -14,6 +14,7 @@ uv = "0.13.7"
 age = "latest"
 "github:jdx/fnox" = "1.48.0"
 "github:yusukebe/ax" = { version = "0.1.25", exe = "ax" }
+zizmor = "1.32.0"
 
 [settings]
 idiomatic_version_file_enable_tools = ["node"]
