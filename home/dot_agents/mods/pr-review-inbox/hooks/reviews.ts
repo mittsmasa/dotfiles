@@ -981,10 +981,18 @@ export function clockText(iso: string, utcOffsetMinutes: number): string {
 
 export const isGithubUrl = (url: string) => /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/\d+$/.test(url)
 
+/**
+ * The deep dive's share of CONVENTIONS_GUIDE: the session reads the code
+ * around the change, and copies its look unless told otherwise.
+ */
+const DEEP_DIVE_CONVENTIONS =
+  '指摘と直し方は、既存コードの書き方ではなく、リポジトリに書かれた規約（CLAUDE.md / AGENTS.md とそこから辿れるファイル、tests/README.md、変更ファイル近くの README）に合わせる。規約に反する既存コードは前例であってルールではなく、それを写す直し方は出さない'
+
 /** Holds the URL and nothing a pull request's author wrote. */
 export function deepDivePrompt(url: string, context: { worktree?: string; resultPath?: string } = {}): string {
   const ask = `${url} を別セッションで詳しくレビューして`
   const more = [
+    DEEP_DIVE_CONVENTIONS,
     ...(context.worktree === undefined
       ? []
       : [
