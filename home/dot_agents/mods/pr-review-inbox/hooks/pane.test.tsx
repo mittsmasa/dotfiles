@@ -583,7 +583,7 @@ test('下読みの worktree が残っていれば、深掘りの依頼文にそ�
   expect(surface.filled).toEqual([`${DEEP_DIVE_ASK}。${DEEP_DIVE_CHECKOUT}。${DEEP_DIVE_RESULT}。`])
 })
 
-test('worktree も結果も無い PR では、深掘りの依頼文は URL だけになる', async ($, on) => {
+test('worktree も結果も無い PR では、深掘りの依頼文は URL と規約の一文だけになる', async ($, on) => {
   const { clock, surface, disk } = world(on, [review(sized(['web/src/a.tsx']))])
   // Neither its checkout nor its accepted result is on disk.
   disk.gone.push('/Users/me/src/widgets/.claude/worktrees/review-12', `${SAVED}.accepted.json`)
@@ -591,7 +591,7 @@ test('worktree も結果も無い PR では、深掘りの依頼文は URL だ�
 
   await pressDeepDive($, clock)
 
-  expect(surface.filled).toEqual([DEEP_DIVE_ASK])
+  expect(surface.filled).toEqual([`${DEEP_DIVE_ASK}。`])
 })
 
 test('セッションの設定や指示のファイルを変える PR では、worktree の場所を渡さない', async ($, on) => {
