@@ -288,6 +288,24 @@ export function failureOf(ran: { exitCode: number; stderr: string }, missing: re
 /** The files a check writes into the output directory, in order. */
 export const outputsOf = (check: Check) => [...(check.stdout ? [check.stdout] : []), ...check.outputs]
 
+/** Whether a check is handed the changed scripts: only `{files}` and `{relativeFiles}` do that. */
+export const takesFiles = (check: Check) => check.argv.some(arg => arg === '{files}' || arg === '{relativeFiles}')
+
+/**
+ * The checks to run when `scriptCount` changed scripts can be checked. With
+ * none, a check handed the scripts has nothing to read and is left out; one
+ * that reads the checkout itself (`{worktree}`) still runs, since a PR that
+ * touches only workflows or Dockerfiles is where it matters most.
+ */
+export function checksToRun(checks: readonly Check[], scriptCount: number): { run: Check[]; skipped: string[] } {
+  if (scriptCount > 0) return { run: [...checks], skipped: [] }
+
+  return {
+    run: checks.filter(check => !takesFiles(check)),
+    skipped: checks.filter(check => takesFiles(check)).map(check => `${check.name}（対象の JS / TS ファイルなし）`),
+  }
+}
+
 /**
  * A failed check is named in `skipped` and its output left out of what the
  * prompt lists; the output directory still goes to the reviewer for the rest.
