@@ -14,6 +14,27 @@ description: "ソフトウェア開発で、第三者のコードを取り込む
 | 依存の追加・更新、パッケージマネージャ設定、拡張機能、hook や devcontainer の追加 | `references/supply-chain.md` |
 | CI/CD workflow、署名、公開・デプロイ、認証情報と環境変数 | `references/delivery-and-credentials.md` |
 | Dockerfile、コンテナ、ランタイム更新、AI エージェントの設定・組み込み | `references/platform-and-agents.md` |
+| ツールで先に候補を洗い出す（`secure-scan`、zizmor、gitleaks） | `references/mechanical-checks.md` |
+
+## 呼び出したら最初に: 機械チェックを走らせる
+
+ファイルを書く・直す・レビューする作業でこの skill を呼び出したら、ファイルを読む前に `secure-scan` を走らせる。この会話で同じ対象に走らせ、その後に対象のファイルを変えていなければ、走らせずに前回の `findings.json` を読む。
+
+```bash
+if root="$(git rev-parse --show-toplevel 2>/dev/null)"; then out="$root/.workflow/secure-scan"; else root="$PWD"; out="$TMPDIR/secure-scan"; fi
+if node -e 'process.exit(Number(process.versions.node.split(".")[0]) < 24 ? 1 : 0)'; then
+  node ~/.agents/skills/secure-dev/tools/bin/secure-scan.ts "$root" [paths...] --out "$out"
+else
+  echo "secure-scan: Node 24 未満なので省く"
+fi
+```
+
+- `[paths...]` には今回の変更や依頼が触れるディレクトリを渡す。依存やクールダウンに触れる作業では省き、リポジトリ全体を見る
+- 標準出力はルールごとの件数だけ。`$out/findings.json` から、今回触れるファイル（`git diff --name-only` など）の結果を先に読み、その行の前後だけを開いて要対応かを判定する。既存の問題は分けて報告する
+- `skipped` に出たツール（zizmor、gitleaks が無いなど）と、Node が足りず省いたことは、報告に一文で書く
+- 設定やコードに触れない相談（観点の説明だけ、など）では走らせない
+
+ルールの一覧、読み方の注意、ツールが見ない項目は `references/mechanical-checks.md`。
 
 ## 基本原則
 
@@ -68,6 +89,8 @@ description: "ソフトウェア開発で、第三者のコードを取り込む
 - 決済、予約取消など本人の意思確認が要る操作は、対象と内容を見せて確認を取る
 
 ## 報告の書き方
+
+機械チェックの結果は、読む範囲を狭めるためのもの。ツールの出力だけを根拠に指摘しない。
 
 満たしていない項目を見つけたら、次の 3 点を短く書く。
 

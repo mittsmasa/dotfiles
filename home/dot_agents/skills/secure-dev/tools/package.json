@@ -1,0 +1,8 @@
+{
+  "name": "secure-dev-tools",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test 'src/**/*.test.ts'"
+  }
+}

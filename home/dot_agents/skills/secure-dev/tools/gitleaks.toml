@@ -1,0 +1,3 @@
+# 走査先の .gitleaks.toml を読ませないために --config で渡す。gitleaks の既定ルールをそのまま使う
+[extend]
+useDefault = true
