@@ -1350,6 +1350,7 @@ export function reviewerPrompt(input: {
     input.criteriaPath
       ? `Review criteria to follow strictly, read it first; where it differs from the viewpoints, it wins: ${input.criteriaPath}`
       : 'No project criteria file.',
+    CONVENTIONS_GUIDE,
     ...viewpointSections,
     ...(input.conversationPath ? [`${CONVERSATION_GUIDE}\nComments and checks: ${input.conversationPath}`] : []),
     ...(input.previousPath ? [`${FOLLOWUP_GUIDE}\nEarlier review comments: ${input.previousPath}`] : []),
