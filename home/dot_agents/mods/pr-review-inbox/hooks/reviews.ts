@@ -1098,6 +1098,27 @@ const FINDING_CONTRACT = [
   'with what it did before and with what its name, comment and callers expect.',
 ].join('\n')
 
+/**
+ * The repository's written conventions over the look of its existing code: a
+ * reviewer that copies nearby code passes on what the documents forbid.
+ */
+const CONVENTIONS_GUIDE = [
+  "The repository's written conventions come before its existing code. Before judging the changed code,",
+  'read the conventions the repository writes down inside the checkout: CLAUDE.md / AGENTS.md and the',
+  'files they point to, tests/README.md, and any README or doc next to the changed files that says how code',
+  'there is written. These files are in the checkout, so you may read them.',
+  '- Judge the change by those documents and the viewpoints, not by how nearby code happens to be written.',
+  '  Existing code that breaks a written convention is precedent, not a rule: "other files do it the same',
+  '  way" is no reason to skip a finding.',
+  '- Take the shape of a proposed fix from the written convention, and cite its file and section in reason.',
+  '  Use nearby code as the model only when it follows the convention, or when no document covers the point.',
+  '  Never propose a fix that copies code breaking the convention.',
+  '- Where a written convention and a viewpoint disagree, the convention wins; say so in reason. The',
+  '  criteria file, when there is one, still comes first.',
+  '- Existing code that breaks the convention is not a finding of this change. Mention it under humanReview',
+  '  only when the change copies it or builds on it.',
+].join('\n')
+
 /** A viewpoint finding under the generic guide: what any viewpoint file's finding carries. */
 const GENERIC_FINDING = [
   'A finding with source "viewpoint" (one the viewpoint files support):',
