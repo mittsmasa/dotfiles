@@ -229,6 +229,21 @@ test('a check that failed is named in skipped and only its output leaves the lis
   })
 })
 
+const absolute: Check = { name: 'oxlint', argv: ['oxlint', '{files}'], outputs: [] }
+const relative: Check = { name: 'scan', argv: ['scan', '{worktree}', '{relativeFiles}'], outputs: [] }
+const whole: Check = { name: 'secure-scan', argv: ['node', 'secure-scan.ts', '{worktree}', '--out', '{outDir}'], outputs: ['findings.json'] }
+
+test('with no script to check, a check handed {files} or {relativeFiles} is left out and one given only {worktree} runs', () => {
+  expect(checksToRun([absolute, whole, relative], 0)).toEqual({
+    run: [whole],
+    skipped: ['oxlint（対象の JS / TS ファイルなし）', 'scan（対象の JS / TS ファイルなし）'],
+  })
+})
+
+test('with a script to check, every check runs in the order set', () => {
+  expect(checksToRun([absolute, whole, relative], 1)).toEqual({ run: [absolute, whole, relative], skipped: [] })
+})
+
 test('a check that ran fails only when an output it names is missing, whatever its exit code', () => {
   // A lint that found something: non-zero, output written.
   expect(failureOf({ exitCode: 1, stderr: '' }, [])).toBe(undefined)
