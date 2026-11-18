@@ -81,6 +81,12 @@ org 内の依頼をすべて拾い、clone は `~/work/repo/<リポジトリ名>
   - `{relativeFiles}`: 同じファイルの worktree からの相対パス。`./` から始まります
   - `{worktree}`: PR の checkout
   - `{outDir}`: 出力先のディレクトリ
+- 変更に JS / TS ファイルが無い PR（workflow や Dockerfile だけの変更など）では、`{files}` か `{relativeFiles}` を 1 引数としてそのまま持つチェックを省き、pane の「省いたもの」に「<name>（対象の JS / TS ファイルなし）」と出します。どちらも持たないチェック（`{worktree}` を渡して checkout 全体を走査するものなど）は、変更の中身にかかわらず毎回走ります
+
+```json
+{ "name": "secure-scan", "argv": ["~/.local/share/mise/shims/node", "~/.agents/skills/secure-dev/tools/bin/secure-scan.ts", "{worktree}", "--out", "{outDir}"], "outputs": ["findings.json"] }
+```
+
 - `stdout` を書くと、標準出力を `{outDir}/<stdout>` に保存します
 - `outputs` には、コマンドが自分で `{outDir}` に書くファイル名を並べます。終わったときにこれが無ければ、そのチェックは失敗扱いです
 - 終了コードは見ません。lint は指摘があると 0 以外で終わるためです。起動できない、タイムアウト（3 分）、`outputs` が無い、のどれかで失敗になり、pane に「省いたもの」として出ます
