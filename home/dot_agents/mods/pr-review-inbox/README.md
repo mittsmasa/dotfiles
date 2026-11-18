@@ -161,6 +161,34 @@ worktree は下読みが終わっても残り、次のどれかで消えます�
 
 一覧から消えた PR（マージ、依頼の取り下げ）の worktree は消えません。`git worktree remove <path>` で消してください。保存済みの結果を使い回した PR には worktree がありません。
 
+## セルフレビュー
+
+自分の PR を作る前に、同じ下読みで自分のブランチを読みます。観点、guide、機械チェック、reviewer への依頼文、結果の受理条件は、レビュー依頼の下読みと同じです。pane には出ません。
+
+PreToolUse hook に次を足すと、Claude Code のセッションが `gh pr create` を打ったときに止めて、下読みの手順を返します。
+
+```json
+{
+  "type": "command",
+  "command": "~/.local/share/mise/installs/node/global/bin/node ~/.agents/mods/pr-review-inbox/tools/self-review.ts gate",
+  "if": "Bash(gh pr create *)"
+}
+```
+
+- node は 22.18 以降が要ります。`.ts` をそのまま走らせ、mod の拡張子なしの import を `registerHooks` で解決するためです
+- 止めるのは、origin が `sources` に入っているリポジトリの `gh pr create` だけです。`&&` や `|` でつないだ呼び出しと、`--dry-run` は止めません
+- 手順は 3 つです。`prepare` が diff、機械チェックの出力、依頼文を書きます。セッションが依頼文を general-purpose の subagent に渡します。`report` が結果を受理して、修正リストを出します
+- ブランチのどこかの commit（`origin/<base>` に入っていないもの）に受理済みの結果があれば通します。指摘を直して commit しても、もう一度下読みは求めません
+- 結果は checkout の `.workflow/self-review/<sha>/` に置きます。`.workflow` を gitignore していないリポジトリでは、未追跡のファイルとして見えます
+- ユーザーが指示したときだけ、`self-review.ts skip --reason "<理由>"` で下読みを飛ばせます
+
+レビュー依頼の下読みとの違い:
+
+- 読むのは作業ツリーそのものです。worktree は作りません。diff は `origin/<base>...HEAD` で、fetch はしません。未コミットの変更は diff に入らず、「省いたもの」に出ます
+- PR の会話と checks、前回の指摘は渡しません（PR がまだ無いため）
+- reviewer のツールを絞りません。読む対象が自分のコードだからです
+- `/review-inbox` を打った受付セッションでは、mod のガードが subagent を止めるので下読みできません。別のセッションで下読みするか、skip します
+
 ## reviewer が触れるもの
 
 reviewer は Read / Grep / Glob と、結果ファイル 1 つへの Write だけを使えます。読めるのは次の範囲に限られます。
