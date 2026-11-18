@@ -523,7 +523,8 @@ test('with no checks set, a review of changed scripts runs nothing but gh, git a
 
 // ---- 深掘りする ----
 
-const DEEP_DIVE_ASK = 'https://github.com/acme/widgets/pull/12 を別セッションで詳しくレビューして'
+const DEEP_DIVE_ASK =
+  'https://github.com/acme/widgets/pull/12 を別セッションで詳しくレビューして。指摘と直し方は、既存コードの書き方ではなく、リポジトリに書かれた規約（CLAUDE.md / AGENTS.md とそこから辿れるファイル、tests/README.md、変更ファイル近くの README）に合わせる。規約に反する既存コードは前例であってルールではなく、それを写す直し方は出さない'
 const DEEP_DIVE_RESULT = `下読みの結果は ${SAVED}.accepted.json にある`
 // The stored review names no changed files, so its checkout is not offered.
 const DEEP_DIVE = `${DEEP_DIVE_ASK}。${DEEP_DIVE_RESULT}。`
