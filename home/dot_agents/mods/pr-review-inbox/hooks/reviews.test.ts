@@ -855,6 +855,20 @@ test('reviewerPrompt gives a defect the change introduces its own source, with t
   expect(prompt).toContain('"source": "criteria | behavior | viewpoint"')
 })
 
+test('reviewerPrompt puts the written conventions before existing code, with or without a guide file', () => {
+  for (const guide of [undefined, { kind: 'text' as const, text: 'team guide' }]) {
+    const prompt = promptWith({ guide, criteriaPath: '/c.md' })
+
+    expect(prompt).toContain("The repository's written conventions come before its existing code.")
+    expect(prompt).toContain('tests/README.md')
+    expect(prompt).toContain('Never propose a fix that copies code breaking the convention.')
+    expect(prompt).toContain('criteria file, when there is one, still comes first')
+    // Read before the viewpoints, after the criteria file.
+    expect(prompt.indexOf('written conventions come before')).toBeGreaterThan(prompt.indexOf('/c.md'))
+    expect(prompt.indexOf('written conventions come before')).toBeLessThan(prompt.indexOf('Every finding sets source'))
+  }
+})
+
 test('reviewerPrompt defines blocker by what merging breaks, with examples and what is not one', () => {
   const prompt = promptWith({})
 
