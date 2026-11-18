@@ -14,7 +14,7 @@ ruleTester.run('no-internal-module-spy', rule, {
     { name: 'a global object is not imported', code: `vi.spyOn(window, 'open');` },
     {
       name: 'a package import is not internal',
-      code: `import { toast } from '@partner-prop/prysm-react'; vi.spyOn(toast, 'error');`,
+      code: `import { toast } from '@acme/ui-kit'; vi.spyOn(toast, 'error');`,
     },
     {
       name: 'a type-only import declaration is skipped',
