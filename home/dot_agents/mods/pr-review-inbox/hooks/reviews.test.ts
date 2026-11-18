@@ -372,10 +372,12 @@ test('the deep-dive draft holds the URL and nothing from the pull request', asyn
 })
 
 test('the deep-dive draft names the checkout and the result only where it is given them', async () => {
-  const ask = 'https://github.com/acme/widgets/pull/12 を別セッションで詳しくレビューして'
+  const conventions =
+    '指摘と直し方は、既存コードの書き方ではなく、リポジトリに書かれた規約（CLAUDE.md / AGENTS.md とそこから辿れるファイル、tests/README.md、変更ファイル近くの README）に合わせる。規約に反する既存コードは前例であってルールではなく、それを写す直し方は出さない'
+  const ask = `https://github.com/acme/widgets/pull/12 を別セッションで詳しくレビューして。${conventions}`
   const url = 'https://github.com/acme/widgets/pull/12'
 
-  expect(deepDivePrompt(url)).toBe(ask)
+  expect(deepDivePrompt(url)).toBe(`${ask}。`)
   expect(deepDivePrompt(url, { resultPath: '/data/12.accepted.json' })).toBe(
     `${ask}。下読みの結果は /data/12.accepted.json にある。`,
   )
