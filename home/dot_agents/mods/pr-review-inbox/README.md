@@ -81,7 +81,8 @@ org 内の依頼をすべて拾い、clone は `~/work/repo/<リポジトリ名>
   - `{relativeFiles}`: 同じファイルの worktree からの相対パス。`./` から始まります
   - `{worktree}`: PR の checkout
   - `{outDir}`: 出力先のディレクトリ
-- 変更に JS / TS ファイルが無い PR（workflow や Dockerfile だけの変更など）では、`{files}` か `{relativeFiles}` を 1 引数としてそのまま持つチェックを省き、pane の「省いたもの」に「<name>（対象の JS / TS ファイルなし）」と出します。どちらも持たないチェック（`{worktree}` を渡して checkout 全体を走査するものなど）は、変更の中身にかかわらず毎回走ります
+- 変更に JS / TS ファイルが無い PR（workflow や Dockerfile だけの変更など）では、`{files}` か `{relativeFiles}` を持つチェックだけを省きます。pane の「省いたもの」に「<name>（対象の JS / TS ファイルなし）」と出ます
+- どちらも持たないチェックは、変更の中身にかかわらず毎回走ります。`{worktree}` を渡して checkout 全体を走査するチェックはこちらです
 
 ```json
 { "name": "secure-scan", "argv": ["~/.local/share/mise/shims/node", "~/.agents/skills/secure-dev/tools/bin/secure-scan.ts", "{worktree}", "--out", "{outDir}"], "outputs": ["findings.json"] }
