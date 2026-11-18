@@ -1002,7 +1002,7 @@ export function deepDivePrompt(url: string, context: { worktree?: string; result
     ...(context.resultPath === undefined ? [] : [`下読みの結果は ${context.resultPath} にある`]),
   ]
 
-  return more.length === 0 ? ask : `${[ask, ...more].join('。')}。`
+  return `${[ask, ...more].join('。')}。`
 }
 
 const AGENT_CONFIG_FILES = new Set(['CLAUDE.md', 'CLAUDE.local.md', 'AGENTS.md', '.mcp.json'])
