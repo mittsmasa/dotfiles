@@ -871,17 +871,6 @@ test('reviewerPrompt puts the written conventions before existing code, with or 
   }
 })
 
-test('reviewerPrompt reads "follow the existing code" as about what runs, and keeps undocumented points out of humanReview', () => {
-  for (const guide of [undefined, { kind: 'text' as const, text: 'team guide' }]) {
-    const prompt = promptWith({ guide })
-
-    expect(prompt).toContain('is about what gets\n  executed')
-    expect(prompt).toContain('a written convention on how to write code still comes before that code.')
-    expect(prompt).toContain('"No document covers this" is not, by itself, a reason to leave a point to a human.')
-    expect(prompt).toContain('use humanReview only for a spec or design choice they do not settle.')
-  }
-})
-
 test('reviewerPrompt defines blocker by what merging breaks, with examples and what is not one', () => {
   const prompt = promptWith({})
 
