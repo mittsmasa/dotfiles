@@ -1125,6 +1125,11 @@ const CONVENTIONS_GUIDE = [
   '  criteria file, when there is one, still comes first.',
   '- Existing code that breaks the convention is not a finding of this change. Mention it under humanReview',
   '  only when the change copies it or builds on it.',
+  '- A document that tells you to follow the existing code, or ranks "actual code" first, is about what gets',
+  '  executed (config, lockfiles, lint rules, types). It does not make the way nearby code is written into a',
+  '  rule: a written convention on how to write code still comes before that code.',
+  '- "No document covers this" is not, by itself, a reason to leave a point to a human. When the viewpoints',
+  '  settle it, report it as a finding; use humanReview only for a spec or design choice they do not settle.',
 ].join('\n')
 
 /** A viewpoint finding under the generic guide: what any viewpoint file's finding carries. */
