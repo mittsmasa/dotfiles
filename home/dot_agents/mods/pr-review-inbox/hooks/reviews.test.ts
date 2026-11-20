@@ -983,6 +983,17 @@ test('reviewerPrompt lists only the check outputs it is given', () => {
   expect(prompt).toContain('Mechanical check output: /scan (oxlint.json).')
 })
 
+test('a guide from the config does not drop the order to read every check output', () => {
+  const prompt = promptWith({
+    scanDir: '/scan',
+    checkOutputs: [{ name: 'oxlint', files: ['oxlint.json'] }],
+    guide: { kind: 'text', text: 'TEAM GUIDE: apply rule X first.' },
+  })
+
+  expect(prompt).toContain('Read every file listed here before you judge the change')
+  expect(prompt).toContain('In checked, name each file you read')
+})
+
 test('a guide and a comment style from the config replace those parts and leave the contract', () => {
   const prompt = promptWith({
     skillFiles: ['/team/viewpoints.md'],
