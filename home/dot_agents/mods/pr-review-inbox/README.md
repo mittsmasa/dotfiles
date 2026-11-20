@@ -14,15 +14,14 @@
 
 `~/.config/pr-review-inbox/config.json` に書きます。`sources` か `repos` のどちらも無いと、何も取得しません。
 
-### 設定ファイルは mod と一緒に同期されない
+### どのマシンでも要る指示は mod 本体に書く
 
-mod 本体（`~/.agents/mods/pr-review-inbox/`）は chezmoi で同期しています。一方、`~/.config/pr-review-inbox/` の config.json と guide.md は chezmoi の管理外です。別のマシンでは、この 2 つが無いか、古いまま動きます。
+mod 本体（`~/.agents/mods/pr-review-inbox/`）は chezmoi で全マシンに同期します。一方、`~/.config/pr-review-inbox/` の config.json と guide.md は、マシンごとに下読みの中身を変えるために、あえて同期しません。
 
-- config.json が無いと、PR を 1 件も取得しません
-- guide.md が古いと、あとから足した reviewer への指示（scan の出力を必ず読む、など）が抜けたまま下読みします。結果の形は変わらないので、抜けに気づきにくいです
-- config.json の `checks` と `viewpoints` は、mise のインストール先（`~/.local/share/mise/installs/...`）と skill の置き場所を前提にしています
+このため、guide.md に足した指示は、そのマシンでしか効きません。
 
-別のマシンで使う前に、2 つのファイルをコピーします。そのうえで、`checks` と `viewpoints` のパスがそのマシンにあるかを確かめます。
+- 観点に依らない reviewer への指示（機械チェックの出力を必ず読む、など）は、mod の prompt（`hooks/reviews.ts`）に書きます。guide.md に書くと、ほかのマシンの下読みでは抜けます。結果の形は変わらないので、抜けに気づきにくいです
+- guide.md には、そのマシンで当てる skill の読み方だけを書きます
 
 ### team で使う最小の例
 
