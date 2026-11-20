@@ -1351,8 +1351,12 @@ export function reviewerPrompt(input: {
     input.scanDir
       ? [
           `Mechanical check output: ${input.scanDir}${outputFiles.length > 0 ? ` (${outputFiles.join(', ')})` : ''}.`,
+          'Read every file listed here before you judge the change, even when the change looks small or the files look unrelated.',
           'These are candidates that narrow what to read, not findings: read the flagged files and judge them by',
           'the viewpoints. Look at candidates touching the changed files; never cite the output alone.',
+          '- Every entry on a changed file ends in one of three places: a finding, humanReview, or a line in checked saying why it is not a problem.',
+          '- Entries only on files the change did not touch are existing ones: do not list them one by one; at most one line under humanReview.',
+          '- In checked, name each file you read and what it held for the changed files. A listed file you could not read goes under skipped with the reason.',
         ].join('\n')
       : 'No mechanical check output for this pull request.',
     input.criteriaPath
