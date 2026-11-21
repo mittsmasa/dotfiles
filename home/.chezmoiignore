@@ -21,6 +21,9 @@
 .agents/skills/vercel-react-best-practices
 .claude/skills/vercel-react-best-practices
 .claude/skills/partner-prop-invoice
+.claude/skills/partner-prop-local-verify
+.claude/skills/partner-prop-review
+.claude/skills/mantine-prysm-migration
 .claude/sounds/ref-whitecul.wav
 
 # pr-review-inbox の設定 - 対象 org と clone の場所を書くので公開しない
