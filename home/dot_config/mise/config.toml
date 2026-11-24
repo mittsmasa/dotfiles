@@ -10,7 +10,7 @@ gitleaks = "8.30.1"
 gh = "2.104.0"
 just = "1.59.0"
 "npm:vercel" = "65.16.0"
-uv = "0.13.8"
+uv = "0.13.9"
 age = "latest"
 "github:jdx/fnox" = "1.48.0"
 "github:yusukebe/ax" = { version = "0.1.25", exe = "ax" }
