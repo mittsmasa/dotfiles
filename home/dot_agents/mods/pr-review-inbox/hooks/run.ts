@@ -774,14 +774,23 @@ async function reuseSaved($: EngineInterface, config: Config, review: Review): P
   return true
 }
 
+/** Sets one review up for a reviewer; `pump` has put its key in `preparing`, and it leaves here. */
 async function startReview($: EngineInterface, config: Config, review: Review) {
+  try {
+    await prepareReview($, config, review)
+  } finally {
+    preparing.delete(review.key)
+    wake()
+  }
+  await pump($, config)
+}
+
+async function prepareReview($: EngineInterface, config: Config, review: Review) {
   // A checkout kept from an earlier commit must not outlive it, reused result or not.
   await removeWorktree($, config, review.key)
-  if (await reuseSaved($, config, review)) return pump($, config)
+  if (await reuseSaved($, config, review)) return
   const parsed = parseKey(review.key)
   const place = worktreeOf(config, review.key)
-  let release = () => {}
-  spawning = new Promise<void>(resolve => (release = resolve))
   let hasWorktree = false
   try {
     if (!parsed || !place || !(await $.fs.exists(place.repo))) throw new Error('clone なし')
@@ -789,15 +798,17 @@ async function startReview($: EngineInterface, config: Config, review: Review) {
     const origin = await must($, git(['-C', repo, 'remote', 'get-url', 'origin']), config, 'origin を読めない')
     if (!originMatches(origin.stdout, parsed.fullName)) throw new Error('origin 不一致')
 
-    await removeWorktree($, config, review.key)
-    await must(
-      $,
-      git(['-C', repo, 'fetch', 'origin', `pull/${parsed.number}/head`, review.baseRefName]),
-      config,
-      'fetch 失敗',
-      180_000,
-    )
-    await must($, git(['-C', repo, 'worktree', 'add', '--detach', worktree, review.headSha]), config, 'worktree 作成失敗', 180_000)
+    await withRepoLock(repo, async () => {
+      await removeWorktreeAt($, config, place)
+      await must(
+        $,
+        git(['-C', repo, 'fetch', 'origin', `pull/${parsed.number}/head`, review.baseRefName]),
+        config,
+        'fetch 失敗',
+        180_000,
+      )
+      await must($, git(['-C', repo, 'worktree', 'add', '--detach', worktree, review.headSha]), config, 'worktree 作成失敗', 180_000)
+    })
     hasWorktree = true
     const worktreeReal = await realPath($, worktree)
     if (!worktreeReal) throw new Error('worktree を解決できない')
@@ -892,9 +903,18 @@ async function startReview($: EngineInterface, config: Config, review: Review) {
     })
     if (started.agentId === undefined) throw new Error('reviewer を起動できない')
     const agentId = started.agentId
+    // Known as this mod's reviewer at once: a session not running the inbox refuses it, kept or not.
     reviewerAgentIds = [...reviewerAgentIds, agentId].slice(-100)
+    if (!isActive) {
+      // The inbox stopped while this was set up. Nothing here can stop the reviewer:
+      // it is left to end, refused every tool, and its checkout goes.
+      await $.store.set('reviewerAgentIds', reviewerAgentIds)
+      await removeWorktree($, config, review.key)
+
+      return
+    }
+    await setRunning($, [...running, { key: review.key, agentId, repo, worktree, resultPath, allowedRoots }])
     await $.store.set('reviewerAgentIds', reviewerAgentIds)
-    await setRunning($, { key: review.key, agentId, repo, worktree, resultPath, allowedRoots })
     const startedAt = (await now($)).toISOString()
     await patch($, review.key, one => ({
       ...one,
