@@ -33,16 +33,42 @@ const thread = (replies: readonly string[]) =>
     }),
   )
 
+const SESSION = 'session-1'
+const STORE_KEY = `link:${SESSION}`
+
+type SetUpOptions = {
+  /** 前のプロセスが $.store に残した値。 */
+  store?: Record<string, unknown>
+  /** false なら session.start だけして紐付けない。 */
+  isLinked?: boolean
+  isStoreGetFailing?: boolean
+}
+
 /** Slack とエンジンの代わりを立て、紐付けまで済ませる。 */
-async function setUp($: Engine, on: On, initial: string[]) {
+async function setUp($: Engine, on: On, initial: string[], options: SetUpOptions = {}) {
   const world = {
     replies: initial,
     submitted: [] as string[],
     toasts: [] as string[],
+    statuses: [] as (string | undefined)[],
+    store: new Map(Object.entries(options.store ?? {})),
     isSubmitFailing: false,
     calledServers: [] as string[],
     mcpTools: [`mcp__other__search`, `mcp__${SERVER}__slack_read_thread`, `mcp__${SERVER}__slack_send_message`],
   }
+  on('session.id', () => ({ value: SESSION }))
+  on('store.get', (_, e) => {
+    if (options.isStoreGetFailing) throw new Error('store が壊れています')
+    return { value: world.store.get(e.key) }
+  })
+  on('store.set', (_, e) => {
+    world.store.set(e.key, e.value)
+    return { value: undefined }
+  })
+  on('store.delete', (_, e) => {
+    world.store.delete(e.key)
+    return { value: undefined }
+  })
   // セッションが持つ MCP ツールの一覧。mod が読むのは名前だけなので、ほかの値は埋めない。
   on('session.usage', () => ({
     value: { context: { window: 0, breakdown: { mcpTools: world.mcpTools.map(name => ({ name })) } } },
@@ -66,7 +92,10 @@ async function setUp($: Engine, on: On, initial: string[]) {
     return { text: e.text }
   })
   on('tool.call', () => ({ result: {} }))
-  on('ui.status', () => ({ value: undefined }))
+  on('ui.status', (_, e) => {
+    world.statuses.push(e.text)
+    return { value: undefined }
+  })
   const clock = mock.clock(on)
   const run = (args: string) =>
     $.command.run({
