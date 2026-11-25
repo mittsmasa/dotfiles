@@ -205,8 +205,9 @@ async function stop($: EngineInterface, config: Config) {
   await update($, activeAtom, () => false)
   const mine = running
   // The store's `running` is the new owner's now: only this copy is dropped.
-  running = undefined
-  if (mine) await removeWorktree($, config, mine.key)
+  running = []
+  wake()
+  for (const one of mine) await removeWorktree($, config, one.key)
   await $.ui.close({ id: 'review-inbox' }).catch(() => undefined)
 }
 
@@ -434,8 +435,8 @@ export async function markRead($: EngineInterface, config: Config, key: string) 
     diffView: undefined,
     reviews: state.reviews.map(review => (review.key === key ? { ...review, isRead: true } : review)),
   }))
-  // The checkout was kept for a deep dive; a reviewer still at work keeps its own.
-  if (running?.key !== key) await removeWorktree($, config, key)
+  // The checkout was kept for a deep dive; a reviewer at work, or being set up, keeps its own.
+  if (!running.some(one => one.key === key) && !preparing.has(key)) await removeWorktree($, config, key)
 }
 
 /**
@@ -516,37 +517,47 @@ export async function init($: EngineInterface, config: Config) {
   const stored = (await $.store.get('inbox')) as Partial<Inbox> | undefined
   const before = Array.isArray(stored?.reviews) ? stored.reviews : []
   await knownReviewers($)
-  // A reload leaves the reviewer it had running at work: the mod cannot stop
-  // it, so it is taken up again rather than cut off under its feet.
-  const left = ((await $.store.get('running')) as Running | null | undefined) ?? undefined
+  // A reload leaves the reviewers it had running at work: the mod cannot stop
+  // them, so they are taken up again rather than cut off under their feet.
+  const left = runningFromStore(await $.store.get('running'))
   const alive = await aliveAgentIds($)
-  const kept =
-    left &&
-    alive.includes(left.agentId) &&
-    before.some(one => one.key === left.key && one.status === 'reviewing' && one.agentId === left.agentId)
-      ? left
-      : undefined
+  const kept = left.filter(
+    one =>
+      alive.includes(one.agentId) &&
+      before.some(review => review.key === one.key && review.status === 'reviewing' && review.agentId === one.agentId),
+  )
   await setRunning($, kept)
   isSending = false
   inbox = EMPTY
   await mutate($, () => ({
     ...EMPTY,
-    reviews: recoverOnStart(before, kept ? [kept.agentId] : []),
+    reviews: recoverOnStart(
+      before,
+      kept.map(one => one.agentId),
+    ),
     lastFetchedAt: stored?.lastFetchedAt,
   }))
   await refreshWithDiff($, config)
   // A review cut off by a restart leaves its worktree behind.
-  for (const review of before.filter(one => one.status === 'reviewing' && one.key !== kept?.key)) {
+  for (const review of before.filter(one => one.status === 'reviewing' && !kept.some(k => k.key === one.key))) {
     await removeWorktree($, config, review.key)
   }
-  if (kept) await onTimeout($, config, kept.key)
+  for (const one of kept) await onTimeout($, config, one.key)
 }
 
-/** Keeps `running` in the store too, so a reload can take its reviewer up again. */
-async function setRunning($: EngineInterface, value: Running | undefined) {
+/** The store's `running`: a list now; one review, or null, before reviews ran side by side. */
+function runningFromStore(value: unknown): Running[] {
+  if (Array.isArray(value)) return value as Running[]
+
+  return value !== null && typeof value === 'object' ? [value as Running] : []
+}
+
+/** Keeps `running` in the store too, so a reload can take its reviewers up again. */
+async function setRunning($: EngineInterface, value: Running[]) {
+  // Set before the store write: a reviewer's first tool call may be waiting on it.
   running = value
-  // The store takes JSON data only: null, not undefined, says there is none.
-  await $.store.set('running', value ?? null)
+  wake()
+  await $.store.set('running', value)
 }
 
 const ALIVE = new Set(['pending', 'running', 'waiting'])
@@ -570,6 +581,11 @@ function worktreeOf(config: Config, key: string) {
 async function removeWorktree($: EngineInterface, config: Config, key: string) {
   const place = worktreeOf(config, key)
   if (!place) return
+  await withRepoLock(place.repo, () => removeWorktreeAt($, config, place))
+}
+
+/** Only from inside `withRepoLock` on the same clone. */
+async function removeWorktreeAt($: EngineInterface, config: Config, place: { repo: string; worktree: string }) {
   await run($, git(['-C', place.repo, 'worktree', 'remove', '--force', place.worktree]), config).catch(
     () => undefined,
   )
@@ -647,12 +663,20 @@ export async function tick($: EngineInterface, config: Config) {
   if (isActive && isDue(await now($), config.utcOffsetMinutes, config.schedule)) await fetchNow($, config)
 }
 
-// ---- reviewing, one at a time ----
+// ---- reviewing, up to MAX_PARALLEL at once ----
 
 export async function pump($: EngineInterface, config: Config) {
-  if (running || spawning || !(await ensureOwner($, config))) return
-  const next = inbox.reviews.find(review => review.status === 'queued')
-  if (next) await startReview($, config, next)
+  if (!(await ensureOwner($, config))) return
+  // Picked and marked with no await between: two pumps at once must not pick the same review.
+  const free = MAX_PARALLEL - running.length - preparing.size
+  const next = inbox.reviews
+    .filter(
+      review =>
+        review.status === 'queued' && !preparing.has(review.key) && !running.some(one => one.key === review.key),
+    )
+    .slice(0, Math.max(0, free))
+  for (const review of next) preparing.add(review.key)
+  await Promise.all(next.map(review => startReview($, config, review)))
 }
 
 export async function retry($: EngineInterface, config: Config, key: string) {
