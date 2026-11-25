@@ -1640,6 +1640,7 @@ export function reviewerPrompt(input: {
     `Pull request: ${input.key} at ${input.headSha}`,
     `Checkout (read only): ${input.worktree}`,
     `Diff against the base branch: ${input.diffPath}`,
+    ...(input.since ? [incrementalGuide(input.since, input.previousPath !== undefined)] : []),
     input.scanDir
       ? [
           `Mechanical check output: ${input.scanDir}${outputFiles.length > 0 ? ` (${outputFiles.join(', ')})` : ''}.`,
