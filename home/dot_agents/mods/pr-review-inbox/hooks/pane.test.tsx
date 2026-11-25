@@ -119,6 +119,9 @@ function world(
   // Set, the next read of the saved diff waits for it, so a later read can come back first.
   // `gone` names paths that are not on disk, whatever else is.
   const disk = { hold: undefined as Promise<void> | undefined, gone: [] as string[] }
+  // Set, every git fetch waits for it, so a review stays in its setting up.
+  // `inFlight` and `most`: the fetches waiting now, and the most that ever waited at once.
+  const fetches = { hold: undefined as Promise<void> | undefined, inFlight: 0, most: 0 }
   // This session's agents as `$.agent.list()` reports them.
   const agents: { id: string; status: string }[] = []
   const clock = mock.clock(on, { now: Date.UTC(2026, 10, 9, 2, 0) })
@@ -242,8 +245,7 @@ function world(
     const isRefused = argv.includes('POST') && github.isRefusingReviews
     const isHistory = argv.some(one => one.includes('reviewThreads'))
     const isFailing = (isHistory ? github.isHistoryDown : argv.includes('graphql') && github.isDown) || isRefused
-
-    return {
+    const answer = {
       value: {
         exitCode: isFailing ? 1 : 0,
         stdout: isFailing ? '' : stdout,
@@ -252,6 +254,15 @@ function world(
         isStderrTruncated: false,
       },
     }
+    if (!(argv[0] === 'git' && argv.includes('fetch') && fetches.hold)) return answer
+    fetches.inFlight += 1
+    fetches.most = Math.max(fetches.most, fetches.inFlight)
+
+    return fetches.hold.then(() => {
+      fetches.inFlight -= 1
+
+      return answer
+    })
   })
 
   // What the surface takes: the prompt box, the clipboard. The desktop app draws
