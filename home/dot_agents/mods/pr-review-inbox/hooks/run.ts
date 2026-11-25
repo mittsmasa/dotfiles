@@ -45,12 +45,23 @@ import {
   withHistories,
   acceptedCopyOf,
   applyFetchResult,
+  checkoutsInUse,
+  clonesToSweep,
+  isSearchComplete,
+  lastAcceptedSha,
+  doneNotice,
+  drainedNotice,
+  isDrained,
+  newlyDone,
+  staleCheckouts,
   CONFIG_FILE,
   conversationArgs,
   conversationFile,
   criteriaFor,
   criteriaRoot,
+  earlierOf,
   fail,
+  incrementalNote,
   isAllowedToolCall,
   isDue,
   isScript,
@@ -65,6 +76,7 @@ import {
   resolveClone,
   reviewerPrompt,
   reviewFromSaved,
+  reviewScope,
   buildSearchArgv,
   searchedKeys,
   timeoutAction,
@@ -107,6 +119,8 @@ type Running = {
   worktree: string
   resultPath: string
   allowedRoots: string[]
+  /** How many pre-reads in a row, this one counted, read only what changed; absent when it reads the whole. */
+  incrementalRuns?: number
 }
 
 /** How many reviews go at once: those a reviewer is at work on, and those being set up for one. */
@@ -119,6 +133,9 @@ let running: Running[] = []
 // The reviews being set up for a reviewer. They stay `queued` until it starts,
 // so `pump` must not pick them again.
 const preparing = new Set<string>()
+// The reviews whose next pre-read reads the whole pull request, whatever an earlier one left:
+// asked for again by a press, or by the author at the same commit.
+const fullOnly = new Set<string>()
 // Woken whenever `running` or `preparing` changes: a tool call may be waiting on its reviewer's spawn.
 let waiters: (() => void)[] = []
 // Store writes go through one line: two hooks merging at once lose a write.
@@ -166,11 +183,22 @@ async function knownReviewers($: EngineInterface): Promise<readonly string[]> {
 }
 
 /**
- * Makes this session the one running the inbox: the last session to ask wins,
- * and the one that had it stops at its next fetch. Safe to call again.
+ * Makes this session the one running the inbox: the last session to type
+ * /review-inbox wins, and the one that had it stops at its next fetch. A reload
+ * (`session.start`) only picks the inbox up again while no other session has
+ * taken it. Safe to call again. Resolves whether this session runs the inbox.
  */
-export async function activate($: EngineInterface, config: Config, via: 'command' | 'session.start') {
+export async function activate($: EngineInterface, config: Config, via: 'command' | 'session.start'): Promise<boolean> {
   sessionId ??= await $.session.id()
+  if (via === 'session.start') {
+    const owner = (await $.store.get('owner')) as { sessionId?: string } | undefined
+    if (owner?.sessionId !== undefined && owner.sessionId !== sessionId) {
+      isActive = false
+      await update($, activeAtom, () => false)
+
+      return false
+    }
+  }
   await $.store.set('owner', { sessionId })
   if (!isRegistered) {
     await $.agent.register({
@@ -225,6 +253,7 @@ function mutate($: EngineInterface, change: (inbox: Inbox) => Inbox): Promise<vo
   const step = line.then(async () => {
     const before = inbox
     inbox = change(inbox)
+    noteDone($, before.reviews, inbox.reviews)
     // What the pane is doing (a selection, a draft) is not worth a store write.
     if (inbox.reviews !== before.reviews || inbox.lastFetchedAt !== before.lastFetchedAt) {
       await $.store.set('inbox', { reviews: inbox.reviews, lastFetchedAt: inbox.lastFetchedAt })
@@ -234,6 +263,46 @@ function mutate($: EngineInterface, change: (inbox: Inbox) => Inbox): Promise<vo
   line = step.catch(() => undefined)
 
   return step
+}
+
+// ---- telling that pre-reads ended ----
+
+/** How long ended pre-reads are gathered before they are told of as one. */
+const NOTICE_DELAY_MS = 5000
+// The reviews that ended since the last toast, and since the last notification.
+let fresh: string[] = []
+let batch: string[] = []
+let isNoticeDue = false
+
+/** Books one telling for the pre-reads this write ended, and for the last of them ending at all. */
+function noteDone($: EngineInterface, before: readonly Review[], after: readonly Review[]) {
+  if (before === after) return
+  const done = newlyDone(before, after)
+  fresh = [...fresh, ...done]
+  batch = [...batch, ...done]
+  const hasDrained = !isDrained(before) && isDrained(after)
+  if (isNoticeDue || (done.length === 0 && !hasDrained)) return
+  isNoticeDue = true
+  $.clock.after(NOTICE_DELAY_MS, () => void flushNotice($))
+}
+
+/**
+ * A toast for what ended since the last one, and a native notification once
+ * nothing is left to pre-read. A review marked read meanwhile is not counted.
+ */
+async function flushNotice($: EngineInterface) {
+  isNoticeDue = false
+  const ended = fresh
+  fresh = []
+  const { reviews } = inbox
+  const all = isDrained(reviews) ? batch : []
+  if (isDrained(reviews)) batch = []
+  if (!isActive) return
+  const toast = doneNotice(reviews, ended)
+  if (toast !== undefined) $.ui.toast(toast, { timeoutMs: 10_000 })
+  const notice = drainedNotice(reviews, all)
+  // A notification turned off or refused is no failure of the inbox.
+  if (notice !== undefined) await $.ui.notify(notice, { title: 'PR レビュー', key: 'drained' }).catch(() => undefined)
 }
 
 // `$` crosses a file only into function declarations: the validator follows no other.
@@ -597,11 +666,14 @@ export async function fetchNow($: EngineInterface, config: Config) {
   if (inbox.isFetching || !(await ensureOwner($, config))) return
   await mutate($, state => ({ ...state, isFetching: true, fetchError: undefined }))
   let fetchError: string | undefined
+  const before = inbox.reviews
+  let isComplete = false
   try {
     if (config.sources.length === 0) throw new Error(`~/${CONFIG_FILE} にリポジトリを設定してください`)
     const searches = []
     for (const source of config.sources) searches.push(await run($, buildSearchArgv(source), config))
     const search = mergeSearches(searches)
+    isComplete = isSearchComplete(searches)
     const views = []
     for (const key of searchedKeys(search) ?? []) {
       const argv = viewArgs(key)
@@ -632,7 +704,10 @@ export async function fetchNow($: EngineInterface, config: Config) {
     }
     const next = withHistories(fetched, histories, stored)
     // Only once the fetch is good: a failed one leaves the saved results too.
-    for (const [key, headSha] of reRequested) await dropSaved($, config, { key, headSha })
+    for (const [key, headSha] of reRequested) {
+      await dropSaved($, config, { key, headSha })
+      fullOnly.add(key)
+    }
     const fetchedAt = (await now($)).toISOString()
     await mutate($, state => ({ ...state, reviews: [...next], lastFetchedAt: fetchedAt }))
   } catch (error) {
@@ -641,7 +716,34 @@ export async function fetchNow($: EngineInterface, config: Config) {
   // A fetch that went well still says what the config file had wrong.
   const shown = fetchError ?? warningLine(config.warnings)
   await mutate($, state => ({ ...state, isFetching: false, fetchError: shown }))
+  // Only after a fetch that read everything: a pull request a failed or cut-short search
+  // left out is not gone.
+  if (fetchError === undefined && isComplete && (await ensureOwner($, config))) {
+    await sweepWorktrees($, config, before).catch(() => undefined)
+  }
   await pump($, config)
+}
+
+/**
+ * Takes away the checkouts of pull requests no longer listed (merged, or the
+ * request withdrawn), and what earlier runs left behind. Only `review-<N>` in
+ * a configured clone's `.claude/worktrees`, and only the checkout: the saved
+ * results, diffs and check outputs stay for the next time the pull request is listed.
+ */
+async function sweepWorktrees($: EngineInterface, config: Config, before: readonly Review[]) {
+  const keysInUse = () => [...inbox.reviews.map(review => review.key), ...running.map(one => one.key), ...preparing]
+  for (const repo of clonesToSweep(config, [...before.map(review => review.key), ...keysInUse()])) {
+    const dir = `${repo}/.claude/worktrees`
+    const entries = await $.fs.list(dir).catch(() => [])
+    for (const name of staleCheckouts(entries, checkoutsInUse(config, repo, keysInUse()))) {
+      await withRepoLock(repo, async () => {
+        // Judged again here, with no await before the removal starts: while this waited
+        // for the clone, the pull request may have come back and its review begun.
+        const stillStale = staleCheckouts([{ name, kind: 'dir', isLink: false }], checkoutsInUse(config, repo, keysInUse()))
+        if (stillStale.length > 0) await removeWorktreeAt($, config, { repo, worktree: `${dir}/${name}` })
+      })
+    }
+  }
 }
 
 /** When a review of this commit was sent: what the store holds, or the note left beside its result. */
@@ -785,7 +887,48 @@ async function startReview($: EngineInterface, config: Config, review: Review) {
   await pump($, config)
 }
 
+/**
+ * What a pre-read may build on: the newest result accepted for another commit
+ * of the pull request, and whether the changes since that commit can be read
+ * alone. The diff from it to the head is written to `sincePath` on the way.
+ */
+async function earlierPreRead(
+  $: EngineInterface,
+  config: Config,
+  review: Review,
+  place: { repo: string; worktree: string },
+  sincePath: string,
+) {
+  const saved = savedPathsOf(config, review)
+  const entries = saved ? await $.fs.list(saved.dir).catch(() => []) : []
+  const sha = lastAcceptedSha(entries, review.headSha)
+  const commit = sha === undefined ? undefined : { key: review.key, headSha: sha }
+  const earlierPaths = commit && savedPathsOf(config, commit)
+  const text = earlierPaths && (await $.fs.read(earlierPaths.accepted).then(String, () => undefined))
+  const earlier = commit && text !== undefined ? earlierOf(parseReviewerJson(text, undefined), commit) : undefined
+  if (sha === undefined || earlier === undefined) return undefined
+  // Exits 0 only for an ancestor: 1 after a force-push or a rebase, 128 for a commit the clone lacks.
+  const ancestry = await run($, git(['-C', place.repo, 'merge-base', '--is-ancestor', sha, review.headSha]), config).catch(
+    () => undefined,
+  )
+  const isAncestor = ancestry?.exitCode === 0
+  const diff = isAncestor
+    ? await run($, git(['-C', place.worktree, 'diff', sha, 'HEAD']), config, 120_000).catch(() => undefined)
+    : undefined
+  const isWhole = diff !== undefined && diff.exitCode === 0 && !diff.isStdoutTruncated && diff.stdout.length <= 3_000_000
+  const isDiffKept =
+    isWhole &&
+    (await $.fs.write(sincePath, diff.stdout).then(
+      () => true,
+      () => false,
+    ))
+
+  return { sha, runs: earlier.runs, file: earlier.file, isAncestor, isDiffKept }
+}
+
 async function prepareReview($: EngineInterface, config: Config, review: Review) {
+  // Taken here, before anything can fail: the ask is for this pre-read only.
+  const isFullAsked = fullOnly.delete(review.key)
   // A checkout kept from an earlier commit must not outlive it, reused result or not.
   await removeWorktree($, config, review.key)
   if (await reuseSaved($, config, review)) return
@@ -831,6 +974,27 @@ async function prepareReview($: EngineInterface, config: Config, review: Review)
     const skipped = [
       ...(diff.isStdoutTruncated || diff.stdout.length > 3_000_000 ? ['diff の一部（大きすぎる）'] : []),
     ]
+    // Only what changed since an earlier pre-read, where there is one to build on. Its
+    // findings go beside the diff, in the folder the reviewer already reads.
+    const sincePath = `${scanDir}/since.diff`
+    const earlierPath = `${scanDir}/earlier.json`
+    const earlier = isFullAsked ? undefined : await earlierPreRead($, config, review, place, sincePath)
+    const scope = reviewScope({
+      isFullAsked,
+      ...(earlier ? { earlier } : {}),
+      isAncestor: earlier?.isAncestor === true,
+      isDiffKept: earlier?.isDiffKept === true,
+    })
+    const since =
+      scope.kind === 'incremental' &&
+      earlier !== undefined &&
+      (await $.fs.write(earlierPath, earlier.file).then(
+        () => true,
+        () => false,
+      ))
+        ? { sha: scope.sinceSha, diffPath: sincePath, earlierPath, runs: scope.runs }
+        : undefined
+    if (since) skipped.push(incrementalNote(since.sha))
     const checked = await mechanicalChecks($, config, review, worktreeReal, scanDir)
     skipped.push(...checked.skipped)
 
@@ -899,6 +1063,7 @@ async function prepareReview($: EngineInterface, config: Config, review: Review)
         files: review.files,
         ...(hasPrevious ? { previousPath } : {}),
         ...(hasConversation ? { conversationPath } : {}),
+        ...(since ? { since: { sha: since.sha, diffPath: since.diffPath, earlierPath: since.earlierPath } } : {}),
       }),
     })
     if (started.agentId === undefined) throw new Error('reviewer を起動できない')
@@ -913,7 +1078,10 @@ async function prepareReview($: EngineInterface, config: Config, review: Review)
 
       return
     }
-    await setRunning($, [...running, { key: review.key, agentId, repo, worktree, resultPath, allowedRoots }])
+    await setRunning($, [
+      ...running,
+      { key: review.key, agentId, repo, worktree, resultPath, allowedRoots, ...(since ? { incrementalRuns: since.runs } : {}) },
+    ])
     await $.store.set('reviewerAgentIds', reviewerAgentIds)
     const startedAt = (await now($)).toISOString()
     await patch($, review.key, one => ({
@@ -958,7 +1126,7 @@ export async function onTurnComplete(
   const accepted = acceptReviewerOutput(review, { agentId, json }, await now($))
   if (accepted.kind === 'discard') return
   // The copy a later fetch may reuse: written for an accepted result only.
-  const copy = acceptedCopyOf(accepted, json)
+  const copy = acceptedCopyOf(accepted, json, mine.incrementalRuns)
   const saved = savedPathsOf(config, review)
   if (copy !== undefined && saved) await $.fs.write(saved.accepted, copy).catch(() => undefined)
   await patch($, mine.key, one =>
@@ -1052,6 +1220,8 @@ export async function requeue($: EngineInterface, config: Config, key: string) {
   const open = inbox.reviews.find(review => review.key === key && isOpen(review))
   if (open) await dropSaved($, config, open)
   if (open) await removeWorktree($, config, key)
+  // Asked for by hand: the whole pull request is read again, not the changes since an earlier pre-read.
+  if (open) fullOnly.add(key)
   await patch($, key, review =>
     isOpen(review)
       ? { ...review, status: 'queued', findings: [], followups: undefined, humanReview: [], checked: [], skipped: [] }
