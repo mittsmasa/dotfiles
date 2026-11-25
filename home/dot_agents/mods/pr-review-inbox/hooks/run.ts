@@ -223,6 +223,8 @@ export async function activate($: EngineInterface, config: Config, via: 'command
   fetchTimer?.cancel()
   fetchTimer = $.clock.every(config.schedule.intervalMinutes * 60_000, () => void tick($, config))
   if (!wasActive) $.clock.after(500, () => void tick($, config))
+
+  return true
 }
 
 /** Stops this session's inbox: its timer, its pane, and the review it had running. */
