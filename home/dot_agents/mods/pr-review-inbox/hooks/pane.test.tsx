@@ -567,16 +567,18 @@ test('a reviewer at work is not held up while another review is being set up', a
   // Answered with no clock moving: the 5-second wait is not reached.
   let isAnswered = false
   void $.tool.call(subagentBash('reviewer-20')).then(() => (isAnswered = true))
-  await Promise.resolve()
-  await Promise.resolve()
-  expect(isAnswered).toBe(true)
+  await afterPending()
+  const isAnsweredWhileHeld = isAnswered
 
   // An agent not yet known waits while a review is set up, and is judged once it is.
   let unknown: { deny?: unknown } | undefined
   void $.tool.call(subagentBash('someone-elses-agent')).then(answer => (unknown = answer))
-  await Promise.resolve()
-  expect(unknown).toBe(undefined)
+  await afterPending()
+  const unknownWhileHeld = unknown
   release()
+  await clock.settle()
+  expect(isAnsweredWhileHeld).toBe(true)
+  expect(unknownWhileHeld).toBe(undefined)
   await clock.settle()
   expect(typeof unknown?.deny).toBe('string')
 })
