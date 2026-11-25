@@ -201,10 +201,13 @@ export function parseKey(key: string): { fullName: string; number: number } | un
 
 // ---- fetching ----
 
+/** The most pull requests one search returns; a search that returns this many may have left some out. */
+export const SEARCH_LIMIT = 50
+
 /** Open pull requests waiting for my review in one source; drafts are left out. */
 export function buildSearchArgv(source: string): string[] {
   return [
-    'gh', 'search', 'prs', '--review-requested=@me', '--state=open', '--draft=false', '--limit', '50',
+    'gh', 'search', 'prs', '--review-requested=@me', '--state=open', '--draft=false', '--limit', String(SEARCH_LIMIT),
     '--json', 'number,title,url,repository',
     source.includes('/') ? '--repo' : '--owner', source,
   ]
