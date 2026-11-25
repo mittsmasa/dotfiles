@@ -109,13 +109,39 @@ type Running = {
   allowedRoots: string[]
 }
 
+/** How many reviews go at once: those a reviewer is at work on, and those being set up for one. */
+const MAX_PARALLEL = 3
+
 // The module's own copy of what the store holds; rebuilt by `init` on a reload.
 let inbox: Inbox = EMPTY
 let reviewerAgentIds: string[] = []
-let running: Running | undefined
-let spawning: Promise<void> | undefined
+let running: Running[] = []
+// The reviews being set up for a reviewer. They stay `queued` until it starts,
+// so `pump` must not pick them again.
+const preparing = new Set<string>()
+// Woken whenever `running` or `preparing` changes: a tool call may be waiting on its reviewer's spawn.
+let waiters: (() => void)[] = []
 // Store writes go through one line: two hooks merging at once lose a write.
 let line: Promise<unknown> = Promise.resolve()
+// Git writes to one clone go one at a time: two fetches fight over the same ref locks.
+const repoLines = new Map<string, Promise<unknown>>()
+
+function wake() {
+  const woken = waiters
+  waiters = []
+  for (const one of woken) one()
+}
+
+/** Runs `fn` once every git write queued before it on `repo` has ended; a failure holds up none after it. */
+function withRepoLock<T>(repo: string, fn: () => Promise<T>): Promise<T> {
+  const step = (repoLines.get(repo) ?? Promise.resolve()).then(fn)
+  repoLines.set(
+    repo,
+    step.catch(() => undefined),
+  )
+
+  return step
+}
 
 // ---- which session runs the inbox ----
 
