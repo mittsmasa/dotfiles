@@ -20,11 +20,41 @@ import type { Reply } from './slack'
 const POLL_MS = 60_000
 const SELF_TS_LIMIT = 50
 
+const LINK_SHAPE = 'link-1'
+
 const link = atom({ plugin: 'slack-thread-link', key: 'link' } as const, null as SlackLink | null, {
-  shape: 'link-1',
+  shape: LINK_SHAPE,
 })
 
 type $ = EngineInterface
+
+/** $.state はプロセスが終わると消えるので、紐付けはセッションごとに $.store にも残す。 */
+type StoredLink = { shape: string; value: SlackLink }
+
+async function storeKey($: $): Promise<string> {
+  return `link:${await $.session.id()}`
+}
+
+/** 紐付けを書き換え、同じ値を $.store にも書く。 */
+async function save($: $, fn: (cur: SlackLink | null) => SlackLink | null): Promise<void> {
+  let next: SlackLink | null = null
+  // update は版が合わないと fn を呼び直すので、最後に返した値が書かれた値になる。
+  await update($, link, cur => (next = fn(cur)))
+  const key = await storeKey($)
+  if (next) {
+    await $.store.set(key, { shape: LINK_SHAPE, value: next } satisfies StoredLink)
+  } else {
+    await $.store.delete(key)
+  }
+}
+
+/** 紐付けが空なら $.store から読み戻す。ホットリロードでは state が残っているので何もしない。 */
+async function restore($: $): Promise<void> {
+  if (await read($, link)) return
+  const stored = (await $.store.get(await storeKey($))) as StoredLink | undefined
+  if (stored?.shape !== LINK_SHAPE) return
+  await update($, link, cur => cur ?? stored.value)
+}
 
 /**
  * Slack コネクタのサーバー名（ツール名 mcp__<server>__slack_* の <server> 部分）。
@@ -84,7 +114,7 @@ async function poll($: $): Promise<void> {
     const { title, replies } = await fetchThread($, l)
     // 古い紐付けに足りない値はここで補う。
     if (!l.ownerId || (title !== undefined && title !== l.title)) {
-      await update($, link, cur => (cur && cur.threadTs === l.threadTs ? { ...cur, ownerId, title: title ?? cur.title } : cur))
+      await save($, cur => (cur && cur.threadTs === l.threadTs ? { ...cur, ownerId, title: title ?? cur.title } : cur))
     }
     const fresh = replies.filter(
       r => tsAfter(r.ts, l.lastTs) && !l.selfTs.includes(r.ts),
