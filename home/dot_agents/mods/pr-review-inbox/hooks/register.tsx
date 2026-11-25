@@ -115,9 +115,9 @@ export const register: Register = (on, options) => {
     })
     const ready = await makeConfig($, options)
     config = ready
-    // A reload: this session was running the inbox, so it picks it up again.
-    if (await read($, activeAtom)) {
-      await activate($, ready, 'session.start')
+    // A reload: this session was running the inbox, so it picks it up again,
+    // unless another session has typed /review-inbox since.
+    if ((await read($, activeAtom)) && (await activate($, ready, 'session.start'))) {
       void $.ui.open({ id: PANE, title: TITLE })
     }
 
