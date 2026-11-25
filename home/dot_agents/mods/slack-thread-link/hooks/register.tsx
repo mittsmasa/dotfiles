@@ -124,7 +124,7 @@ async function poll($: $): Promise<void> {
       // submit はターンが始まるまで resolve しない。その間 isPolling が次の重複を止める。
       // 既読位置は渡せてから進め、失敗したら次のポーリングでもう一度渡す。
       await $.prompt.submit({ text: formatPrompt(l.url, fresh, ownerId) })
-      await update($, link, cur =>
+      await save($, cur =>
         cur && cur.threadTs === l.threadTs && tsAfter(newest, cur.lastTs)
           ? { ...cur, lastTs: newest }
           : cur,
@@ -148,7 +148,7 @@ async function linkThread($: $, url: string): Promise<string> {
   const draft: SlackLink = { url, ...ref, ownerId, lastTs: ref.threadTs, selfTs: [] }
   const { title, replies } = await fetchThread($, draft)
   const next: SlackLink = { ...draft, title, lastTs: replies.at(-1)?.ts ?? ref.threadTs }
-  await update($, link, () => next)
+  await save($, () => next)
   showStatus($, next)
 
   return `このセッションを Slack スレッドに紐付けました。${POLL_MS / 1000} 秒ごとに確かめ、あなたの発言があったら、他の人の返信も文脈として一緒に渡します。`
@@ -160,7 +160,13 @@ export const register: Register = on => {
       name: 'slack-link',
       description: 'Slack スレッドを紐付ける（<URL> / off / now / 引数なしで状態表示）',
     })
-    showStatus($, await read($, link))
+    try {
+      await restore($)
+      showStatus($, await read($, link))
+    } catch (err) {
+      // 読み戻せなくても、紐付けなしのままポーリングとセッションの開始は続ける。
+      void $.ui.status(`Slack: 紐付けを読み戻せませんでした: ${err instanceof Error ? err.message : String(err)}`)
+    }
     // 読み込み直後にも一度確かめ、冒頭などの表示をすぐ埋める。
     $.clock.after(0, () => {
       void poll($)
@@ -197,7 +203,7 @@ export const register: Register = on => {
         return { text: `紐付け中: ${l.url}\n冒頭: ${l.title ?? '（まだ取得していません）'}` }
       }
       if (arg === 'off') {
-        await update($, link, () => null)
+        await save($, () => null)
         showStatus($, null)
         return { text: 'Slack スレッドとの紐付けを外しました。' }
       }
@@ -247,7 +253,7 @@ export const register: Register = on => {
       if (!l || input.channel_id !== l.channel || input.thread_ts !== l.threadTs) return ran
       const own = (await fetchThread($, l)).replies.at(-1)?.ts
       if (own) {
-        await update($, link, cur =>
+        await save($, cur =>
           cur && cur.threadTs === l.threadTs
             ? { ...cur, selfTs: [...cur.selfTs, own].slice(-SELF_TS_LIMIT) }
             : cur,
