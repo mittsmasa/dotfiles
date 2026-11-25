@@ -10,13 +10,71 @@ const MAX_FINDINGS = 20
 
 // ---- the fetch window ----
 
-/** Weekdays, 8:00 to 16:59, in the timezone `utcOffsetMinutes` names. */
-export function isDue(now: Date, utcOffsetMinutes: number): boolean {
+/** When the inbox fetches on its own: how often, on which days, between which hours. */
+export type Schedule = {
+  intervalMinutes: number
+  /** 0 is Sunday, 6 is Saturday. */
+  days: number[]
+  /** From `fromHour`:00 up to, not including, `toHour`:00. */
+  fromHour: number
+  toHour: number
+}
+
+/** Hourly, on weekdays from 8:00 to 16:59. */
+export const DEFAULT_SCHEDULE: Schedule = { intervalMinutes: 60, days: [1, 2, 3, 4, 5], fromHour: 8, toHour: 17 }
+
+// Below this a fetch, a search per source and a view per pull request, comes too often.
+const MIN_INTERVAL_MINUTES = 5
+// Above a day the wait would no longer fit in a timer.
+const MAX_INTERVAL_MINUTES = 24 * 60
+
+const isWholeIn = (value: unknown, min: number, max: number): value is number =>
+  Number.isInteger(value) && (value as number) >= min && (value as number) <= max
+
+/** The `schedule` entry of the config file: what does not read falls back to the default, key by key. */
+export function parseSchedule(raw: unknown): { schedule: Schedule; warnings: string[] } {
+  if (raw === undefined) return { schedule: DEFAULT_SCHEDULE, warnings: [] }
+  if (!isRecord(raw)) return { schedule: DEFAULT_SCHEDULE, warnings: ['schedule がオブジェクトでない'] }
+  const warnings: string[] = []
+  let { intervalMinutes, days, fromHour, toHour } = DEFAULT_SCHEDULE
+  if (isWholeIn(raw.intervalMinutes, MIN_INTERVAL_MINUTES, MAX_INTERVAL_MINUTES)) intervalMinutes = raw.intervalMinutes
+  else if (raw.intervalMinutes !== undefined) {
+    warnings.push(`schedule.intervalMinutes が ${MIN_INTERVAL_MINUTES}〜${MAX_INTERVAL_MINUTES} の整数でない`)
+  }
+  if (Array.isArray(raw.days) && raw.days.length > 0 && raw.days.every(day => isWholeIn(day, 0, 6))) {
+    days = [...new Set(raw.days as number[])].sort((a, b) => a - b)
+  } else if (raw.days !== undefined) warnings.push('schedule.days が 0〜6 の整数の配列でない')
+  if (raw.fromHour !== undefined || raw.toHour !== undefined) {
+    const from = raw.fromHour ?? fromHour
+    const to = raw.toHour ?? toHour
+    if (isWholeIn(from, 0, 24) && isWholeIn(to, 0, 24) && from < to) {
+      fromHour = from
+      toHour = to
+    } else warnings.push('schedule.fromHour と toHour が 0〜24 の整数で fromHour < toHour になっていない')
+  }
+
+  return { schedule: { intervalMinutes, days, fromHour, toHour }, warnings }
+}
+
+/** True while `now`, in the timezone `utcOffsetMinutes` names, is inside the schedule's days and hours. */
+export function isDue(now: Date, utcOffsetMinutes: number, schedule: Schedule): boolean {
   const local = new Date(now.getTime() + utcOffsetMinutes * 60_000)
-  const day = local.getUTCDay()
   const hour = local.getUTCHours()
 
-  return day >= 1 && day <= 5 && hour >= 8 && hour < 17
+  return schedule.days.includes(local.getUTCDay()) && hour >= schedule.fromHour && hour < schedule.toHour
+}
+
+const DAY_NAMES = '日月火水木金土'
+
+/** The schedule's days and hours for the pane: `平日 8–17 時`, `毎日 9–19 時`, `月水金 8–17 時`. */
+export function windowText(schedule: Schedule): string {
+  const { days } = schedule
+  const isWeekdays = days.length === 5 && [1, 2, 3, 4, 5].every(day => days.includes(day))
+  // Monday first, Sunday last, as a week reads.
+  const named = [1, 2, 3, 4, 5, 6, 0].filter(day => days.includes(day)).map(day => DAY_NAMES[day]).join('')
+  const label = days.length === 7 ? '毎日' : isWeekdays ? '平日' : named
+
+  return `${label} ${schedule.fromHour}–${schedule.toHour} 時`
 }
 
 // ---- repositories ----
@@ -35,6 +93,7 @@ export type RepoConfig = {
   /** Where a clone is when `repos` does not say: `{owner}` and `{repo}` filled in. */
   clonePath?: string
   profile: Profile
+  schedule: Schedule
   /** What in the file was dropped, for the pane to show. */
   warnings: string[]
 }
@@ -59,7 +118,14 @@ function toRegExp(source: unknown): RegExp | undefined {
  * later, on the real path.
  */
 export function parseConfig(text: string | undefined, home: string): RepoConfig {
-  const empty: RepoConfig = { repos: {}, criteria: {}, sources: [], profile: parseProfile(undefined, home).profile, warnings: [] }
+  const empty: RepoConfig = {
+    repos: {},
+    criteria: {},
+    sources: [],
+    profile: parseProfile(undefined, home).profile,
+    schedule: DEFAULT_SCHEDULE,
+    warnings: [],
+  }
   const raw = text === undefined ? undefined : parseJson(text)
   if (!isRecord(raw) || (!isRecord(raw.repos) && !Array.isArray(raw.sources))) return empty
   const expand = (path: string) => expandHome(path, home)
@@ -77,6 +143,7 @@ export function parseConfig(text: string | undefined, home: string): RepoConfig 
   if (typeof raw.clonePath === 'string' && raw.clonePath.includes('{repo}')) clonePath = expand(raw.clonePath)
   else if (raw.clonePath !== undefined) warnings.push('clonePath に {repo} が無い')
   const { profile, warnings: profileWarnings } = parseProfile(raw.review, home)
+  const { schedule, warnings: scheduleWarnings } = parseSchedule(raw.schedule)
   const criteria = Object.fromEntries(
     Object.entries(isRecord(raw.criteria) ? raw.criteria : {}).flatMap(([name, entry]) => {
       if (!isRecord(entry) || typeof entry.path !== 'string' || !entry.path) return []
@@ -92,7 +159,8 @@ export function parseConfig(text: string | undefined, home: string): RepoConfig 
     sources,
     ...(clonePath ? { clonePath } : {}),
     profile,
-    warnings: [...warnings, ...profileWarnings],
+    schedule,
+    warnings: [...warnings, ...profileWarnings, ...scheduleWarnings],
   }
 }
 

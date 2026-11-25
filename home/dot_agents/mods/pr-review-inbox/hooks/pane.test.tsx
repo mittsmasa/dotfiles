@@ -338,6 +338,16 @@ test('typing /review-inbox again starts nothing twice', async ($, on) => {
   expect(calls.search).toBe(2)
 })
 
+test('the config file sets how often the inbox fetches', async ($, on) => {
+  const config = JSON.stringify({ repos: { 'acme/widgets': '~/src/widgets' }, schedule: { intervalMinutes: 30 } })
+  const { clock, calls } = world(on, [review()], {}, undefined, config)
+  await begin($, clock)
+  expect(calls.search).toBe(1)
+
+  await clock.advance(30 * 60 * 1000)
+  expect(calls.search).toBe(2)
+})
+
 test('a session picks the inbox up again when it starts while marked as running it', async ($, on) => {
   const { clock, calls } = world(on, [review()])
   await begin($, clock)
@@ -1199,6 +1209,21 @@ test('時間外は、自動取得が平日 8–17 時だけだと見出しに出
   await clock.advance(7 * HOUR)
   const after = await $.ui.mount({ ...PANE, surface: 'desktop' })
   expect(await after.find({ type: 'Text', text: /時間外 · 平日 8–17 時だけ自動取得/ })).toBeDefined()
+  await after.unmount()
+})
+
+test('時間外の見出しは、設定した曜日と時間帯を出す', async ($, on) => {
+  const config = JSON.stringify({
+    repos: { 'acme/widgets': '~/src/widgets' },
+    schedule: { days: [1, 3, 5], fromHour: 9, toHour: 12 },
+  })
+  const { clock } = world(on, [review()], {}, undefined, config)
+  await begin($, clock)
+
+  // Monday 11:00 JST to 13:00 JST.
+  await clock.advance(2 * HOUR)
+  const after = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect(await after.find({ type: 'Text', text: /時間外 · 月水金 9–12 時だけ自動取得/ })).toBeDefined()
   await after.unmount()
 })
 

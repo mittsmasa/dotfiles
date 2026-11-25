@@ -23,6 +23,7 @@ import {
   threadTone,
   threadsHeading,
   toneOf,
+  windowText,
 } from './reviews'
 import {
   activate,
@@ -198,7 +199,7 @@ export const register: Register = (on, options) => {
     const mode = selected ? state.mode : undefined
     // The request being confirmed or sent, if any: the detail stays as it is around it.
     const pending = mode?.kind === 'confirm' || mode?.kind === 'sending' ? mode : undefined
-    const isOpen = isDue(new Date(await $.clock.now()), offset)
+    const isOpen = isDue(new Date(await $.clock.now()), offset, ready.schedule)
 
     // The left edge of a block: one cell wide, as tall as what stands beside it.
     const bar = (color: string) => <Box width={1} flexShrink={0} backgroundColor={color} />
@@ -902,7 +903,7 @@ export const register: Register = (on, options) => {
               : state.lastFetchedAt
                 ? `最終取得 ${clockText(state.lastFetchedAt, offset)}`
                 : 'まだ取得していません'}
-            {isOpen ? '' : ' · 時間外 · 平日 8–17 時だけ自動取得'}
+            {isOpen ? '' : ` · 時間外 · ${windowText(ready.schedule)}だけ自動取得`}
           </Text>
           <Button key="fetch" variant="secondary" label="更新" onPress={() => void fetchNow($, ready)} />
         </Box>

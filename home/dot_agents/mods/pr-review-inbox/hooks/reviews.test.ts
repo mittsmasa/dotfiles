@@ -33,6 +33,7 @@ import {
   originMatches,
   parseConfig,
   parseReviewerJson,
+  parseSchedule,
   recoverOnStart,
   requestedArgs,
   resolveClone,
@@ -48,6 +49,7 @@ import {
   toneOf,
   verdictOf,
   viewArgs,
+  windowText,
 } from './reviews'
 
 const JST = 540
@@ -83,13 +85,81 @@ const fetched = (headSha: string, key = KEY) => ({
 const jst = (day: number, hour: number, minute: number) =>
   new Date(Date.UTC(2026, 10, day, hour - 9, minute))
 
-test('the fetch window is weekdays from 8:00 to 16:59', async () => {
-  expect(isDue(jst(9, 8, 0), JST)).toBe(true)
-  expect(isDue(jst(9, 16, 59), JST)).toBe(true)
-  expect(isDue(jst(9, 7, 59), JST)).toBe(false)
-  expect(isDue(jst(9, 17, 1), JST)).toBe(false)
-  expect(isDue(jst(14, 10, 0), JST)).toBe(false)
-  expect(isDue(jst(15, 10, 0), JST)).toBe(false)
+test('without a schedule, the inbox fetches hourly on weekdays from 8:00 to 16:59', async () => {
+  const { schedule, warnings } = parseConfig(JSON.stringify({ sources: ['acme'] }), '/Users/me')
+
+  expect(schedule).toEqual({ intervalMinutes: 60, days: [1, 2, 3, 4, 5], fromHour: 8, toHour: 17 })
+  expect(warnings).toEqual([])
+  expect(isDue(jst(9, 8, 0), JST, schedule)).toBe(true)
+  expect(isDue(jst(9, 16, 59), JST, schedule)).toBe(true)
+  expect(isDue(jst(9, 7, 59), JST, schedule)).toBe(false)
+  expect(isDue(jst(9, 17, 1), JST, schedule)).toBe(false)
+  expect(isDue(jst(14, 10, 0), JST, schedule)).toBe(false)
+  expect(isDue(jst(15, 10, 0), JST, schedule)).toBe(false)
+})
+
+test('a schedule sets the interval, the days and the hours', async () => {
+  const { schedule, warnings } = parseSchedule({ intervalMinutes: 30, days: [6, 0, 6], fromHour: 9, toHour: 19 })
+
+  expect(schedule).toEqual({ intervalMinutes: 30, days: [0, 6], fromHour: 9, toHour: 19 })
+  expect(warnings).toEqual([])
+  // 2026-11-14 is a Saturday, 11-09 a Monday.
+  expect(isDue(jst(14, 9, 0), JST, schedule)).toBe(true)
+  expect(isDue(jst(14, 18, 59), JST, schedule)).toBe(true)
+  expect(isDue(jst(14, 8, 59), JST, schedule)).toBe(false)
+  expect(isDue(jst(14, 19, 0), JST, schedule)).toBe(false)
+  expect(isDue(jst(9, 10, 0), JST, schedule)).toBe(false)
+})
+
+test('a schedule with one hour set keeps the default for the other', async () => {
+  expect(parseSchedule({ toHour: 19 }).schedule).toEqual({ intervalMinutes: 60, days: [1, 2, 3, 4, 5], fromHour: 8, toHour: 19 })
+  expect(parseSchedule({ fromHour: 0, toHour: 24 }).schedule).toMatchObject({ fromHour: 0, toHour: 24 })
+})
+
+test('a schedule entry that does not read falls back to the default and is named, and only that one', async () => {
+  const intervalOf = (intervalMinutes: unknown) => parseSchedule({ intervalMinutes })
+  for (const bad of [4, 1441, 7.5, '30', null]) {
+    expect(intervalOf(bad).schedule.intervalMinutes).toBe(60)
+    expect(intervalOf(bad).warnings.length).toBe(1)
+  }
+  expect(intervalOf(5).schedule.intervalMinutes).toBe(5)
+  expect(intervalOf(1440).schedule.intervalMinutes).toBe(1440)
+
+  for (const bad of [[], [7], [-1], [1.5], 'mon']) {
+    expect(parseSchedule({ days: bad }).schedule.days).toEqual([1, 2, 3, 4, 5])
+    expect(parseSchedule({ days: bad }).warnings.length).toBe(1)
+  }
+
+  // Overnight windows are not supported: both hours fall back together.
+  for (const hours of [{ fromHour: 22, toHour: 6 }, { fromHour: 9, toHour: 9 }, { fromHour: 9, toHour: 25 }, { fromHour: '9' }]) {
+    expect(parseSchedule(hours).schedule).toMatchObject({ fromHour: 8, toHour: 17 })
+    expect(parseSchedule(hours).warnings.length).toBe(1)
+  }
+
+  const mixed = parseSchedule({ intervalMinutes: 1, days: [0, 6], fromHour: 10 })
+  expect(mixed.schedule).toEqual({ intervalMinutes: 60, days: [0, 6], fromHour: 10, toHour: 17 })
+  expect(mixed.warnings.length).toBe(1)
+
+  expect(parseSchedule('hourly')).toEqual({
+    schedule: { intervalMinutes: 60, days: [1, 2, 3, 4, 5], fromHour: 8, toHour: 17 },
+    warnings: ['schedule がオブジェクトでない'],
+  })
+})
+
+test('what the schedule had wrong reaches the config file warnings', async () => {
+  const config = parseConfig(JSON.stringify({ sources: ['acme'], schedule: { intervalMinutes: 1 } }), '/Users/me')
+
+  expect(config.schedule.intervalMinutes).toBe(60)
+  expect(config.warnings).toEqual(['schedule.intervalMinutes が 5〜1440 の整数でない'])
+})
+
+test('the fetch window reads as days then hours, Monday first', async () => {
+  const hours = { intervalMinutes: 60, fromHour: 8, toHour: 17 }
+
+  expect(windowText({ ...hours, days: [1, 2, 3, 4, 5] })).toBe('平日 8–17 時')
+  expect(windowText({ ...hours, days: [0, 1, 2, 3, 4, 5, 6] })).toBe('毎日 8–17 時')
+  expect(windowText({ ...hours, days: [0, 1, 3, 5] })).toBe('月水金日 8–17 時')
+  expect(windowText({ ...hours, days: [6, 0], fromHour: 0, toHour: 24 })).toBe('土日 0–24 時')
 })
 
 test('the search asks for open, non-draft pull requests in one source: a repository, or an owner', async () => {

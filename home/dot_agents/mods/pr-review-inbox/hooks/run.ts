@@ -87,6 +87,7 @@ export type Config = {
   sources: string[]
   clonePath?: string
   profile: RepoConfig['profile']
+  schedule: RepoConfig['schedule']
   /** The viewpoint files that are plain files, in reading order; not yet resolved. */
   viewpoints: string[]
   /** What the config file had wrong, shown after a fetch. */
@@ -118,8 +119,6 @@ let line: Promise<unknown> = Promise.resolve()
 
 // ---- which session runs the inbox ----
 
-const HOUR_MS = 60 * 60 * 1000
-
 // Kept in the session's state so a reload finds it; register.tsx declares the
 // same atom for its reads.
 const activeAtom = atom({ plugin: 'pr-review-inbox', key: 'isActive' } as const, false)
@@ -127,7 +126,7 @@ const activeAtom = atom({ plugin: 'pr-review-inbox', key: 'isActive' } as const,
 // This module's copy of the atom, for the paths that cannot await a read.
 let isActive = false
 let sessionId: string | undefined
-let hourly: { cancel: () => void } | undefined
+let fetchTimer: { cancel: () => void } | undefined
 let isRegistered = false
 let hasLoadedReviewers = false
 
@@ -167,15 +166,15 @@ export async function activate($: EngineInterface, config: Config, via: 'command
       .write(`${config.dataDir}/active.json`, JSON.stringify({ sessionId, via, at: (await now($)).toISOString() }))
       .catch(() => undefined)
   }
-  hourly?.cancel()
-  hourly = $.clock.every(HOUR_MS, () => void tick($, config))
+  fetchTimer?.cancel()
+  fetchTimer = $.clock.every(config.schedule.intervalMinutes * 60_000, () => void tick($, config))
   if (!wasActive) $.clock.after(500, () => void tick($, config))
 }
 
 /** Stops this session's inbox: its timer, its pane, and the review it had running. */
 async function stop($: EngineInterface, config: Config) {
-  hourly?.cancel()
-  hourly = undefined
+  fetchTimer?.cancel()
+  fetchTimer = undefined
   isActive = false
   await update($, activeAtom, () => false)
   const mine = running
@@ -465,7 +464,7 @@ export async function makeConfig($: EngineInterface, options: Readonly<Record<st
   const home = (await $.env.get('HOME')) ?? ''
   const offset = Number(options.utcOffsetMinutes)
   const text = await $.fs.read(`${home}/${CONFIG_FILE}`).then(String, () => undefined)
-  const { repos, criteria, sources, clonePath, profile, warnings } = parseConfig(text, home)
+  const { repos, criteria, sources, clonePath, profile, schedule, warnings } = parseConfig(text, home)
   const picked = await resolveViewpoints(profile.viewpoints, {
     list: path => $.fs.list(path),
     stat: path => $.fs.stat(path),
@@ -478,6 +477,7 @@ export async function makeConfig($: EngineInterface, options: Readonly<Record<st
     sources,
     ...(clonePath ? { clonePath } : {}),
     profile,
+    schedule,
     viewpoints: picked.files,
     warnings: [...warnings, ...picked.warnings],
     utcOffsetMinutes: Number.isFinite(offset) ? offset : 0,
@@ -618,7 +618,7 @@ async function sentAtOf(
 }
 
 export async function tick($: EngineInterface, config: Config) {
-  if (isActive && isDue(await now($), config.utcOffsetMinutes)) await fetchNow($, config)
+  if (isActive && isDue(await now($), config.utcOffsetMinutes, config.schedule)) await fetchNow($, config)
 }
 
 // ---- reviewing, one at a time ----
