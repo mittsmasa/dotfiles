@@ -109,11 +109,18 @@ async function setUp($: Engine, on: On, initial: string[], options: SetUpOptions
     await clock.settle()
   }
 
-  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
-  await run(URL)
+  const start = () => $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
 
-  return { world, clock, run, checkNow }
+  await start()
+  if (options.isLinked !== false) await run(URL)
+
+  return { world, clock, run, checkNow, start }
 }
+
+const storedLink = (url: string, shape = 'link-1') => ({
+  shape,
+  value: { url, channel: 'C1', threadTs: '1793849534.425339', ownerId: OWNER, title: TITLE, lastTs: '1793849534.425339', selfTs: [] },
+})
 
 test('パーマリンクから親スレッドの channel と ts を取り出す', async () => {
   expect(parsePermalink(URL)).toEqual({ channel: 'C07QD6X30Q2', threadTs: '1793849534.425339' })
@@ -301,4 +308,46 @@ test('入力したメッセージにパーマリンクがあれば紐付け、�
   world.replies = [reply('1795000100.000001', OWNER, 'mitsuhashi', 'あとからの依頼')]
   await clock.advance(60_000)
   expect(world.submitted.some(text => text.includes('あとからの依頼'))).toBe(true)
+})
+
+test('紐付けはセッション ID ごとに $.store にも残る', async ($, on) => {
+  const { world } = await setUp($, on, [])
+
+  expect((world.store.get(STORE_KEY) as { value: { url: string } }).value.url).toBe(URL)
+})
+
+test('プロセスが変わって state が空でも、$.store に残った紐付けを読み戻す', async ($, on) => {
+  const { run } = await setUp($, on, [], { store: { [STORE_KEY]: storedLink(URL) }, isLinked: false })
+
+  expect((await run('')).text).toBe(`紐付け中: ${URL}\n冒頭: ${TITLE}`)
+})
+
+test('紐付けを外すと $.store からも消える', async ($, on) => {
+  const { world, run } = await setUp($, on, [])
+
+  await run('off')
+
+  expect(world.store.has(STORE_KEY)).toBe(false)
+})
+
+test('ホットリロードで state が残っていれば、$.store の値で上書きしない', async ($, on) => {
+  const { world, run, start } = await setUp($, on, [])
+  world.store.set(STORE_KEY, storedLink('https://x.slack.com/archives/C9/p1700000000000001'))
+
+  await start()
+
+  expect((await run('')).text).toContain(`紐付け中: ${URL}\n`)
+})
+
+test('$.store の値の形が古ければ読み戻さない', async ($, on) => {
+  const { run } = await setUp($, on, [], { store: { [STORE_KEY]: storedLink(URL, 'link-0') }, isLinked: false })
+
+  expect((await run('')).text).toBe('紐付けている Slack スレッドはありません。')
+})
+
+test('$.store を読めなくても、紐付けなしでセッションを始めて理由を出す', async ($, on) => {
+  const { world, run } = await setUp($, on, [], { isLinked: false, isStoreGetFailing: true })
+
+  expect(world.statuses).toContain('Slack: 紐付けを読み戻せませんでした: store が壊れています')
+  expect((await run('')).text).toBe('紐付けている Slack スレッドはありません。')
 })
