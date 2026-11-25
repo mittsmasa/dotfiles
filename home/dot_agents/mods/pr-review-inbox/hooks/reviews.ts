@@ -622,6 +622,69 @@ export function applyFetchResult(
   return fetched ? selectQueued(fetched, stored, reRequested) : stored
 }
 
+// ---- the checkouts of pull requests that left the list ----
+
+/**
+ * True when every search read and none reached `SEARCH_LIMIT`: only then does
+ * a pull request missing from them mean it is no longer waiting for my review.
+ */
+export function isSearchComplete(searches: readonly CommandOutput[]): boolean {
+  return searches.every(search => {
+    const keys = searchedKeys(search)
+
+    return keys !== undefined && keys.length < SEARCH_LIMIT
+  })
+}
+
+/**
+ * The clones whose checkouts are looked over: those the config names (`repos`,
+ * and each `owner/repo` source) and those of `keys`. An org-wide source names
+ * no repository, so its clones are found through `keys` only.
+ */
+export function clonesToSweep(
+  config: Pick<RepoConfig, 'repos' | 'clonePath' | 'sources'>,
+  keys: Iterable<string>,
+): string[] {
+  const names = [
+    ...Object.keys(config.repos),
+    ...config.sources.filter(source => source.includes('/')),
+    ...[...keys].flatMap(key => parseKey(key)?.fullName ?? []),
+  ]
+
+  return [...new Set(names.flatMap(name => resolveClone(config, name) ?? []))]
+}
+
+/** The pull requests of `keys` whose checkout lies in `clone`, by number. */
+export function checkoutsInUse(
+  config: Pick<RepoConfig, 'repos' | 'clonePath'>,
+  clone: string,
+  keys: Iterable<string>,
+): Set<number> {
+  const numbers = new Set<number>()
+  for (const key of keys) {
+    const parsed = parseKey(key)
+    if (parsed && resolveClone(config, parsed.fullName) === clone) numbers.add(parsed.number)
+  }
+
+  return numbers
+}
+
+/**
+ * Of what lies in a clone's `.claude/worktrees`, the names of this mod's
+ * checkouts (`review-<N>`, a real folder) whose pull request is not in `inUse`.
+ * Anything named otherwise is someone else's and is never returned.
+ */
+export function staleCheckouts(
+  entries: readonly { name: string; kind: 'file' | 'dir' | 'other'; isLink: boolean }[],
+  inUse: ReadonlySet<number>,
+): string[] {
+  return entries.flatMap(entry => {
+    const match = /^review-([1-9]\d*)$/.exec(entry.name)
+
+    return match && entry.kind === 'dir' && !entry.isLink && !inUse.has(Number(match[1])) ? [entry.name] : []
+  })
+}
+
 // ---- a review's life ----
 
 export function isTimedOut(review: Review, now: Date): boolean {
