@@ -953,6 +953,49 @@ export function bandText(reviews: readonly Review[]): string | undefined {
   return `PR 待ち ${waiting.length}` + (blockers > 0 ? ` · blocker ${blockers}` : '')
 }
 
+// ---- telling that pre-reads ended ----
+
+const isBusy = (review: Review) => review.status === 'queued' || review.status === 'reviewing'
+
+/**
+ * The keys of the reviews that waited or were being reviewed in `before` and
+ * are done in `after`. One absent from `before` is not among them: a restart
+ * restores what was done, and that is no news.
+ */
+export function newlyDone(before: readonly Review[], after: readonly Review[]): string[] {
+  const busy = new Set(before.filter(isBusy).map(review => review.key))
+
+  return after.filter(review => review.status === 'done' && busy.has(review.key)).map(review => review.key)
+}
+
+/** True when no review waits for a reviewer or has one at work. */
+export const isDrained = (reviews: readonly Review[]) => !reviews.some(isBusy)
+
+/** How many of `keys` still wait for me, and their blockers; nothing with none. */
+function tally(reviews: readonly Review[], keys: readonly string[]): string | undefined {
+  const waiting = unread(reviews).filter(review => keys.includes(review.key))
+  if (waiting.length === 0) return undefined
+  const blockers = waiting
+    .flatMap(review => review.findings)
+    .filter(finding => finding.severity === 'blocker').length
+
+  return `${waiting.length} 件` + (blockers > 0 ? ` · blocker ${blockers}` : '')
+}
+
+/** The toast for the reviews among `keys` that just ended. */
+export function doneNotice(reviews: readonly Review[], keys: readonly string[]): string | undefined {
+  const counted = tally(reviews, keys)
+
+  return counted === undefined ? undefined : `下読み完了 ${counted}`
+}
+
+/** The notification once every review has ended; nothing while one is left. */
+export function drainedNotice(reviews: readonly Review[], keys: readonly string[]): string | undefined {
+  const counted = isDrained(reviews) ? tally(reviews, keys) : undefined
+
+  return counted === undefined ? undefined : `下読みがすべて終わりました: ${counted}`
+}
+
 const VERDICT_LABEL: Readonly<Record<Verdict, string>> = {
   'needs-fix': '要修正',
   comments: 'コメントあり',
