@@ -636,7 +636,7 @@ export type TimeoutAction = { kind: 'none' } | { kind: 'fail' } | { kind: 'wait'
 
 /**
  * What a review's timer does. The mod cannot stop a reviewer, so one still at
- * work past the timeout is waited on (its worktree kept, no other started)
+ * work past the timeout is waited on (its worktree kept, its slot not freed)
  * until it ends or the hard limit passes.
  */
 export function timeoutAction(review: Review, now: Date, isReviewerAlive: boolean): TimeoutAction {
