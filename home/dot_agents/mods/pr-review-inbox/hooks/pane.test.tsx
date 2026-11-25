@@ -527,6 +527,72 @@ test('a reviewer still at work is given up on after the hard limit', async ($, o
   expect(removals(calls.argv)).toBe(1)
 })
 
+// ---- reviewing side by side ----
+
+test('three reviewers at work fill the slots, and one ending lets the next start', async ($, on) => {
+  const { clock, calls } = reviewersAtWork(on, 1, [KEY, 'acme/widgets#13', 'acme/widgets#14'], [queued(15)])
+  await begin($, clock)
+  expect(calls.spawn).toBe(0)
+
+  await $.turn.complete({ agentId: 'reviewer-13', answer: 'no json here' } as never)
+  await clock.settle()
+
+  expect(calls.spawn).toBe(1)
+  expect(removalsOf(calls.argv, 13)).toBe(1)
+  expect(removals(calls.argv)).toBe(0)
+})
+
+test('reviews of one clone are set up side by side, but their git fetches go one at a time', async ($, on) => {
+  const { clock, calls, fetches } = world(on, [queued(12), queued(13)])
+  let release = () => {}
+  fetches.hold = new Promise<void>(resolve => (release = resolve))
+  await begin($, clock)
+
+  // Both are being set up; the second waits on the clone, not on the first review.
+  expect(fetches.inFlight).toBe(1)
+  release()
+  await clock.settle()
+
+  expect(fetches.most).toBe(1)
+  expect(calls.spawn).toBe(2)
+})
+
+test('a reviewer at work is not held up while another review is being set up', async ($, on) => {
+  const { clock, fetches } = reviewersAtWork(on, 1, ['acme/widgets#20'], [queued(12)])
+  let release = () => {}
+  fetches.hold = new Promise<void>(resolve => (release = resolve))
+  await begin($, clock)
+  expect(fetches.inFlight).toBe(1)
+
+  // Answered with no clock moving: the 5-second wait is not reached.
+  let isAnswered = false
+  void $.tool.call(subagentBash('reviewer-20')).then(() => (isAnswered = true))
+  await Promise.resolve()
+  await Promise.resolve()
+  expect(isAnswered).toBe(true)
+
+  // An agent not yet known waits while a review is set up, and is judged once it is.
+  let unknown: { deny?: unknown } | undefined
+  void $.tool.call(subagentBash('someone-elses-agent')).then(answer => (unknown = answer))
+  await Promise.resolve()
+  expect(unknown).toBe(undefined)
+  release()
+  await clock.settle()
+  expect(typeof unknown?.deny).toBe('string')
+})
+
+test('handing the inbox to another session takes away every checkout its reviewers had', async ($, on) => {
+  const { clock, calls, store } = reviewersAtWork(on, 1, [KEY, 'acme/widgets#13'])
+  await begin($, clock)
+  expect(removals(calls.argv)).toBe(0)
+
+  store.set('owner', { sessionId: 'session-b' })
+  await clock.advance(HOUR)
+
+  expect(removals(calls.argv)).toBe(1)
+  expect(removalsOf(calls.argv, 13)).toBe(1)
+})
+
 // ---- what a subagent may do ----
 
 test('a reviewer this mod spawned stays refused in a session not running the inbox', async ($, on) => {
