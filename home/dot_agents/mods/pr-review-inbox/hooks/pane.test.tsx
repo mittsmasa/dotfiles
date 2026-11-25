@@ -284,7 +284,7 @@ function world(
     return { value: undefined } as never
   })
 
-  return { clock, calls, store, agents, github, disk, surface }
+  return { clock, calls, store, agents, github, disk, fetches, surface }
 }
 
 type Engine = Parameters<TestBody>[0]
@@ -434,8 +434,8 @@ test('a reload takes up the reviewer still at work instead of cutting it off', a
   await begin($, clock)
 
   expect(removals(calls.argv)).toBe(0)
-  // One at a time still: the waiting one waits.
-  expect(calls.spawn).toBe(0)
+  // A slot is free beside it, so the waiting one starts.
+  expect(calls.spawn).toBe(1)
   const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
   expect(await pane.find({ type: 'Text', text: /中断/ })).toBe(undefined)
   await pane.unmount()
@@ -471,20 +471,46 @@ function reviewerAtWork(on: On, minutesAgo: number, more: Review[] = []) {
   return made
 }
 
-test('a reviewer past the timeout but still at work keeps its worktree, and none other starts', async ($, on) => {
-  const waiting = review({ key: 'acme/widgets#13', status: 'queued', findings: [], verdict: undefined })
-  const { clock, calls, agents } = reviewerAtWork(on, 10, [waiting])
+// Reviewers a reload takes up, one per key, each started `minutesAgo` before the mocked now.
+function reviewersAtWork(on: On, minutesAgo: number, keys: string[], more: Review[] = []) {
+  const started = new Date(Date.UTC(2026, 10, 9, 2, 0) - minutesAgo * 60 * 1000).toISOString()
+  const agentOf = (key: string) => `reviewer-${key.split('#')[1]}`
+  const left = keys.map(key =>
+    review({ key, status: 'reviewing', agentId: agentOf(key), reviewStartedAt: started, findings: [], verdict: undefined }),
+  )
+  const running = keys.map(key => ({
+    key,
+    agentId: agentOf(key),
+    repo: '',
+    worktree: `/Users/me/src/widgets/.claude/worktrees/review-${key.split('#')[1]}`,
+    resultPath: '',
+    allowedRoots: [],
+  }))
+  const made = world(on, [...left, ...more], { running, reviewerAgentIds: keys.map(agentOf) })
+  for (const key of keys) made.agents.push({ id: agentOf(key), status: 'running' })
+
+  return made
+}
+
+const queued = (number: number) =>
+  review({ key: `acme/widgets#${number}`, status: 'queued', findings: [], verdict: undefined })
+const removalsOf = (argv: readonly (readonly string[])[], number: number) =>
+  argv.filter(one => one.includes('remove') && one.some(arg => arg.endsWith(`/review-${number}`))).length
+
+test('a reviewer past the timeout but still at work keeps its worktree and its slot', async ($, on) => {
+  const { clock, calls, agents } = reviewersAtWork(on, 10, [KEY, 'acme/widgets#13', 'acme/widgets#14'], [queued(15)])
   await begin($, clock)
 
-  // Past the 15 minutes, and on to 40.
+  // Past the 15 minutes, and on to 40: all three slots stay taken.
   await clock.advance(30 * 60 * 1000)
   expect(removals(calls.argv)).toBe(0)
   expect(calls.spawn).toBe(0)
 
-  // Once it has ended, the review fails as timed out and the queue moves on.
-  agents[0] = { id: 'reviewer-x', status: 'completed' }
+  // Once one has ended, its review fails as timed out and the queue moves on.
+  agents[0] = { id: 'reviewer-12', status: 'completed' }
   await clock.advance(5 * 60 * 1000)
   expect(removals(calls.argv)).toBe(1)
+  expect(removalsOf(calls.argv, 13)).toBe(0)
   expect(calls.spawn).toBe(1)
   const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
   expect(await pane.find({ type: 'Text', text: /失敗: タイムアウト/ })).toBeDefined()
