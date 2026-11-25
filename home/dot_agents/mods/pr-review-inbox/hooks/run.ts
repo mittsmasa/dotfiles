@@ -928,17 +928,16 @@ async function prepareReview($: EngineInterface, config: Config, review: Review)
     const reason = firstLine(String(error instanceof Error ? error.message : error))
     await patch($, review.key, one => fail(one, reason))
     if (hasWorktree) await removeWorktree($, config, review.key)
-  } finally {
-    release()
-    spawning = undefined
   }
-  if (!running) await pump($, config)
 }
 
 /** `keepWorktree`: an accepted result leaves its checkout for a deep dive. */
 async function finish($: EngineInterface, config: Config, key: string, keepWorktree = false) {
   if (!keepWorktree) await removeWorktree($, config, key)
-  await setRunning($, undefined)
+  await setRunning(
+    $,
+    running.filter(one => one.key !== key),
+  )
   await refreshWithDiff($, config)
   await pump($, config)
 }
@@ -950,8 +949,8 @@ export async function onTurnComplete(
   agentId: string,
   answer: string | undefined,
 ) {
-  const mine = running
-  if (!mine || mine.agentId !== agentId) return
+  const mine = running.find(one => one.agentId === agentId)
+  if (!mine) return
   const review = inbox.reviews.find(one => one.key === mine.key)
   if (!review) return finish($, config, mine.key)
   const fileText = await $.fs.read(mine.resultPath).then(String, () => undefined)
@@ -974,8 +973,8 @@ export async function onTurnComplete(
  */
 async function onTimeout($: EngineInterface, config: Config, key: string) {
   const review = inbox.reviews.find(one => one.key === key)
-  const mine = running
-  if (!review || mine?.key !== key || review.agentId !== mine.agentId) return
+  const mine = running.find(one => one.key === key)
+  if (!review || !mine || review.agentId !== mine.agentId) return
   const action = timeoutAction(review, await now($), (await aliveAgentIds($)).includes(mine.agentId))
   if (action.kind === 'wait') {
     $.clock.after(action.ms, () => void onTimeout($, config, key))
@@ -1157,15 +1156,38 @@ export async function send($: EngineInterface, config: Config, key: string) {
 type Args = Readonly<Record<string, unknown>>
 const str = (value: unknown) => (typeof value === 'string' ? value : undefined)
 
+/**
+ * A reviewer's first call may arrive before its spawn has answered. A call from
+ * an agent not yet in `running` waits while a review is being set up, until
+ * that agent shows up in `running`, nothing is being set up, or 5 seconds pass.
+ * The main loop and a reviewer already known never wait.
+ */
+async function untilKnown($: EngineInterface, agentId: string | undefined) {
+  const isSettled = () => preparing.size === 0 || running.some(one => one.agentId === agentId)
+  if (agentId === undefined || isSettled()) return
+  await new Promise<void>(resolve => {
+    let isDone = false
+    const end = () => {
+      if (isDone) return
+      isDone = true
+      resolve()
+    }
+    const check = () => {
+      if (isDone) return
+      if (isSettled()) end()
+      else waiters.push(check)
+    }
+    waiters.push(check)
+    $.clock.after(5000, end)
+  })
+}
+
 export async function isToolCallAllowed(
   $: EngineInterface,
   config: Config | undefined,
   call: { tool: string; agentId: string; args: Args },
 ): Promise<boolean> {
-  // A reviewer's first call may arrive before its spawn has answered.
-  if (spawning) {
-    await Promise.race([spawning, new Promise<void>(resolve => $.clock.after(5000, resolve))])
-  }
+  await untilKnown($, call.agentId)
   const guard = guardOf({
     isActive,
     isSpawnedHere: (await knownReviewers($)).includes(call.agentId),
@@ -1174,6 +1196,7 @@ export async function isToolCallAllowed(
   const filePath = str(call.args.file_path)
   const path = str(call.args.path)
   const target = call.tool === 'Read' ? filePath : path
+  const mine = running.find(one => one.agentId === call.agentId)
   const isAllowed = guard === 'check' && isAllowedToolCall(
     {
       tool: call.tool,
@@ -1186,8 +1209,8 @@ export async function isToolCallAllowed(
     },
     {
       reviewerAgentIds,
-      resultPath: running?.agentId === call.agentId ? running.resultPath : undefined,
-      allowedRoots: running?.agentId === call.agentId ? running.allowedRoots : [],
+      resultPath: mine?.resultPath,
+      allowedRoots: mine?.allowedRoots ?? [],
     },
   )
   if (!isAllowed && config) {
