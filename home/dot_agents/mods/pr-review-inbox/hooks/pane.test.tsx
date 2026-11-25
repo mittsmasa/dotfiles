@@ -115,10 +115,22 @@ function world(
     isRefusingReviews: false,
     history: undefined as unknown,
     isHistoryDown: false,
+    isSearchDown: false,
+    // The head `gh pr view` reports for every pull request.
+    head: SHA,
   }
   // Set, the next read of the saved diff waits for it, so a later read can come back first.
   // `gone` names paths that are not on disk, whatever else is.
-  const disk = { hold: undefined as Promise<void> | undefined, gone: [] as string[] }
+  // `worktrees`: the folders in every clone's `.claude/worktrees`.
+  // `results`: the files in every pull request's results folder, with when each was written.
+  // `isDiverged`: no commit is an ancestor of another, as after a force-push.
+  const disk = {
+    hold: undefined as Promise<void> | undefined,
+    gone: [] as string[],
+    worktrees: [] as string[],
+    results: [] as { name: string; mtimeMs: number }[],
+    isDiverged: false,
+  }
   // Set, every git fetch waits for it, so a review stays in its setting up.
   // `inFlight` and `most`: the fetches waiting now, and the most that ever waited at once.
   const fetches = { hold: undefined as Promise<void> | undefined, inFlight: 0, most: 0 }
@@ -166,6 +178,13 @@ function world(
   on('fs.exists', (_, e) => ({
     value: !disk.gone.includes(e.path) && (!files || !e.path.startsWith(DATA) || e.path in files),
   }))
+  on('fs.list', (_, e) => ({
+    value: e.path.endsWith('/.claude/worktrees')
+      ? disk.worktrees.map(name => ({ name, kind: 'dir', isLink: false }))
+      : e.path.startsWith(`${DATA}/results/`)
+        ? disk.results.map(one => ({ ...one, kind: 'file', isLink: false }))
+        : [],
+  }) as never)
   on('fs.stat', (_, e) => ({ value: { kind: 'file', isLink: false, realPath: e.path } }) as never)
   on('fs.read', (_, e) => {
     if (e.path === CONFIG_PATH) {
@@ -212,7 +231,7 @@ function world(
         )
       : argv.includes('view')
         ? JSON.stringify({
-            headRefOid: SHA,
+            headRefOid: github.head,
             baseRefName: 'main',
             files: [],
             // Each pull request's own description and size, as stored.
@@ -244,7 +263,13 @@ function world(
             : ''
     const isRefused = argv.includes('POST') && github.isRefusingReviews
     const isHistory = argv.some(one => one.includes('reviewThreads'))
-    const isFailing = (isHistory ? github.isHistoryDown : argv.includes('graphql') && github.isDown) || isRefused
+    const isSearchFailing = argv.includes('search') && github.isSearchDown
+    const isNoAncestor = argv.includes('--is-ancestor') && disk.isDiverged
+    const isFailing =
+      (isHistory ? github.isHistoryDown : argv.includes('graphql') && github.isDown) ||
+      isRefused ||
+      isSearchFailing ||
+      isNoAncestor
     const answer = {
       value: {
         exitCode: isFailing ? 1 : 0,
@@ -267,7 +292,16 @@ function world(
 
   // What the surface takes: the prompt box, the clipboard. The desktop app draws
   // its own composer, so it refuses the fill.
-  const surface = { isFilled: true, isCopied: true, filled: [] as string[], copied: [] as string[], toasts: [] as string[] }
+  const surface = {
+    isFilled: true,
+    isCopied: true,
+    filled: [] as string[],
+    copied: [] as string[],
+    toasts: [] as string[],
+    // Native notifications as the mod raised them; refused, the raise rejects.
+    notices: [] as { text: string; title?: string; key?: string }[],
+    isNotifyRefused: false,
+  }
   on('prompt.fill', (_, e) => {
     if (surface.isFilled) surface.filled.push(e.text)
 
@@ -282,6 +316,13 @@ function world(
     surface.toasts.push((e as { text: string }).text)
 
     return { value: undefined } as never
+  })
+  on('ui.notify', (_, e) => {
+    if (surface.isNotifyRefused) throw new Error('refused')
+    const { text, title, key } = e as { text: string; title?: string; key?: string }
+    surface.notices.push({ text, title, key })
+
+    return { value: { isSent: true, channel: 'client' } } as never
   })
 
   return { clock, calls, store, agents, github, disk, fetches, surface }
@@ -391,6 +432,23 @@ test('a session stops by itself once another has taken the inbox', async ($, on)
   expect(await band.find({ key: 'open-pane' })).toBe(undefined)
   expect(await band.find({ type: 'Text', text: 'engine' })).toBeDefined()
   await band.unmount()
+})
+
+test('a reload does not take the inbox back from the session that took it over', async ($, on) => {
+  const { clock, calls, store } = world(on, [review()])
+  await begin($, clock)
+  const opened = calls.open.length
+  store.set('owner', { sessionId: 'session-b' })
+
+  await load($)
+  await clock.advance(HOUR)
+
+  expect(store.get('owner')).toEqual({ sessionId: 'session-b' })
+  expect(calls.open.length).toBe(opened)
+  expect(calls.search).toBe(1)
+  const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect(await pane.find({ type: 'Text', text: /受付をしていません/ })).toBeDefined()
+  await pane.unmount()
 })
 
 test('taking the inbox over cuts off the review the last session left running', async ($, on) => {
@@ -2609,4 +2667,312 @@ test('with no config file, nothing is fetched and the pane says where to set one
   const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
   expect(await pane.find({ type: 'Text', text: /config\.json/ })).toBeDefined()
   await pane.unmount()
+})
+
+// ---- the checkouts of pull requests that left the list ----
+
+test('一覧から消えた PR の worktree は、次に取得できたときに消える。レビューの記録は残る', async ($, on) => {
+  const listed = [review()]
+  const files = { [`${SAVED}.accepted.json`]: result(), [`${SAVED}.posted.json`]: '{}', [DIFF_PATH]: DIFF }
+  const { clock, calls, disk } = world(on, listed, {}, files)
+  disk.worktrees.push('review-12', 'review-13')
+  await begin($, clock)
+  // Listed, its checkout stays; one no list ever held goes at once.
+  expect(removalsOf(calls.argv, 12)).toBe(0)
+  expect(removalsOf(calls.argv, 13)).toBe(1)
+
+  // Merged: the next search no longer names it.
+  listed.length = 0
+  await clock.advance(HOUR)
+  await clock.settle()
+
+  expect(removalsOf(calls.argv, 12)).toBe(1)
+  expect(calls.argv.filter(argv => argv[0] === 'rm' && argv.some(arg => arg.startsWith(DATA)))).toEqual([])
+  expect(Object.keys(files)).toEqual([`${SAVED}.accepted.json`, `${SAVED}.posted.json`, DIFF_PATH])
+})
+
+test('取得に失敗したときは、一覧に無い PR の worktree も消さない', async ($, on) => {
+  const { clock, calls, disk, github } = world(on, [review()])
+  disk.worktrees.push('review-13')
+  github.isSearchDown = true
+  await begin($, clock)
+
+  expect(calls.search).toBe(1)
+  expect(removalsOf(calls.argv, 13)).toBe(0)
+})
+
+test('検索が上限の件数を返したときは、worktree を消さない', async ($, on) => {
+  const many = Array.from({ length: 50 }, (_, index) => review({ key: `acme/widgets#${index + 100}` }))
+  const { clock, calls, disk } = world(on, many)
+  disk.worktrees.push('review-13')
+  await begin($, clock)
+
+  expect(calls.search).toBe(1)
+  expect(removalsOf(calls.argv, 13)).toBe(0)
+})
+
+test('準備中の PR が一覧から消えても、その worktree は消さない', async ($, on) => {
+  const listed = [queued(12)]
+  const { clock, calls, disk, fetches } = world(on, listed)
+  disk.worktrees.push('review-12')
+  let release = () => {}
+  fetches.hold = new Promise<void>(resolve => (release = resolve))
+  await begin($, clock)
+  expect(fetches.inFlight).toBe(1)
+  // What setting the review up took away itself, before its checkout was made.
+  const before = removalsOf(calls.argv, 12)
+
+  listed.length = 0
+  await clock.advance(HOUR)
+  expect(calls.search).toBe(2)
+  release()
+  await clock.settle()
+
+  expect(calls.spawn).toBe(1)
+  // One more only: the review, started with no agentId here, fails and clears up after itself.
+  expect(removalsOf(calls.argv, 12)).toBe(before + 1)
+})
+
+// ---- telling that pre-reads ended ----
+
+const NOTICE_DELAY = 5000
+/** A reviewer's last message carrying its result, as it does where its write was refused. */
+const answerOf = (key: string, findings: unknown[] = []) =>
+  ['```json', JSON.stringify({ key, headSha: SHA, findings, humanReview: [] }), '```'].join('\n')
+const BLOCKER = { severity: 'blocker', reason: '基準が合わない', comment: '直すのはどうでしょうか' }
+const drained = (text: string) => ({ text, title: 'PR レビュー', key: 'drained' })
+
+test('下読みが終わるたびに toast が出て、最後の 1 件が終わると OS の通知が 1 回出る', async ($, on) => {
+  const { clock, surface } = reviewersAtWork(on, 1, [KEY, 'acme/widgets#13'])
+  await begin($, clock)
+
+  await $.turn.complete({ agentId: 'reviewer-12', answer: answerOf(KEY, [BLOCKER]) } as never)
+  await clock.advance(NOTICE_DELAY)
+  expect(surface.toasts).toEqual(['下読み完了 1 件 · blocker 1'])
+  // One is still being reviewed.
+  expect(surface.notices).toEqual([])
+
+  await $.turn.complete({ agentId: 'reviewer-13', answer: answerOf('acme/widgets#13') } as never)
+  await clock.advance(NOTICE_DELAY)
+  // The second toast counts only what ended since the first.
+  expect(surface.toasts).toEqual(['下読み完了 1 件 · blocker 1', '下読み完了 1 件'])
+  expect(surface.notices).toEqual([drained('下読みがすべて終わりました: 2 件 · blocker 1')])
+})
+
+test('続けて終わった下読みは、1 回の toast にまとまる', async ($, on) => {
+  const { clock, surface } = reviewersAtWork(on, 1, [KEY, 'acme/widgets#13', 'acme/widgets#14'])
+  await begin($, clock)
+
+  await $.turn.complete({ agentId: 'reviewer-12', answer: answerOf(KEY) } as never)
+  await clock.advance(1000)
+  await $.turn.complete({ agentId: 'reviewer-13', answer: answerOf('acme/widgets#13') } as never)
+  await clock.advance(NOTICE_DELAY)
+
+  expect(surface.toasts).toEqual(['下読み完了 2 件'])
+  expect(surface.notices).toEqual([])
+})
+
+test('最後の 1 件が失敗で終わっても、終わった分の OS の通知が出る', async ($, on) => {
+  const { clock, surface } = reviewersAtWork(on, 1, [KEY, 'acme/widgets#13'])
+  await begin($, clock)
+  await $.turn.complete({ agentId: 'reviewer-12', answer: answerOf(KEY) } as never)
+  await clock.advance(NOTICE_DELAY)
+
+  await $.turn.complete({ agentId: 'reviewer-13', answer: 'no json here' } as never)
+  await clock.advance(NOTICE_DELAY)
+
+  expect(surface.toasts).toEqual(['下読み完了 1 件'])
+  expect(surface.notices).toEqual([drained('下読みがすべて終わりました: 1 件')])
+})
+
+test('done を持ったまま起動し直しても、toast も OS の通知も出ない', async ($, on) => {
+  const { clock, surface } = world(on, [review(), review({ key: 'acme/widgets#13' })])
+  await begin($, clock)
+  await clock.advance(2 * NOTICE_DELAY)
+
+  expect(surface.toasts).toEqual([])
+  expect(surface.notices).toEqual([])
+})
+
+test('保存済みの結果で done になった PR も知らせる', async ($, on) => {
+  const { clock, surface } = world(on, [waiting()], {}, { [`${SAVED}.accepted.json`]: result(), [DIFF_PATH]: DIFF })
+  await begin($, clock)
+  await clock.advance(NOTICE_DELAY)
+
+  expect(surface.toasts).toEqual(['下読み完了 1 件 · blocker 1'])
+  expect(surface.notices).toEqual([drained('下読みがすべて終わりました: 1 件 · blocker 1')])
+})
+
+test('送信済みの結果が戻っただけなら知らせない', async ($, on) => {
+  const { clock, surface, github } = world(on, [waiting()], {}, {
+    [`${SAVED}.accepted.json`]: result({ findings: [] }),
+    [`${SAVED}.posted.json`]: SENT_NOTE,
+    [DIFF_PATH]: DIFF,
+  })
+  github.requestedAt = [BEFORE_SENT]
+  await begin($, clock)
+  await clock.advance(NOTICE_DELAY)
+
+  expect(surface.toasts).toEqual([])
+  expect(surface.notices).toEqual([])
+})
+
+test('知らせる前に片付けた PR は数えない', async ($, on) => {
+  const { clock, surface } = reviewersAtWork(on, 1, [KEY])
+  await begin($, clock)
+  await $.turn.complete({ agentId: 'reviewer-12', answer: answerOf(KEY) } as never)
+  await clock.settle()
+
+  const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await pane.press({ key: `row:${KEY}` })
+  await pane.press({ key: 'read' })
+  await pane.unmount()
+  await clock.advance(NOTICE_DELAY)
+
+  expect(surface.toasts).toEqual([])
+  expect(surface.notices).toEqual([])
+})
+
+test('受付がほかのセッションに移ったあとは知らせない', async ($, on) => {
+  const { clock, surface, store } = reviewersAtWork(on, 1, [KEY])
+  await begin($, clock)
+  store.set('owner', { sessionId: 'session-b' })
+
+  await $.turn.complete({ agentId: 'reviewer-12', answer: answerOf(KEY) } as never)
+  await clock.advance(NOTICE_DELAY)
+
+  expect(surface.toasts).toEqual([])
+  expect(surface.notices).toEqual([])
+})
+
+test('OS の通知が断られても、toast は出て、一覧は使える', async ($, on) => {
+  const { clock, surface } = reviewersAtWork(on, 1, [KEY])
+  surface.isNotifyRefused = true
+  await begin($, clock)
+
+  await $.turn.complete({ agentId: 'reviewer-12', answer: answerOf(KEY, [BLOCKER]) } as never)
+  await clock.advance(NOTICE_DELAY)
+
+  expect(surface.toasts).toEqual(['下読み完了 1 件 · blocker 1'])
+  const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect((await pane.find({ type: 'Text', text: /要修正/ }))?.text).toBe('要修正')
+  await pane.unmount()
+})
+
+// ---- reading only what changed since an earlier pre-read ----
+
+const OLD_SHA = 'b'.repeat(40)
+const OLD_SAVED = `${DATA}/results/acme/widgets/12/${OLD_SHA}`
+const SCAN = `${DATA}/scan/acme/widgets/12/${SHA}`
+const earlierResult = (over: Record<string, unknown> = {}) => result({ headSha: OLD_SHA, ...over })
+const isSinceDiff = (argv: readonly string[]) => argv.includes('diff') && argv.includes(OLD_SHA)
+
+/** A pull request waiting at SHA whose pre-read at OLD_SHA was accepted before. */
+function withEarlier(on: On, reviews: Review[], earlier = earlierResult(), more: Record<string, string> = {}) {
+  const made = world(on, reviews, {}, { [`${OLD_SAVED}.accepted.json`]: earlier, ...more })
+  made.disk.results = [{ name: `${OLD_SHA}.accepted.json`, mtimeMs: 1 }]
+
+  return made
+}
+
+// The kit's spawn hands back no agentId, so a review started here ends as failed: what it
+// leaves under 省いたもの is not seen here. `incrementalNote` is covered in reviews.test.ts.
+test('前の commit の下読み結果がある PR は、そこからの差分と前回の指摘で下読みされる', async ($, on) => {
+  const { clock, calls } = withEarlier(on, [waiting()])
+  await begin($, clock)
+  await clock.settle()
+
+  expect(calls.argv.filter(isSinceDiff).length).toBe(1)
+  expect(calls.prompts[0]).toContain(`Changes since that commit: ${SCAN}/since.diff`)
+  expect(calls.prompts[0]).toContain(`Findings of that pre-read: ${SCAN}/earlier.json`)
+  expect(calls.prompts[0]).toContain(`Diff against the base branch: ${DIFF_PATH}`)
+  expect(calls.writes).toContain(`${SCAN}/since.diff`)
+  expect(JSON.parse(calls.written[`${SCAN}/earlier.json`] ?? 'null').findings[0].reason).toBe('基準が合わない')
+})
+
+test('前の commit の下読み結果が無い PR は、今までどおり全体を下読みされる', async ($, on) => {
+  const { clock, calls } = world(on, [waiting()], {}, {})
+  await begin($, clock)
+  await clock.settle()
+
+  expect(calls.spawn).toBe(1)
+  expect(calls.prompts[0]).not.toContain('since that commit')
+  expect(calls.argv.filter(argv => argv.includes('--is-ancestor'))).toEqual([])
+})
+
+test('前回の commit が今の head の祖先でなければ、全体の下読みに戻る', async ($, on) => {
+  const { clock, calls, disk } = withEarlier(on, [waiting()])
+  disk.isDiverged = true
+  await begin($, clock)
+  await clock.settle()
+
+  expect(calls.spawn).toBe(1)
+  expect(calls.prompts[0]).not.toContain('since that commit')
+  expect(calls.argv.filter(isSinceDiff)).toEqual([])
+})
+
+test('差分の下読みが 3 回続いた PR は、次を全体の下読みに戻す', async ($, on) => {
+  const { clock, calls } = withEarlier(on, [waiting()], earlierResult({ incrementalRuns: 3 }))
+  await begin($, clock)
+  await clock.settle()
+
+  expect(calls.spawn).toBe(1)
+  expect(calls.prompts[0]).not.toContain('since that commit')
+})
+
+test('もう一度レビューするを押すと、前の commit の結果があっても全体を下読みする', async ($, on) => {
+  // Done, with the diff gone: the pane offers to review again in place of sending.
+  const { clock, calls } = withEarlier(on, [review()], earlierResult(), { [`${SAVED}.accepted.json`]: result() })
+  await begin($, clock)
+  await clock.settle()
+
+  const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await pane.press({ key: `row:${KEY}` })
+  await clock.settle()
+  await pane.press({ key: 'rereview' })
+  await clock.settle()
+  await pane.unmount()
+
+  expect(calls.spawn).toBe(1)
+  expect(calls.prompts[0]).not.toContain('since that commit')
+})
+
+test('送信後に同じ commit で再依頼された PR は、前の commit の結果があっても全体を下読みする', async ($, on) => {
+  const { clock, calls, github } = withEarlier(on, [waiting()], earlierResult(), {
+    [`${SAVED}.accepted.json`]: result({ findings: [] }),
+    [`${SAVED}.posted.json`]: SENT_NOTE,
+    [DIFF_PATH]: DIFF,
+  })
+  github.requestedAt = [BEFORE_SENT, AFTER_SENT]
+  await begin($, clock)
+  await clock.settle()
+
+  expect(calls.spawn).toBe(1)
+  expect(calls.prompts[0]).not.toContain('since that commit')
+})
+
+test('差分の下読みの結果を受理すると、続いた回数が写しに残る。全体の下読みでは 0 になる', async ($, on) => {
+  const started = '2026-11-09T01:55:00.000Z'
+  const left = (key: string) =>
+    review({ key, status: 'reviewing', agentId: `reviewer-${key.split('#')[1]}`, reviewStartedAt: started, findings: [], verdict: undefined })
+  const at = (key: string, more: Record<string, unknown>) => ({
+    key,
+    agentId: `reviewer-${key.split('#')[1]}`,
+    repo: '',
+    worktree: WORKTREE_12,
+    resultPath: '',
+    allowedRoots: [],
+    ...more,
+  })
+  const running = [at(KEY, { incrementalRuns: 2 }), at(OTHER, {})]
+  const { clock, calls, agents } = world(on, [left(KEY), left(OTHER)], { running, reviewerAgentIds: ['reviewer-12', 'reviewer-13'] }, {})
+  agents.push({ id: 'reviewer-12', status: 'running' }, { id: 'reviewer-13', status: 'running' })
+  await begin($, clock)
+
+  await $.turn.complete({ agentId: 'reviewer-12', answer: answerOf(KEY) } as never)
+  await $.turn.complete({ agentId: 'reviewer-13', answer: answerOf(OTHER) } as never)
+  await clock.settle()
+
+  expect(JSON.parse(calls.written[`${SAVED}.accepted.json`] ?? 'null').incrementalRuns).toBe(2)
+  expect(JSON.parse(calls.written[`${DATA}/results/acme/widgets/13/${SHA}.accepted.json`] ?? 'null').incrementalRuns).toBe(0)
 })
