@@ -529,6 +529,9 @@ test('a reviewer still at work is given up on after the hard limit', async ($, o
 
 // ---- reviewing side by side ----
 
+/** Lets every pending promise run, with the mocked clock standing still. */
+const afterPending = () => new Promise<void>(resolve => setTimeout(resolve, 0))
+
 test('three reviewers at work fill the slots, and one ending lets the next start', async ($, on) => {
   const { clock, calls } = reviewersAtWork(on, 1, [KEY, 'acme/widgets#13', 'acme/widgets#14'], [queued(15)])
   await begin($, clock)
