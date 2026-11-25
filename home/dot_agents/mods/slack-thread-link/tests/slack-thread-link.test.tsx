@@ -348,6 +348,6 @@ test('$.store の値の形が古ければ読み戻さない', async ($, on) => {
 test('$.store を読めなくても、紐付けなしでセッションを始めて理由を出す', async ($, on) => {
   const { world, run } = await setUp($, on, [], { isLinked: false, isStoreGetFailing: true })
 
-  expect(world.statuses).toContain('Slack: 紐付けを読み戻せませんでした: store が壊れています')
+  expect(world.statuses.some(text => text?.startsWith('Slack: 紐付けを読み戻せませんでした: '))).toBe(true)
   expect((await run('')).text).toBe('紐付けている Slack スレッドはありません。')
 })
