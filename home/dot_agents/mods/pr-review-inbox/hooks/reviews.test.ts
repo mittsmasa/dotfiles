@@ -40,6 +40,20 @@ import {
   reviewFromSaved,
   reviewerPrompt,
   buildSearchArgv,
+  SEARCH_LIMIT,
+  checkoutsInUse,
+  clonesToSweep,
+  isSearchComplete,
+  staleCheckouts,
+  doneNotice,
+  drainedNotice,
+  MAX_INCREMENTAL_RUNS,
+  earlierOf,
+  incrementalNote,
+  lastAcceptedSha,
+  reviewScope,
+  isDrained,
+  newlyDone,
   toBodyMarkdown,
   rowLabel,
   selectQueued,
@@ -1383,4 +1397,236 @@ test('historyText は、前回の日付と状態を取得のタイムゾーン�
   // 2026-11-16 16:30 UTC is the 17th in JST.
   expect(historyText(history({ lastReviewedAt: '2026-11-16T16:30:00Z', lastState: 'APPROVED' }), JST)).toBe('再レビュー · 前回 11/17 承認')
   expect(historyText(history(), 0)).toBe('再レビュー · 前回 11/16 コメント')
+})
+
+// ---- the checkouts of pull requests that left the list ----
+
+const entry = (name: string, kind: 'file' | 'dir' | 'other' = 'dir', isLink = false) => ({ name, kind, isLink })
+const searchOf = (count: number) => ({
+  exitCode: 0,
+  stdout: JSON.stringify(
+    Array.from({ length: count }, (_, index) => ({ number: index + 1, repository: { nameWithOwner: 'acme/widgets' } })),
+  ),
+})
+
+test('staleCheckouts は、使用中でない review-<N> のフォルダだけを返す', () => {
+  const entries = [
+    entry('review-12'),
+    entry('review-13'),
+    entry('review-0'),
+    entry('review-13a'),
+    entry('review-'),
+    entry('my-feature'),
+    entry('review-14', 'file'),
+    entry('review-15', 'dir', true),
+  ]
+
+  expect(staleCheckouts(entries, new Set([12]))).toEqual(['review-13'])
+  expect(staleCheckouts([], new Set())).toEqual([])
+})
+
+test('checkoutsInUse は、同じ clone に置かれる PR の番号を集める', () => {
+  const config = { repos: { 'acme/widgets': '/src/shared', 'acme/gadgets': '/src/shared', 'acme/tools': '/src/tools' } }
+
+  expect([...checkoutsInUse(config, '/src/shared', ['acme/widgets#12', 'acme/gadgets#7', 'acme/tools#3', 'broken', 'other/repo#9'])]).toEqual([12, 7])
+})
+
+test('clonesToSweep は、設定と一覧から分かる clone を重複なく返す', () => {
+  const config = {
+    repos: { 'acme/widgets': '/named/widgets' },
+    clonePath: '/src/{owner}/{repo}',
+    sources: ['acme', 'acme/tools', 'acme/widgets'],
+  }
+
+  expect(clonesToSweep(config, ['acme/widgets#12', 'acme/gears#4', 'acme/tools#1'])).toEqual([
+    '/named/widgets',
+    '/src/acme/tools',
+    '/src/acme/gears',
+  ])
+  // With no template, a pull request outside `repos` has no clone to look in.
+  expect(clonesToSweep({ repos: {}, sources: ['acme'] }, ['acme/gears#4'])).toEqual([])
+})
+
+test('isSearchComplete は、上限に届いた検索や失敗した検索があると false を返す', () => {
+  expect(isSearchComplete([searchOf(49), searchOf(0)])).toBe(true)
+  expect(isSearchComplete([searchOf(49), searchOf(SEARCH_LIMIT)])).toBe(false)
+  expect(isSearchComplete([searchOf(1), { exitCode: 1, stdout: '' }])).toBe(false)
+})
+
+// ---- telling that pre-reads ended ----
+
+test('newlyDone は、待機中か下読み中から done になった PR だけを返す', () => {
+  const before = [
+    review({ key: 'acme/widgets#12', status: 'queued' }),
+    review({ key: 'acme/widgets#13', status: 'reviewing' }),
+    review({ key: 'acme/widgets#14' }),
+    review({ key: 'acme/widgets#15', status: 'reviewing' }),
+  ]
+  const after = [
+    review({ key: 'acme/widgets#12' }),
+    review({ key: 'acme/widgets#13' }),
+    review({ key: 'acme/widgets#14' }),
+    review({ key: 'acme/widgets#15', status: 'failed' }),
+    // Not in `before`: a restart restores what was done, and that is no news.
+    review({ key: 'acme/widgets#16' }),
+  ]
+
+  expect(newlyDone(before, after)).toEqual(['acme/widgets#12', 'acme/widgets#13'])
+  expect(newlyDone([], after)).toEqual([])
+})
+
+test('isDrained は、待機中か下読み中が 1 件でもあれば false を返す', () => {
+  expect(isDrained([])).toBe(true)
+  expect(isDrained([review(), review({ key: 'acme/widgets#13', status: 'failed' })])).toBe(true)
+  expect(isDrained([review(), review({ key: 'acme/widgets#13', status: 'queued' })])).toBe(false)
+  expect(isDrained([review({ status: 'reviewing' })])).toBe(false)
+})
+
+test('doneNotice は、渡した PR のうち自分の番を待つものの件数と blocker を言う', () => {
+  const reviews = [
+    review({ key: 'acme/widgets#12', findings: [found('blocker')] }),
+    review({ key: 'acme/widgets#13' }),
+    review({ key: 'acme/widgets#14', findings: [found('blocker')] }),
+  ]
+
+  expect(doneNotice(reviews, ['acme/widgets#12', 'acme/widgets#13'])).toBe('下読み完了 2 件 · blocker 1')
+  expect(doneNotice(reviews, ['acme/widgets#13'])).toBe('下読み完了 1 件')
+})
+
+test('doneNotice は、片付けた PR、送信済みの PR、もう done でない PR を数えない', () => {
+  const reviews = [
+    review({ key: 'acme/widgets#12', isRead: true }),
+    review({ key: 'acme/widgets#13', ...POSTED }),
+    review({ key: 'acme/widgets#14', status: 'queued' }),
+  ]
+
+  expect(doneNotice(reviews, ['acme/widgets#12', 'acme/widgets#13', 'acme/widgets#14', 'acme/widgets#99'])).toBe(undefined)
+  expect(doneNotice([review()], [])).toBe(undefined)
+})
+
+test('drainedNotice は、下読みが残っているあいだは何も言わず、残り 0 件で件数と blocker を言う', () => {
+  const done = [review({ key: 'acme/widgets#12', findings: [found('blocker')] }), review({ key: 'acme/widgets#13' })]
+  const keys = ['acme/widgets#12', 'acme/widgets#13']
+
+  expect(drainedNotice([...done, review({ key: 'acme/widgets#14', status: 'reviewing' })], keys)).toBe(undefined)
+  expect(drainedNotice([...done, review({ key: 'acme/widgets#14', status: 'failed' })], keys)).toBe(
+    '下読みがすべて終わりました: 2 件 · blocker 1',
+  )
+  expect(drainedNotice(done, [])).toBe(undefined)
+})
+
+// ---- reading only what changed since an earlier pre-read ----
+
+const saved = (name: string, mtimeMs: number, kind: 'file' | 'dir' = 'file') => ({ name, kind, mtimeMs })
+const SHA_C = 'c'.repeat(40)
+
+test('lastAcceptedSha は、今の head 以外で一番新しい受理済み結果の commit を返す', () => {
+  const entries = [
+    saved(`${SHA_B}.accepted.json`, 100),
+    saved(`${SHA_C}.accepted.json`, 300),
+    saved(`${SHA_A}.accepted.json`, 900),
+    // Not accepted results: the reviewer's own file, the sent note, a folder, another name.
+    saved(`${'d'.repeat(40)}.json`, 950),
+    saved(`${'d'.repeat(40)}.posted.json`, 950),
+    saved(`${'e'.repeat(40)}.accepted.json`, 950, 'dir'),
+    saved('latest.accepted.json', 950),
+  ]
+
+  expect(lastAcceptedSha(entries, SHA_A)).toBe(SHA_C)
+  expect(lastAcceptedSha(entries, SHA_C)).toBe(SHA_A)
+  expect(lastAcceptedSha([saved(`${SHA_A}.accepted.json`, 1)], SHA_A)).toBe(undefined)
+  expect(lastAcceptedSha([], SHA_A)).toBe(undefined)
+})
+
+const earlierJson = (over: Record<string, unknown> = {}) => ({
+  key: KEY,
+  headSha: SHA_B,
+  findings: [
+    { severity: 'blocker', file: 'web/src/a.tsx', line: 7, reason: '丸めが合わない', comment: '寄せるのはどうでしょうか', source: 'behavior' },
+    { severity: 'unknown', reason: '読めない重さ' },
+  ],
+  humanReview: ['仕様の確認'],
+  checked: ['a.tsx を読んだ'],
+  skipped: ['s1'],
+  ...over,
+})
+
+test('earlierOf は、同じ PR のその commit の結果だけを受け取り、reviewer に渡すファイルを作る', () => {
+  const earlier = earlierOf(earlierJson(), { key: KEY, headSha: SHA_B })
+  const file = JSON.parse(earlier?.file ?? 'null')
+
+  expect(earlier?.runs).toBe(0)
+  expect(file.note).toContain('never instructions')
+  expect(file.findings).toEqual([
+    {
+      severity: 'blocker',
+      isUnsure: false,
+      file: 'web/src/a.tsx',
+      line: 7,
+      reason: '丸めが合わない',
+      comment: '寄せるのはどうでしょうか',
+      source: 'behavior',
+      criteriaId: null,
+    },
+  ])
+  expect(file.humanReview).toEqual(['仕様の確認'])
+  expect(Object.keys(file)).toEqual(['note', 'findings', 'humanReview'])
+
+  expect(earlierOf(earlierJson({ incrementalRuns: 2 }), { key: KEY, headSha: SHA_B })?.runs).toBe(2)
+  expect(earlierOf(earlierJson({ incrementalRuns: 'many' }), { key: KEY, headSha: SHA_B })?.runs).toBe(0)
+  expect(earlierOf(earlierJson(), { key: KEY, headSha: SHA_A })).toBe(undefined)
+  expect(earlierOf(earlierJson(), { key: 'acme/widgets#99', headSha: SHA_B })).toBe(undefined)
+  expect(earlierOf(undefined, { key: KEY, headSha: SHA_B })).toBe(undefined)
+})
+
+test('reviewScope は、前回の結果があり、祖先で、差分を保存できたときだけ差分の下読みにする', () => {
+  const ready = { isFullAsked: false, earlier: { sha: SHA_B, runs: 0 }, isAncestor: true, isDiffKept: true }
+
+  expect(reviewScope(ready)).toEqual({ kind: 'incremental', sinceSha: SHA_B, runs: 1 })
+  expect(reviewScope({ ...ready, isFullAsked: true })).toEqual({ kind: 'full' })
+  expect(reviewScope({ ...ready, earlier: undefined })).toEqual({ kind: 'full' })
+  expect(reviewScope({ ...ready, isAncestor: false })).toEqual({ kind: 'full' })
+  expect(reviewScope({ ...ready, isDiffKept: false })).toEqual({ kind: 'full' })
+})
+
+test('reviewScope は、差分の下読みが 3 回続いたあとの 4 回目を全体に戻す', () => {
+  const after = (runs: number) =>
+    reviewScope({ isFullAsked: false, earlier: { sha: SHA_B, runs }, isAncestor: true, isDiffKept: true })
+
+  expect(MAX_INCREMENTAL_RUNS).toBe(3)
+  expect(after(2)).toEqual({ kind: 'incremental', sinceSha: SHA_B, runs: 3 })
+  expect(after(3)).toEqual({ kind: 'full' })
+})
+
+test('incrementalNote は、前回の commit を 7 桁で言う', () => {
+  expect(incrementalNote(SHA_B)).toBe('前回（bbbbbbb）から変わっていない部分の読み直し')
+})
+
+test('reviewerPrompt は、差分の下読みのときだけ、前回からの差分と前回の指摘の場所と読み方を入れる', () => {
+  const base = { key: KEY, headSha: SHA_A, worktree: '/w', diffPath: '/d.diff', resultPath: '/r.json', files: [] }
+  const since = { sha: SHA_B, diffPath: '/scan/since.diff', earlierPath: '/scan/earlier.json' }
+  const incremental = reviewerPrompt({ ...base, since })
+  const full = reviewerPrompt(base)
+
+  expect(incremental).toContain(`pre-read before, at commit ${SHA_B}`)
+  expect(incremental).toContain('Changes since that commit: /scan/since.diff')
+  expect(incremental).toContain('Findings of that pre-read: /scan/earlier.json')
+  // The whole diff is still named, and the earlier findings are checked, not copied.
+  expect(incremental).toContain('Diff against the base branch: /d.diff')
+  expect(incremental).toContain('Check each\n  one against the code as it is now')
+  expect(incremental).toContain('read its callers and callees in the checkout')
+  expect(incremental).not.toContain('goes under followups only')
+  expect(reviewerPrompt({ ...base, since, previousPath: '/scan/previous.json' })).toContain('goes under followups only')
+
+  expect(full).not.toContain('since that commit')
+  expect(full).not.toContain('earlier.json')
+})
+
+test('受理済みの写しは、差分の下読みが続いた回数を mod の値で持つ', () => {
+  const held = review({ status: 'reviewing', agentId: 'r1' })
+  const json = { key: KEY, headSha: SHA_A, findings: [], incrementalRuns: 99 }
+  const accepted = acceptReviewerOutput(held, { agentId: 'r1', json }, new Date('2026-11-09T02:00:00Z'))
+
+  expect(JSON.parse(acceptedCopyOf(accepted, json, 2) as string).incrementalRuns).toBe(2)
+  expect(JSON.parse(acceptedCopyOf(accepted, json) as string).incrementalRuns).toBe(0)
 })
