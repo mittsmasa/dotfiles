@@ -11,7 +11,7 @@ gh = "2.105.0"
 just = "1.59.0"
 "npm:vercel" = "66.5.0"
 uv = "0.13.9"
-age = "1.3.1"
+age = "1.3.2"
 "github:jdx/fnox" = "1.50.0"
 "github:yusukebe/ax" = { version = "0.1.25", exe = "ax" }
 zizmor = "1.32.0"
